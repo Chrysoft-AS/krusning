@@ -285,26 +285,44 @@
     if (w) {
       drawCurrents(ctx, w, t);
       drawFalls(ctx, w, t);
+      drawIce(ctx, w, t);
+      drawWinds(ctx, w, t);
       for (const v of w.whirls) drawWhirl(ctx, v, t);
       for (const c of w.cascades) drawCascadeWater(ctx, c, t);
+      drawRainSpots(ctx, w, t);
       for (const d of w.docks) drawDockWater(ctx, d, t);
       drawShadows(ctx, w);
     }
     if (st.leaves) drawLeaves(ctx, st.leaves);
-    if (w) drawRipples(ctx, w.ripples, w.falls);
+    if (w) drawRipples(ctx, w);
+    if (w && w.timber.length) drawTimber(ctx, w, t);
     drawParticles(ctx, st.particles, 'under');
     ctx.restore();
 
     if (w) {
       for (const r of w.rocks) drawRock(ctx, r, t);
       for (const l of w.logs) drawLog(ctx, l);
+      if (w.walls.length || w.gates.length) {
+        // moloer og porter går inn i sanden, men ikke ut på gresset
+        ctx.save(); pondPath(ctx, -6); ctx.clip();
+        for (const s of w.walls) drawWall(ctx, s);
+        w.gates.forEach((g, i) => drawGate(ctx, g, i, w.t));
+        ctx.restore();
+      }
+      for (const s of w.switches) drawSwitch(ctx, s, t);
+      drawFrogLeaves(ctx, w, t);
       for (const p of w.pads) drawPad(ctx, p, t);
       for (let i = 0; i < w.docks.length; i++) drawDock(ctx, w.docks[i], t, st.dockFx && st.dockFx[i]);
+      for (const L of (w.level.lamps || [])) drawLamp(ctx, L, t);
       for (const b of w.boats) drawBoat(ctx, b, t, st.boatFx && st.boatFx[b.id], st.look);
       for (const c of w.cascades) drawCascadeTop(ctx, c, t);
+      for (const f of w.frogs) drawFrog(ctx, f, t, st.aim && E.previewFrogs(w, st.aim.x, st.aim.y).indexOf(f) >= 0);
+      drawFallingDrops(ctx, w);
     }
     drawParticles(ctx, st.particles, 'over');
-    if (st.hint) drawHint(ctx, st.hint, t);
+    if (w) drawMood(ctx, w, t);
+    if (w && w.dark) drawDark(ctx, w, st, t);
+    if (st.hint) drawHint(ctx, st.hint, t, w);
     if (st.hint && !st.aim && w) drawArrows(ctx, w, st.hint.x, st.hint.y, 0.55);
     if (st.aim && w) drawAim(ctx, w, st.aim, t);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -447,6 +465,10 @@
       ctx.strokeStyle = PAL.shadow; ctx.lineCap = 'round'; ctx.lineWidth = l.r * 2;
       ctx.beginPath(); ctx.moveTo(l.x1 + 3, l.y1 + 5); ctx.lineTo(l.x2 + 3, l.y2 + 5); ctx.stroke();
     }
+    for (const s of w.walls.concat(w.gates.filter((g) => !g.open))) {
+      ctx.strokeStyle = PAL.shadow; ctx.lineCap = 'round'; ctx.lineWidth = s.r * 2;
+      ctx.beginPath(); ctx.moveTo(s.x1 + 3, s.y1 + 5); ctx.lineTo(s.x2 + 3, s.y2 + 5); ctx.stroke();
+    }
     for (const p of w.pads) { ctx.beginPath(); ctx.arc(p.x + 2, p.y + 3, p.r, 0, TAU); ctx.fill(); }
     for (const b of w.boats) {
       if (b.sink > 0) continue;
@@ -552,26 +574,28 @@
     ctx.restore();
   }
 
-  function drawRipples(ctx, ripples, falls) {
+  function drawRipples(ctx, w) {
+    const falls = w.falls;
+    const walls = w.walls.length || w.gates.some((g) => !g.open);
     ctx.lineCap = 'round';
-    for (const rp of ripples) {
+    for (const rp of w.ripples) {
       const r = rp.r;
       if (r < 1) continue;
       // med fosser: ringen vises bare på sin egen vannhøyde
       let clipped = false;
-      if (falls && falls.length) {
-        ctx.save(); clipped = true;
-        for (const f of falls) {
-          ctx.beginPath(); halfPlane(ctx, f, E.fallSide(f, rp.x, rp.y) > 0); ctx.clip();
-        }
+      if (falls.length || walls) { ctx.save(); clipped = true; }
+      for (const f of falls) {
+        ctx.beginPath(); halfPlane(ctx, f, E.fallSide(f, rp.x, rp.y) > 0); ctx.clip();
       }
+      if (walls) clipWallShadows(ctx, w, rp.x, rp.y);
       drawRing(ctx, rp, r);
       if (clipped) ctx.restore();
     }
   }
   function drawRing(ctx, rp, r) {
-    const life = 1 - r / (C.RIPPLE_RANGE + 24);
-    const a = Math.max(0, E.falloff(r * 0.92)) * Math.min(1, life * 3);
+    const range = rp.range || C.RIPPLE_RANGE, p = rp.p || 1;
+    const life = 1 - r / (range + 24);
+    const a = Math.max(0, E.falloff(r * 0.92, range)) * Math.min(1, life * 3) * (0.5 + 0.5 * Math.min(1, p));
     if (a <= 0.01) return;
     // mørk kant utenfor (gir dybde)
     ctx.strokeStyle = `rgba(10,60,90,${0.16 * a})`;
@@ -589,6 +613,401 @@
       ctx.lineWidth = 2 - k * 0.4;
       ctx.beginPath(); ctx.arc(rp.x, rp.y, rr, 0, TAU); ctx.stroke();
     }
+  }
+
+  /* ---------- verden 4–7: regn, molo, sluser, frosker, is, vind og natt ---------- */
+
+  // Farger på brytere og sluseporter (samme farge og merke hører sammen).
+  const GATE_COL = [['#ff86b6', '#d9588c'], ['#ae92ff', '#7f61e3'], ['#ffb15e', '#e0892c'], ['#62d6c8', '#33a99b']];
+
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    if (ctx.roundRect) { ctx.roundRect(x, y, w, h, r); return; }
+    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  function line(ctx, x1, y1, x2, y2) { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
+
+  // Is: lyse, frostete flak med sprekker og et glimt som glir over.
+  function drawIce(ctx, w, t) {
+    for (const r of w.ice) {
+      ctx.save();
+      roundRectPath(ctx, r.x, r.y, r.w, r.h, 12);
+      ctx.fillStyle = 'rgba(238,249,255,0.66)'; ctx.fill();
+      ctx.clip();
+      const g = ctx.createLinearGradient(r.x, r.y, r.x + r.w, r.y + r.h);
+      g.addColorStop(0, 'rgba(255,255,255,0.4)'); g.addColorStop(0.5, 'rgba(190,225,250,0.08)'); g.addColorStop(1, 'rgba(255,255,255,0.3)');
+      ctx.fillStyle = g; ctx.fillRect(r.x, r.y, r.w, r.h);
+      const rnd = rng(Math.round(r.x * 7 + r.y * 13 + r.w * 3 + 1));
+      ctx.strokeStyle = 'rgba(140,185,220,0.55)'; ctx.lineWidth = 1; ctx.lineCap = 'round';
+      const n = Math.round((r.w * r.h) / 2600) + 2;
+      for (let i = 0; i < n; i++) {
+        let x = r.x + rnd() * r.w, y = r.y + rnd() * r.h;
+        ctx.beginPath(); ctx.moveTo(x, y);
+        for (let k = 0; k < 3; k++) { x += (rnd() - 0.5) * 36; y += (rnd() - 0.5) * 36; ctx.lineTo(x, y); }
+        ctx.stroke();
+      }
+      const u = ((t * 0.16 + r.x * 0.003 + r.y * 0.002) % 1.8) - 0.4;
+      const sx = r.x + u * (r.w + r.h);
+      ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 12;
+      line(ctx, sx, r.y - 10, sx - r.h * 0.6, r.y + r.h + 10);
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2;
+      roundRectPath(ctx, r.x, r.y, r.w, r.h, 12); ctx.stroke();
+    }
+  }
+
+  // Vind: lyse striper som suser i vindretningen.
+  function drawWinds(ctx, w, t) {
+    for (const v of w.winds) {
+      const sp = Math.hypot(v.ax, v.ay) || 1, ux = v.ax / sp, uy = v.ay / sp, px = -uy, py = ux;
+      const cx = v.x + v.w / 2, cy = v.y + v.h / 2;
+      const hp = Math.abs(px) * v.w / 2 + Math.abs(py) * v.h / 2;
+      const ha = Math.abs(ux) * v.w / 2 + Math.abs(uy) * v.h / 2 + 30;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(v.x, v.y, v.w, v.h); ctx.clip();
+      ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(v.x, v.y, v.w, v.h);
+      const rnd = rng(Math.round(v.x * 3 + v.y * 7 + v.w + 11));
+      const n = Math.round((v.w * v.h) / 1300) + 5;
+      ctx.lineCap = 'round';
+      for (let i = 0; i < n; i++) {
+        const off = (rnd() * 2 - 1) * hp, ph = rnd(), spd = 0.75 + rnd() * 0.5, len = 18 + rnd() * 24;
+        const along = (((t * (70 + sp * 0.8) * spd) / (2 * ha) + ph) % 1) * 2 * ha - ha;
+        const x = cx + px * off + ux * along, y = cy + py * off + uy * along;
+        const edge = Math.min(along + ha, ha - along);
+        const a = Math.max(0, Math.min(1, edge / 40)) * 0.55;
+        if (a <= 0.02) continue;
+        ctx.strokeStyle = `rgba(255,255,255,${a})`;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        for (let k = 0; k <= 6; k++) {
+          const s = -len + (k / 6) * len, wv = Math.sin(s * 0.18 + t * 6 + i) * 1.6;
+          const xx = x + ux * s + px * wv, yy = y + uy * s + py * wv;
+          if (k === 0) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  // Regn: der dråpen faller. Skyggen av en regnsky, og en stiplet ring
+  // som viser hvor langt dråpen rekker.
+  function drawRainSpots(ctx, w, t) {
+    for (const d of w.rains) {
+      const g = ctx.createRadialGradient(d.x, d.y, 4, d.x, d.y, d.range * 0.85);
+      g.addColorStop(0, 'rgba(20,45,70,0.22)'); g.addColorStop(0.6, 'rgba(20,45,70,0.1)'); g.addColorStop(1, 'rgba(20,45,70,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(d.x, d.y, d.range * 0.85, 0, TAU); ctx.fill();
+      ctx.save();
+      ctx.setLineDash([3, 6]);
+      ctx.lineDashOffset = -t * 6;
+      ctx.strokeStyle = 'rgba(255,255,255,0.34)'; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(d.x, d.y, d.range * 0.72, 0, TAU); ctx.stroke();
+      ctx.restore();
+      const left = E.nextDrop(w, d) * C.DT;
+      const u = Math.max(0, 1 - left / 0.8);
+      ctx.fillStyle = `rgba(10,50,80,${0.15 + 0.25 * u})`;
+      ctx.beginPath(); ctx.arc(d.x, d.y, 3 + 5 * u, 0, TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(d.x, d.y, 7, 0, TAU); ctx.stroke();
+    }
+  }
+  // Regn: dråpen på vei ned (tegnes over alt annet).
+  function drawFallingDrops(ctx, w) {
+    for (const d of w.rains) {
+      const left = E.nextDrop(w, d) * C.DT;
+      if (left > 0.8) continue;
+      const u = 1 - left / 0.8, k = 1 - u;
+      const x = d.x + k * 18, y = d.y - k * 110;
+      const s = 3.6 + k * 3.5;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, u * 2.5);
+      ctx.translate(x, y); ctx.rotate(-0.17);
+      ctx.fillStyle = 'rgba(225,246,255,0.95)';
+      ctx.strokeStyle = 'rgba(40,110,150,0.55)'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, -s * 2.2);
+      ctx.quadraticCurveTo(s * 1.1, -s * 0.2, 0, s);
+      ctx.quadraticCurveTo(-s * 1.1, -s * 0.2, 0, -s * 2.2);
+      ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // Tømmer i elva: stokkene flyter med strømmen, med skygge og litt skum
+  // foran. (Klippes til dammen, så de kommer inn under kanten.)
+  function drawTimber(ctx, w, t) {
+    for (const tm of w.timber) {
+      E.eachTimber(w, tm, (x1, y1, x2, y2, r, i) => {
+        const bob = Math.sin(t * 2.1 + i * 1.7) * 0.7;
+        ctx.strokeStyle = PAL.shadow; ctx.lineCap = 'round'; ctx.lineWidth = r * 2;
+        ctx.beginPath(); ctx.moveTo(x1 + 3, y1 + 5); ctx.lineTo(x2 + 3, y2 + 5); ctx.stroke();
+        // skum der stokken skyver vannet foran seg
+        ctx.fillStyle = 'rgba(255,255,255,0.32)';
+        ctx.beginPath(); ctx.ellipse(x2 + tm.ux * 4, y2 + tm.uy * 4, r * 1.1, r * 1.5, Math.atan2(tm.uy, tm.ux), 0, TAU); ctx.fill();
+        drawLog(ctx, { x1, y1: y1 + bob, x2, y2: y2 + bob, r }, i * 7 + 3);
+      });
+    }
+  }
+
+  // Molo: en mur av steinblokker.
+  function drawWall(ctx, s) {
+    const dx = s.x2 - s.x1, dy = s.y2 - s.y1, len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len, px = -uy, py = ux;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = s.r * 2 + 5; line(ctx, s.x1, s.y1, s.x2, s.y2);
+    ctx.strokeStyle = PAL.rockDark; ctx.lineWidth = s.r * 2 + 1; line(ctx, s.x1, s.y1 + 1.5, s.x2, s.y2 + 1.5);
+    ctx.strokeStyle = PAL.rock; ctx.lineWidth = s.r * 2; line(ctx, s.x1, s.y1, s.x2, s.y2);
+    ctx.strokeStyle = PAL.rockLight; ctx.lineWidth = s.r * 0.7;
+    line(ctx, s.x1 - px * s.r * 0.4, s.y1 - py * s.r * 0.4, s.x2 - px * s.r * 0.4, s.y2 - py * s.r * 0.4);
+    ctx.strokeStyle = 'rgba(70,80,92,0.5)'; ctx.lineWidth = 1.1; ctx.lineCap = 'butt';
+    for (let a = 13, k = 0; a < len - 5; a += 15, k++) {
+      const x = s.x1 + ux * a, y = s.y1 + uy * a, o = k % 2 ? 0 : 0.5;
+      line(ctx, x - px * s.r * (0.95 - o), y - py * s.r * (0.95 - o), x + px * s.r * 0.95, y + py * s.r * 0.95);
+    }
+    ctx.lineCap = 'round';
+  }
+
+  // Sluseport: farget port av planker. Når den åpnes, glir den inn i stolpene.
+  function drawGate(ctx, g, i, now) {
+    const col = GATE_COL[i % GATE_COL.length];
+    const dx = g.x2 - g.x1, dy = g.y2 - g.y1, len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len, px = -uy, py = ux;
+    const k = g.open ? Math.min(1, (now - g.openT) / 0.7) : 0;
+    const mx = (g.x1 + g.x2) / 2, my = (g.y1 + g.y2) / 2;
+    if (k < 1) {
+      const e = 1 - k * k;
+      ctx.globalAlpha = 1 - k * 0.6;
+      ctx.lineCap = 'butt';
+      for (const [sx, sy, dir] of [[g.x1, g.y1, 1], [g.x2, g.y2, -1]]) {
+        const ex = sx + ux * dir * (len / 2) * e, ey = sy + uy * dir * (len / 2) * e;
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = g.r * 2 + 4; line(ctx, sx, sy, ex, ey);
+        ctx.strokeStyle = col[1]; ctx.lineWidth = g.r * 2; line(ctx, sx, sy, ex, ey);
+        ctx.strokeStyle = col[0]; ctx.lineWidth = g.r * 1.1;
+        line(ctx, sx - px * g.r * 0.3, sy - py * g.r * 0.3, ex - px * g.r * 0.3, ey - py * g.r * 0.3);
+        ctx.strokeStyle = 'rgba(90,40,60,0.35)'; ctx.lineWidth = 1;
+        for (let a = 9; a < (len / 2) * e - 3; a += 10) {
+          const x = sx + ux * dir * a, y = sy + uy * dir * a;
+          line(ctx, x - px * g.r, y - py * g.r, x + px * g.r, y + py * g.r);
+        }
+      }
+      ctx.globalAlpha = 1;
+      if (k === 0) drawMark(ctx, i, mx, my, 5, col[0], 0.95);
+    } else {
+      ctx.save();
+      ctx.setLineDash([3, 6]); ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1.5;
+      line(ctx, g.x1, g.y1, g.x2, g.y2);
+      ctx.restore();
+    }
+    for (const [x, y] of [[g.x1, g.y1], [g.x2, g.y2]]) {
+      ctx.fillStyle = 'rgba(10,50,75,0.25)'; ctx.beginPath(); ctx.arc(x + 1.5, y + 2.5, g.r + 2, 0, TAU); ctx.fill();
+      ctx.fillStyle = PAL.log; ctx.beginPath(); ctx.arc(x, y, g.r + 2, 0, TAU); ctx.fill();
+      ctx.fillStyle = col[0]; ctx.beginPath(); ctx.arc(x, y, g.r - 1.5, 0, TAU); ctx.fill();
+    }
+  }
+
+  // Bryter: en flytende knapp. Grønn hake når den er trykket inn.
+  function drawSwitch(ctx, s, t) {
+    const col = GATE_COL[s.gate % GATE_COL.length];
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    if (!s.on) {
+      const u = (t * 0.8) % 1;
+      ctx.strokeStyle = `rgba(255,255,255,${0.5 * (1 - u)})`; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, s.r + 2 + u * 10, 0, TAU); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(10,50,75,0.22)'; ctx.beginPath(); ctx.arc(1.5, 2.5, s.r, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#f7f2e6'; ctx.beginPath(); ctx.arc(0, 0, s.r, 0, TAU); ctx.fill();
+    ctx.strokeStyle = col[1]; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, s.r - 1.5, 0, TAU); ctx.stroke();
+    ctx.fillStyle = s.on ? col[1] : col[0];
+    ctx.beginPath(); ctx.arc(0, s.on ? 1 : -0.5, s.r * 0.55, 0, TAU); ctx.fill();
+    if (s.on) {
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.beginPath(); ctx.moveTo(-3.5, 1); ctx.lineTo(-1, 3.5); ctx.lineTo(4, -2); ctx.stroke();
+    } else {
+      drawMark(ctx, s.gate, 0, -0.5, 3.4, col[0], 1);
+    }
+    ctx.restore();
+  }
+
+  // Frosker: små blader der frosken kan sitte, og en stiplet bue til neste hopp.
+  function drawFrogLeaves(ctx, w, t) {
+    for (const f of w.frogs) {
+      f.hops.forEach(([x, y], i) => {
+        ctx.save();
+        ctx.translate(x, y); ctx.rotate(i * 2.1 + f.id * 1.3 + Math.sin(t * 0.8 + i) * 0.05);
+        ctx.fillStyle = 'rgba(10,50,75,0.2)';
+        ctx.beginPath(); ctx.arc(1.5, 2.5, 11, 0, TAU); ctx.fill();
+        ctx.fillStyle = PAL.padDark;
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, 11, 0.35, TAU - 0.35); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = PAL.pad;
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, 9.6, 0.4, TAU - 0.4); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      });
+      if (f.hops.length > 1 && f.jt < 0) {
+        const to = f.hops[(f.at + 1) % f.hops.length];
+        const mx = (f.x + to[0]) / 2, my = (f.y + to[1]) / 2 - Math.hypot(to[0] - f.x, to[1] - f.y) * 0.18;
+        ctx.save();
+        ctx.setLineDash([2, 5]); ctx.lineDashOffset = -t * 10;
+        ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.quadraticCurveTo(mx, my, to[0], to[1]); ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+  function drawFrog(ctx, f, t, wake) {
+    const n = f.hops.length, to = f.hops[(f.at + 1) % n];
+    let x = f.x, y = f.y, lift = 0;
+    if (f.jt >= 0) {
+      const u = Math.min(1, f.jt / C.FROG_JUMP);
+      x = f.x + (to[0] - f.x) * u; y = f.y + (to[1] - f.y) * u; lift = Math.sin(u * Math.PI);
+    }
+    const ang = n > 1 ? Math.atan2(to[1] - f.y, to[0] - f.x) + Math.PI / 2 : 0;
+    ctx.fillStyle = `rgba(10,50,75,${0.25 * (1 - lift * 0.5)})`;
+    ctx.beginPath(); ctx.ellipse(x + 2, y + 3, 8 * (1 - lift * 0.3), 7 * (1 - lift * 0.3), 0, 0, TAU); ctx.fill();
+    ctx.save();
+    ctx.translate(x, y - lift * 18);
+    const s = 1 + lift * 0.4 + (wake ? Math.sin(t * 20) * 0.04 : 0);
+    ctx.scale(s, s); ctx.rotate(ang);
+    const green = '#74d05e', dark = '#3f9a3a', light = '#b7ef9a';
+    // bakbein (strakt ut i hoppet)
+    ctx.strokeStyle = dark; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const sd of [-1, 1]) {
+      ctx.beginPath();
+      if (lift > 0.05) { ctx.moveTo(sd * 4, 4); ctx.lineTo(sd * 6, 10); ctx.lineTo(sd * 5, 15); }
+      else { ctx.moveTo(sd * 4, 4); ctx.lineTo(sd * 9, 3); ctx.lineTo(sd * 8, 8); }
+      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sd * 3, -3); ctx.lineTo(sd * 7, -6); ctx.stroke();
+    }
+    ctx.fillStyle = green;
+    ctx.beginPath(); ctx.ellipse(0, 0, 7, 8, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = dark; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = light;
+    ctx.beginPath(); ctx.ellipse(0, 2, 3.6, 4, 0, 0, TAU); ctx.fill();
+    for (const sd of [-1, 1]) {
+      ctx.fillStyle = green; ctx.beginPath(); ctx.arc(sd * 3.6, -6, 3.2, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(sd * 3.6, -6.4, 2.2, 0, TAU); ctx.fill();
+      ctx.fillStyle = PAL.eye; ctx.beginPath(); ctx.arc(sd * 3.6, -6.8, 1.2, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Lykt på en liten flottør (lyser opp i mørket).
+  function drawLamp(ctx, L, t) {
+    const fl = 0.85 + Math.sin(t * 7 + L.x) * 0.08 + Math.sin(t * 13 + L.y) * 0.05;
+    ctx.fillStyle = 'rgba(10,50,75,0.25)'; ctx.beginPath(); ctx.arc(L.x + 1.5, L.y + 2.5, 7, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#8a6a4a'; ctx.beginPath(); ctx.arc(L.x, L.y, 7, 0, TAU); ctx.fill();
+    const g = ctx.createRadialGradient(L.x, L.y, 1, L.x, L.y, 14);
+    g.addColorStop(0, `rgba(255,240,180,${fl})`); g.addColorStop(0.4, `rgba(255,200,100,${0.6 * fl})`); g.addColorStop(1, 'rgba(255,190,90,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(L.x, L.y, 14, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#fff6d0'; ctx.beginPath(); ctx.arc(L.x, L.y, 3, 0, TAU); ctx.fill();
+  }
+
+  // Skyggen bak moloer og lukkede porter: krusningen vises ikke der.
+  function clipWallShadows(ctx, w, x, y) {
+    const segs = w.walls.concat(w.gates.filter((g) => !g.open));
+    for (const s of segs) {
+      const far = (px, py) => {
+        const dx = px - x, dy = py - y, d = Math.hypot(dx, dy) || 1;
+        return [px + (dx / d) * 2000, py + (dy / d) * 2000];
+      };
+      const a = far(s.x1, s.y1), b = far(s.x2, s.y2);
+      ctx.beginPath();
+      ctx.rect(-500, -500, C.W + 1000, C.H + 1000);
+      ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.lineTo(b[0], b[1]); ctx.lineTo(a[0], a[1]); ctx.closePath();
+      ctx.clip('evenodd');
+    }
+  }
+
+  // Stemning per verden: grått regnvær, snø over isen.
+  function drawMood(ctx, w, t) {
+    const mood = w.level && w.level.mood;
+    if (mood === 'rain') {
+      ctx.fillStyle = 'rgba(60,80,105,0.22)';
+      ctx.fillRect(-60, -80, C.W + 120, C.H + 160);
+      ctx.strokeStyle = 'rgba(230,242,255,0.34)'; ctx.lineWidth = 1.2; ctx.lineCap = 'round';
+      for (let i = 0; i < 46; i++) {
+        const ph = ((i * 0.618) % 1), spd = 0.9 + ((i * 37) % 10) / 25;
+        const u = (t * spd * 0.9 + ph) % 1;
+        const x = ((i * 83) % (C.W + 100)) - 50 + u * 60, y = -60 + u * (C.H + 120);
+        line(ctx, x, y, x - 4, y - 16);
+      }
+    } else if (mood === 'dusk' && !w.dark) {
+      // skumring: fiolett lys og noen ildfluer
+      ctx.fillStyle = 'rgba(70,45,120,0.16)';
+      ctx.fillRect(-60, -80, C.W + 120, C.H + 160);
+      for (let i = 0; i < 9; i++) {
+        const x = 40 + ((i * 131) % 280) + Math.sin(t * 0.5 + i * 2) * 26, y = 60 + ((i * 197) % 480) + Math.cos(t * 0.4 + i) * 20;
+        const a = 0.35 + 0.35 * Math.sin(t * 2 + i * 1.7);
+        ctx.fillStyle = `rgba(255,240,150,${Math.max(0, a)})`;
+        ctx.beginPath(); ctx.arc(x, y, 1.8, 0, TAU); ctx.fill();
+      }
+    } else if (mood === 'ice') {
+      ctx.fillStyle = 'rgba(215,235,255,0.10)';
+      ctx.fillRect(-60, -80, C.W + 120, C.H + 160);
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      for (let i = 0; i < 34; i++) {
+        const ph = ((i * 0.618) % 1), spd = 0.35 + ((i * 37) % 10) / 40;
+        const u = (t * spd * 0.12 + ph) % 1;
+        const x = ((i * 97) % (C.W + 60)) - 30 + Math.sin(t * 0.8 + i) * 10, y = -40 + u * (C.H + 80);
+        ctx.beginPath(); ctx.arc(x, y, 1.2 + (i % 3) * 0.5, 0, TAU); ctx.fill();
+      }
+    }
+  }
+
+  // Natt: alt er mørkt, unntatt rundt lykter, båter, havner og krusninger.
+  let darkCv = null;
+  function drawDark(ctx, w, st, t) {
+    const W = R.canvas.width, H = R.canvas.height;
+    if (!darkCv) darkCv = document.createElement('canvas');
+    if (darkCv.width !== W || darkCv.height !== H) { darkCv.width = W; darkCv.height = H; }
+    const d = darkCv.getContext('2d');
+    d.setTransform(1, 0, 0, 1, 0, 0);
+    d.globalCompositeOperation = 'source-over';
+    d.clearRect(0, 0, W, H);
+    const more = !!st.light;
+    d.fillStyle = more ? 'rgba(12,18,48,0.68)' : 'rgba(8,12,36,0.86)';
+    d.fillRect(0, 0, W, H);
+    const k = R.dpr * R.s;
+    d.setTransform(k, 0, 0, k, R.dpr * R.ox, R.dpr * R.oy);
+    d.globalCompositeOperation = 'destination-out';
+    const boost = more ? 1.35 : 1;
+    const hole = (x, y, r, a) => {
+      const g = d.createRadialGradient(x, y, r * 0.12, x, y, r);
+      g.addColorStop(0, `rgba(0,0,0,${a})`); g.addColorStop(0.55, `rgba(0,0,0,${a * 0.75})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+      d.fillStyle = g; d.beginPath(); d.arc(x, y, r, 0, TAU); d.fill();
+    };
+    const fl = (s) => 1 + Math.sin(t * 6 + s) * 0.03 + Math.sin(t * 11 + s * 2) * 0.02;
+    for (const b of w.boats) hole(b.x, b.y, 50 * boost * fl(b.id), b.sink > 0 ? 0.5 : 0.95);
+    w.docks.forEach((dk, i) => hole(dk.x, dk.y, 58 * boost * fl(i + 7), 1));
+    for (const L of (w.level.lamps || [])) hole(L.x, L.y, (L.r || 80) * boost * fl(L.x), 1);
+    for (const f of w.frogs) hole(f.x, f.y, 24 * boost, 0.55);
+    for (const s of w.switches) hole(s.x, s.y, 26 * boost, 0.6);
+    for (const rp of w.ripples) {
+      const a = E.falloff(rp.r * 0.9, rp.range) * rp.p;
+      if (a < 0.03 || rp.r < 2) continue;
+      d.lineWidth = 22; d.strokeStyle = `rgba(0,0,0,${Math.min(0.85, 0.9 * a)})`;
+      d.beginPath(); d.arc(rp.x, rp.y, rp.r, 0, TAU); d.stroke();
+    }
+    if (st.aim) hole(st.aim.x, st.aim.y, 44, 0.8);
+    if (st.hint) hole(st.hint.x, st.hint.y, 34, 0.8);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(darkCv, 0, 0);
+    ctx.restore();
+    // varmt lys fra lyktene
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const glow = (x, y, r, a) => {
+      const g = ctx.createRadialGradient(x, y, 2, x, y, r);
+      g.addColorStop(0, `rgba(255,190,100,${a})`); g.addColorStop(1, 'rgba(255,170,80,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+    };
+    w.docks.forEach((dk, i) => glow(dk.x, dk.y, 44 * fl(i + 3), 0.16));
+    for (const L of (w.level.lamps || [])) glow(L.x, L.y, 40 * fl(L.y), 0.2);
+    for (const b of w.boats) if (b.sink <= 0) glow(b.x, b.y, 24, 0.12);
+    ctx.restore();
   }
 
   /* ---------- faste ting ---------- */
@@ -636,7 +1055,7 @@
     ctx.beginPath(); ctx.ellipse(r.x + r.r * 0.3, r.y + r.r * 0.32, r.r * 0.26, r.r * 0.14, 0.4, 0, TAU); ctx.fill();
   }
 
-  function drawLog(ctx, l) {
+  function drawLog(ctx, l, seed) {
     const dx = l.x2 - l.x1, dy = l.y2 - l.y1, len = Math.hypot(dx, dy) || 1;
     const px = -dy / len, py = dx / len;
     ctx.lineCap = 'round';
@@ -648,7 +1067,7 @@
     ctx.beginPath(); ctx.moveTo(l.x1 - px * l.r * 0.35, l.y1 - py * l.r * 0.35); ctx.lineTo(l.x2 - px * l.r * 0.35, l.y2 - py * l.r * 0.35); ctx.stroke();
     // barkstreker
     ctx.strokeStyle = 'rgba(70,40,20,0.35)'; ctx.lineWidth = 1;
-    const rnd = rng(Math.round(l.x1 * 3 + l.y1 * 5));
+    const rnd = rng(seed != null ? seed : Math.round(l.x1 * 3 + l.y1 * 5));
     for (let s = 0.12; s < 0.9; s += 0.11) {
       const u = s + rnd() * 0.05, o = (rnd() - 0.5) * l.r;
       const x = l.x1 + dx * u + px * o, y = l.y1 + dy * u + py * o;
@@ -794,6 +1213,16 @@
     ctx.strokeStyle = 'rgba(60,30,30,0.18)'; ctx.lineWidth = 0.8;
     ctx.beginPath(); ctx.moveTo(-11, 0); ctx.lineTo(11, 0); ctx.stroke();
     hullPath(ctx); ctx.stroke();
+    if (b.heavy) {
+      // lasteskute: kasser bak og foran, og kraftigere kant
+      ctx.strokeStyle = 'rgba(70,40,25,0.75)'; ctx.lineWidth = 1.6;
+      hullPath(ctx); ctx.stroke();
+      for (const [cx, cw] of [[-14.5, 6.5], [8.5, 5.5]]) {
+        ctx.fillStyle = '#c48a52'; ctx.fillRect(cx, -4.2, cw, 8.4);
+        ctx.strokeStyle = '#7a4f2a'; ctx.lineWidth = 0.9; ctx.strokeRect(cx, -4.2, cw, 8.4);
+        ctx.beginPath(); ctx.moveTo(cx, -4.2); ctx.lineTo(cx + cw, 4.2); ctx.moveTo(cx + cw, -4.2); ctx.lineTo(cx, 4.2); ctx.stroke();
+      }
+    }
     ctx.restore();
 
     // ansikt (alltid oppreist – ser søtere ut)
@@ -910,7 +1339,30 @@
     }
   }
 
-  function drawHint(ctx, h, t) {
+  function drawHint(ctx, h, t, w) {
+    // Med tømmer i elva gjelder hintet et bestemt øyeblikk: en ring krymper
+    // inn mot punktet og lyser grønt når det er tid for å trykke.
+    if (h.at != null && w) {
+      const left = (h.at - h.win - w.steps) * C.DT;
+      const now = left <= 0;
+      if (!now) {
+        const k = Math.min(1, left / 2);
+        ctx.strokeStyle = `rgba(255,255,255,${0.35 + 0.5 * (1 - k)})`;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(h.x, h.y, 11 + 46 * k, 0, TAU); ctx.stroke();
+      } else {
+        const p = (t * 4) % 1;
+        ctx.fillStyle = 'rgba(140,240,150,0.28)';
+        ctx.beginPath(); ctx.arc(h.x, h.y, 16, 0, TAU); ctx.fill();
+        ctx.strokeStyle = `rgba(140,240,150,${0.95 * (1 - p)})`; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(h.x, h.y, 10 + p * 18, 0, TAU); ctx.stroke();
+      }
+      ctx.fillStyle = now ? 'rgba(150,245,160,1)' : 'rgba(255,236,150,0.95)';
+      ctx.beginPath(); ctx.arc(h.x, h.y, now ? 6 : 4.5, 0, TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(40,80,0,0.4)'; ctx.lineWidth = 1;
+      ctx.stroke();
+      return;
+    }
     const pulse = (t * 1.3) % 1;
     ctx.strokeStyle = `rgba(255,236,150,${0.9 * (1 - pulse)})`;
     ctx.lineWidth = 2.5;
@@ -949,7 +1401,12 @@
 
   // piler på det som vil bli dyttet (styrke = lengde og tykkelse)
   function drawArrows(ctx, w, x, y, alpha) {
-    for (const p of E.preview(w, x, y)) {
+    for (const fr of E.previewFrogs(w, x, y)) {
+      ctx.strokeStyle = `rgba(190,255,160,${0.85 * alpha})`; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(fr.x, fr.y, 15, 0, TAU); ctx.stroke();
+    }
+    for (const p0 of E.preview(w, x, y)) {
+      const p = Object.assign({}, p0, { f: p0.f / p0.body.mass });
       const b = p.body;
       const len = 10 + 46 * p.f;
       const sx = b.x + p.nx * (b.r + 5), sy = b.y + p.ny * (b.r + 5);

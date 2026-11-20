@@ -82,6 +82,7 @@ Tallene for spilletid er anslag (ca. 1 minutt per bane første gang, med omstart
 | 5 | 108 | 180 |
 | 6 | 135 | 225 |
 | 7 | 162 | 270 |
+| 8 | 189 | 279 |
 | ◉ Perlebukta | 30 perler | 105 |
 
   Hvorfor 60 %: det er nok til at du *må* hente noen ekstra stjerner, men aldri så mye at du sitter fast. Hintet hjelper deg alltid til minst én stjerne.
@@ -150,10 +151,11 @@ Hver verden legger til **én hovedmekanikk** og ofte én liten krydder. Rekkefø
 | 1 · Dammen | trykk, retning, styrke, stein, stokk, flere båter, biljard, vannliljer, virvel | Sikte og styrke | **15 baner** |
 | 2 · Bekken | **strøm** + **fargede havner** (båten må til havna med samme farge og merke) | Planlegge med noe som beveger seg, og sortere båter | **15 baner** |
 | 3 · Fossen | **foss nedover** (båten glir ned til en lavere vannhøyde, men kommer aldri opp igjen, og krusninger når bare båter på samme høyde) og **foss ovenfra** (vann som faller ned dytter båter bort, og treffer båten midten, krasjer den) | Tenke i etasjer: hva må skje før båten går utfor? | **15 baner** |
-| 4 · Regnværet | **regndråper** som lager egne krusninger i et fast mønster, og **tunge båter** (lasteskuter) | Timing: bruk regnet, eller vent på det | Ny |
-| 5 · Slusene | **moloer** som stopper krusninger (skygge bak), **brytere** som åpner en **sluse** når en båt treffer dem | Rekkefølge: gjør ting i riktig rekkefølge | Ny |
-| 6 · Natten | **mørke** (du ser bare nær lyktene) og **frosker** som hopper når krusningen treffer dem og lager en ny krusning der de lander | Kjedereaksjoner og å huske banen | Ny |
-| 7 · Isen | **glatt is** (båtene glir uten å stoppe) og **vind** i faste kast | Små trykk og fin kontroll | Ny |
+| 4 · Regnværet | **regndråper** som faller på faste steder i fast takt og lager egne krusninger (takten starter på nytt ved hvert trykk, og skyen venter når alt er i ro), og **tunge båter** (lasteskuter) | Bruk regnet som et ekstra trykk, eller hold deg unna det | **15 baner** |
+| 5 · Slusene | **moloer** som stopper båter og krusninger (skygge bak), **brytere** som åpner en **sluseport** når en båt (eller vannlilje) kjører over dem | Rekkefølge: gjør ting i riktig rekkefølge | **15 baner** |
+| 6 · Natten | **frosker** som hopper når krusningen treffer dem og lager en ny krusning der de lander, og **mørke** (du ser bare nær lykter, båter og havner, og krusningene lyser opp vannet) | Kjedereaksjoner og å huske banen | **15 baner** |
+| 7 · Isen | **glatt is** (båtene glir nesten uten å stoppe) og **vind** som blåser jevnt i faste felt | Små trykk og fin kontroll | **15 baner** |
+| 8 · Elva | **tømmerstokker** som flyter med strømmen med ujevne mellomrom. Treffer en stokk båten (eller blir den liggende fast i elva), blir den knust og starter på nytt | Timing: send båten over i en åpning | **3 baner** (prøve) |
 | ◉ Perlebukta | ingen ny regel, alt kombinert | Perfekte løsninger | Ny |
 | Senere: Fjorden | tidevann (steiner kommer og går), bølger | | Idé |
 
@@ -164,9 +166,16 @@ Hver verden legger til **én hovedmekanikk** og ofte én liten krydder. Rekkefø
 
 **Andre måter å skru opp vanskeligheten på** (uten ny mekanikk): flere båter, mindre plass rundt havna, strammere par, perle som krever biljard, færre trykkesoner.
 
-**Hvorfor frosker og ikke noe annet i verden 5:** kjedereaksjoner gir de største «aha»-øyeblikkene i fysikkspill, og en frosk som hopper fra blad til blad er lett å forstå uten tekst.
+**Hvorfor frosker og ikke noe annet i verden 6:** kjedereaksjoner gir de største «aha»-øyeblikkene i fysikkspill, og en frosk som hopper fra blad til blad er lett å forstå uten tekst.
 
 Alle nye mekanikker må være deterministiske (fast mønster, ingen tilfeldighet), slik at løseren og hintet virker.
+
+**Valg som ble tatt underveis (verden 4–8):**
+- **Regnet går i takt med trykkene dine.** Første dråpe faller litt etter hvert trykk, og så i fast takt, men bare så lenge noe i dammen er i bevegelse. Når alt er i ro, venter skyen til neste trykk. Da ligger båtene stille mens du tenker, resultatet blir det samme uansett hvor lenge du venter før du trykker, og hint-knappen treffer. Det passer også med at spillet ikke skal ha tidspress.
+- **Vinden blåser jevnt i faste felt** (vist med striper), ikke i kast. Kast som kommer av seg selv ville flyttet båtene mens du tenker, og da kan verken løseren eller hintet regne riktig.
+- **Tømmerstokkene ser tilfeldige ut, men er like hver gang** du spiller en bane (de lages fra et frø). Da kan hint-knappen regne ut et godt øyeblikk. Hintet viser en ring som krymper inn og lyser grønt når det er tid for å trykke.
+- **Regnet blir tettere utover i verden 4:** dråpene faller omtrent hvert sekund, og antall skyer øker fra én til fem.
+- Natten har innstillingen «Mer lys om natten».
 
 ---
 
@@ -285,8 +294,8 @@ Hver fase gir noe som kan spilles og testes med en gang.
 
 1. **Fase 1 – Daglig innhold:** brettgenerator, `tools/gen.js`, Dagens dam (med kalender og deling) og Rask runde (Lett/Middels/Vrien). Ny lagring (versjon 2) som tar vare på gammel fremgang. *Spilltest demoen med 5–10 personer etterpå.*
 2. **Fase 2 – Stien:** verden 1 og 2 opp til 15 baner hver, fargede havner, ny verden 3 «Fossen», nye stjerneporter og finale-krav. **Laget.** Gjenstår: trykkesoner og stikart.
-3. **Fase 3 – Nye mekanikker:** Regnværet og Slusene med 15 baner hver.
-4. **Fase 4 – Dybde:** Natten, Isen, Perlebukta og Båthuset.
+3. **Fase 3 – Nye mekanikker:** Regnværet, Slusene, Natten og Isen med 15 baner hver. **Laget.** (Midlertidig knapp «Test: velg bane» på tittelskjermen; `DEV_JUMP` i `game.js` settes til `false` før lansering.)
+4. **Fase 4 – Dybde:** Perlebukta og Båthuset.
 5. **Fase 5 – App:** iOS-app med Capacitor, engangskjøp via Apple, haptikk, app-ikon, TestFlight med venner.
 6. **Lansering** i App Store. Etterpå: ny verden hver 1–2 måned, Baneverkstedet, Android.
 

@@ -59,11 +59,12 @@ function score(w) {
     let best = 1e9;
     for (const d of w.docks) {
       if (d.boat >= 0 || (d.color >= 0 && d.color !== b.color)) continue;
-      best = Math.min(best, Math.hypot(d.x - b.x, d.y - b.y));
+      best = Math.min(best, Engine.pathDist(w, b.x, b.y, d.x, d.y));
     }
     s -= best;
     for (const v of w.whirls) if (Math.hypot(v.x - b.x, v.y - b.y) < v.r) s -= 150;
   }
+  for (const sw of w.switches) if (sw.on) s += 250; // åpnet sluse er et steg nærmere
   return s;
 }
 
@@ -125,6 +126,9 @@ function makeSolver(threads) {
   // løsning er funnet, og stopper ved stopDepth når en løsning finnes.
   async function analyze(level, o) {
     o = Object.assign({ grid: 9, beam: 24, maxDepth: 4, stopDepth: 1 }, o || {});
+    // Tømmer i elva: søket regner uten stokkene (som om du alltid treffer et
+    // godt øyeblikk). timingCheck() sjekker etterpå at øyeblikkene finnes.
+    if (level.timber) level = Object.assign({}, level, { timber: undefined });
     const fine = gridPoints(Math.max(3, o.grid / 2));
     const r1 = await evaluate(level, [], fine);
     const wins1 = r1.filter((r) => r.done);
@@ -184,10 +188,50 @@ async function solveLevel(level) {
     if (level.pearl >= 2 && !found[level.pearl] && min < level.pearl) lines.push('  (perla nås bare med det svært smale ettrykksvinduet)');
   }
 
+  if (level.timber && example) {
+    const tc = timingCheck(level, example);
+    tc.forEach((r, i) => lines.push(`  tømmer, trykk ${i + 1}: ` + (r.best ? `${r.count} gode øyeblikk de neste 10 s, lengste ${r.best.toFixed(2)} s, første etter ${r.first.toFixed(2)} s` : 'ingen gode øyeblikk')));
+    if (tc.some((r) => !r.best)) warn.push('båten kommer ikke forbi stokkene i eksempelløsningen');
+    else if (tc.some((r) => r.best < 0.2)) warn.push('vinduene mellom stokkene er svært korte (under 0,2 s)');
+  }
+
   for (const w of warn) lines.push(`  ⚠ ${w}`);
   lines.push(`  (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   console.log(lines.join('\n'));
   return { id: level.id, min, warn };
+}
+
+// Tømmer: finnes det, for hvert trykk i løsningen, øyeblikk der båten slipper
+// forbi stokkene? Vi venter 0–10 s (hvert 0,05 s) før trykket og ser etter
+// knusing. Neste trykk tar utgangspunkt i det første gode øyeblikket.
+function timingCheck(level, taps) {
+  const out = [];
+  let w = Engine.createWorld(level);
+  for (const [x, y] of taps) {
+    const wait = Engine.clone(w);
+    const ok = [];
+    let next = null;
+    for (let k = 0; k <= 200; k++) {
+      const t = Engine.clone(wait);
+      Engine.tap(t, x, y);
+      let bad = false;
+      for (let i = 0; i < 12 / C.DT; i++) {
+        Engine.step(t);
+        if (t.events.some((e) => e.type === 'crash')) { bad = true; break; }
+        t.events.length = 0;
+        if (t.done || Engine.isSettled(t)) break;
+      }
+      ok.push(!bad);
+      if (!bad && !next) next = t;
+      for (let i = 0; i < 6; i++) { Engine.step(wait); wait.events.length = 0; }
+    }
+    let best = 0, run = 0, count = 0;
+    ok.forEach((g, i) => { run = g ? run + 1 : 0; if (g && (i === 0 || !ok[i - 1])) count++; best = Math.max(best, run); });
+    out.push({ best: best ? best * 0.05 : 0, count, first: ok.indexOf(true) * 0.05 });
+    if (!next) break;
+    w = next;
+  }
+  return out;
 }
 
 function dedupe(list) {
@@ -212,13 +256,16 @@ function centerOf(pts) {
 }
 
 // Banen som tekst: B båt, H havn (tall = farget havn), O stein, # stokk, L vannlilje, @ virvel,
-// = foss nedover, V foss ovenfra, * vinnende trykk
+// = foss nedover, V foss ovenfra, r regndråpe, M molo, G sluseport, S bryter, f frosk (blad),
+// - is, > vind, * vinnende trykk
 function asciiMap(level, wins) {
   const cw = 9, ch = 15, cols = Math.ceil(C.W / cw), rows = Math.ceil(C.H / ch);
   const g = Array.from({ length: rows }, () => Array(cols).fill(' '));
   const put = (x, y, c) => { const cx = Math.floor(x / cw), cy = Math.floor(y / ch); if (g[cy] && cx >= 0 && cx < cols) g[cy][cx] = c; };
   const disc = (x, y, r, c) => { for (let yy = y - r; yy <= y + r; yy += 3) for (let xx = x - r; xx <= x + r; xx += 3) if (Math.hypot(xx - x, yy - y) <= r) put(xx, yy, c); };
   for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) if (Engine.insidePond(x * cw + cw / 2, y * ch + ch / 2, 0)) g[y][x] = '·';
+  for (const r of level.ice || []) for (let y = r.y + 4; y < r.y + r.h; y += 15) for (let x = r.x + 4; x < r.x + r.w; x += 9) if (g[Math.floor(y / ch)] && g[Math.floor(y / ch)][Math.floor(x / cw)] === '·') put(x, y, '-');
+  for (const r of level.winds || []) for (let y = r.y + 4; y < r.y + r.h; y += 15) for (let x = r.x + 4; x < r.x + r.w; x += 9) if (g[Math.floor(y / ch)] && g[Math.floor(y / ch)][Math.floor(x / cw)] === '·') put(x, y, Math.abs(r.ax || 0) >= Math.abs(r.ay || 0) ? (r.ax > 0 ? '>' : '<') : (r.ay > 0 ? 'v' : '^'));
   for (const [x, y] of wins) put(x, y, '*');
   for (const v of level.whirls || []) disc(v.x, v.y, v.r * 0.35, '@');
   for (const r of level.rocks || []) disc(r.x, r.y, r.r, 'O');
@@ -226,15 +273,20 @@ function asciiMap(level, wins) {
   for (const l of level.logs || []) { for (let t = 0; t <= 1; t += 0.02) put(l.x1 + (l.x2 - l.x1) * t, l.y1 + (l.y2 - l.y1) * t, '#'); }
   for (const f of level.falls || []) { for (let t = -0.2; t <= 1.2; t += 0.01) put(f.x1 + (f.x2 - f.x1) * t, f.y1 + (f.y2 - f.y1) * t, '='); }
   for (const c of level.cascades || []) disc(c.x, c.y, 12, 'V');
+  for (const l of level.walls || []) { for (let t = 0; t <= 1; t += 0.01) put(l.x1 + (l.x2 - l.x1) * t, l.y1 + (l.y2 - l.y1) * t, 'M'); }
+  for (const l of level.gates || []) { for (let t = 0; t <= 1; t += 0.01) put(l.x1 + (l.x2 - l.x1) * t, l.y1 + (l.y2 - l.y1) * t, 'G'); }
+  for (const s of level.switches || []) disc(s.x, s.y, 6, 'S');
+  for (const d of level.rain || []) disc(d.x, d.y, 5, 'r');
+  for (const f of level.frogs || []) for (const [x, y] of f.hops) disc(x, y, 5, 'f');
   for (const d of level.docks || []) disc(d.x, d.y, 12, d.color != null ? String(d.color) : 'H');
   const colored = (level.docks || []).some((d) => d.color != null);
-  (level.boats || []).forEach((b, i) => disc(b.x, b.y, 9, colored ? String.fromCharCode(97 + (b.color != null ? b.color : i)) : 'B'));
+  (level.boats || []).forEach((b, i) => disc(b.x, b.y, 9, colored ? String.fromCharCode(97 + (b.color != null ? b.color : i)) : b.heavy ? 'T' : 'B'));
   return g.map((r) => '    |' + r.join('') + '|').join('\n');
 }
 
 function fmt(taps) { return taps.map(([x, y]) => `(${Math.round(x)}, ${Math.round(y)})`).join(' → '); }
 
-module.exports = { makeSolver, asciiMap };
+module.exports = { makeSolver, asciiMap, timingCheck };
 
 if (require.main === module) {
   const args = process.argv.slice(2);

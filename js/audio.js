@@ -116,6 +116,35 @@
     noise({ dur: 0.07, freq: 3200, q: 0.8, vol: 0.05, filter: 'highpass' });
   };
 
+  // Regndråpe: myk, lys dråpe (svakere enn et trykk).
+  S.drop = function (x) {
+    if (!ready()) return;
+    const f = note(5 + Math.round(x * 4), 72);
+    tone({ f: f * 0.8, f2: f * 1.4, glide: 0.05, dur: 0.1, vol: 0.09, send: 0.5 });
+    noise({ dur: 0.04, freq: 4200, q: 0.8, vol: 0.025, filter: 'highpass' });
+  };
+  // Frosk som hopper: lite «kvekk».
+  S.frog = function () {
+    if (!ready()) return;
+    const t = S.ctx.currentTime;
+    tone({ f: 260, f2: 190, dur: 0.07, vol: 0.12, type: 'square', t });
+    tone({ f: 300, f2: 210, dur: 0.08, vol: 0.1, type: 'square', t: t + 0.09 });
+  };
+  // Frosken lander: «plopp».
+  S.land = function () {
+    if (!ready()) return;
+    tone({ f: 140, f2: 420, glide: 0.06, dur: 0.12, vol: 0.2, send: 0.35 });
+  };
+  // Bryter og sluseport: klikk og en dyp rumling.
+  S.gate = function () {
+    if (!ready()) return;
+    const t = S.ctx.currentTime;
+    tone({ f: 880, dur: 0.05, vol: 0.12, type: 'triangle', t });
+    tone({ f: 1320, dur: 0.06, vol: 0.08, type: 'triangle', t: t + 0.06 });
+    tone({ f: 90, f2: 60, dur: 0.6, vol: 0.18, type: 'triangle', t: t + 0.1, send: 0.3 });
+    noise({ dur: 0.5, freq: 400, q: 0.6, vol: 0.05, t: t + 0.1 });
+  };
+
   S.hit = function (f) {
     if (!ready() || f < 0.25) return;
     tone({ f: 180 + f * 120, f2: 320 + f * 200, glide: 0.08, dur: 0.12, vol: 0.05 * f, send: 0.3 });

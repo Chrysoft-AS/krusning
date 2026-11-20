@@ -46,11 +46,32 @@
     WHIRL_SWIRL: 170,             // strømvirvel: sirkelbevegelse
     SINK_R: 9,
     SINK_TIME: 1.1,
+    TIMBER_R: 9,                  // tømmerstokk i elva: tykkelse (radius)
 
     FALL_KICK: 70,                // fart nedover når en båt går utfor en foss
     FALL_LIP: 2,                  // båter under fossen kommer ikke opp igjen
     CASCADE_PUSH: 520,            // foss ovenfra: vannet dytter båter bort
     CASCADE_CORE: 15,             // treffer båten midten, krasjer den
+
+    HEAVY_MASS: 2,                // lasteskuter er tunge og flytter seg mindre
+
+    RAIN_EVERY: 1.2,              // regn: sekunder mellom dråpene
+    RAIN_DELAY: 0.6,              // regn: første dråpe så lenge etter et trykk
+    RAIN_POWER: 0.6,              // regn: dråpen er svakere enn et trykk…
+    RAIN_RANGE: 120,              // …og rekker kortere
+    RAIN_MAX: 6,                  // regn: høyst så mange dråper per sky etter hvert trykk
+
+    WALL_R: 7,                    // molo og sluseport: halv tykkelse
+    SWITCH_R: 13,                 // bryter: båten må over denne
+
+    FROG_R: 9,
+    FROG_JUMP: 0.5,               // sekunder i lufta
+    FROG_POWER: 0.9,              // frosken lander og lager en krusning
+    FROG_RANGE: 260,
+    FROG_WAKE: 0.45,              // krusningen må være så sterk for å vekke frosken
+
+    ICE_DRAG: 0.4,                // is: nesten ingen vannmotstand…
+    ICE_FRICTION: 10,             // …og lite brems
 
     SETTLE_V: 3,
     MAX_RIPPLES: 16,
@@ -59,8 +80,69 @@
   const DRAG_MUL_BOAT = Math.exp(-C.DRAG * C.DT);
   const DRAG_MUL_PAD = Math.exp(-C.PAD_DRAG * C.DT);
   const GRIP_MUL = Math.exp(-C.CURRENT_GRIP * C.DT);
+  const ICE_MUL = Math.exp(-C.ICE_DRAG * C.DT);
 
   /* ---------- oppretting ---------- */
+
+  // Enkel tallgenerator med frø (samme frø gir samme tall hver gang).
+  function seeded(seed) {
+    let a = (seed >>> 0) || 1;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // Lager lista over alle stokkene i ei tømmerrenne (en halvtime med stokker).
+  function makeTimber(t, i) {
+    const dx = t.x2 - t.x1, dy = t.y2 - t.y1, L = Math.hypot(dx, dy) || 1;
+    const speed = t.speed || 60, len = t.len || 60;
+    const gap = t.gap || [1, 3];
+    const jit = t.jitter != null ? t.jitter : 6;
+    const rnd = seeded(t.seed != null ? t.seed : 7 + i * 31);
+    const travel = (L + len * 1.5) / speed; // tid fra stokken kommer inn til den er ute
+    const logs = [];
+    let T = -travel + gap[0] + (gap[1] - gap[0]) * rnd(); // elva er full av stokker fra start
+    while (T < 1800) {
+      const l = len * (0.8 + 0.4 * rnd());
+      logs.push({ t0: T, len: l, off: (rnd() * 2 - 1) * jit, ang: (rnd() * 2 - 1) * 0.16 });
+      T += l / speed + gap[0] + (gap[1] - gap[0]) * rnd();
+    }
+    return { x1: t.x1, y1: t.y1, ux: dx / L, uy: dy / L, L, speed, travel, logs, period: T + travel, r: t.r || C.TIMBER_R, jit };
+  }
+
+  // Stokkene som flyter i renna akkurat nå: kaller fn(x1, y1, x2, y2, r, i)
+  // for hver stokk (i er stokkens nummer, til tegningen).
+  function eachTimber(w, tm, fn) {
+    const t = (w.steps * C.DT) % tm.period;
+    const logs = tm.logs;
+    let lo = 0, hi = logs.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (logs[m].t0 <= t - tm.travel) lo = m + 1; else hi = m; }
+    for (let i = lo; i < logs.length && logs[i].t0 <= t; i++) {
+      const g = logs[i];
+      const c = (t - g.t0) * tm.speed - g.len / 2;
+      const cx = tm.x1 + tm.ux * c - tm.uy * g.off, cy = tm.y1 + tm.uy * c + tm.ux * g.off;
+      const ca = Math.cos(g.ang), sa = Math.sin(g.ang);
+      const ux = tm.ux * ca - tm.uy * sa, uy = tm.uy * ca + tm.ux * sa, h = g.len / 2;
+      fn(cx - ux * h, cy - uy * h, cx + ux * h, cy + uy * h, tm.r, i);
+    }
+  }
+
+  // Har båten blitt liggende fast i elva (presset mot land av strømmen)?
+  // Da tar elva den: den blir knust og starter på nytt.
+  function stuckInTimber(w, b) {
+    if (b.dock >= 0 || b.sink > 0) return false;
+    if (b.vx * b.vx + b.vy * b.vy > 15 * 15) return false;
+    for (const c of w.currents) if (b.x >= c.x && b.x <= c.x + c.w && b.y >= c.y && b.y <= c.y + c.h) return true;
+    for (const tm of w.timber) {
+      const d = Math.abs((b.x - tm.x1) * tm.uy - (b.y - tm.y1) * tm.ux);
+      if (d < tm.jit + tm.r + b.r) return true;
+    }
+    return false;
+  }
 
   function createWorld(level) {
     const w = {
@@ -68,7 +150,9 @@
       t: 0, steps: 0, taps: 0,
       bodies: [], boats: [], pads: [],
       docks: [], rocks: [], logs: [], whirls: [], currents: [], falls: [], cascades: [],
-      ripples: [], events: [], rippleSeq: 0,
+      rains: [], walls: [], gates: [], switches: [], frogs: [], ice: [], winds: [], timber: [],
+      ripples: [], events: [], rippleSeq: 0, tapStep: 0,
+      dark: !!level.dark,
       done: false, doneAt: -1,
     };
 
@@ -85,7 +169,7 @@
       const body = {
         kind: 'boat', id: w.bodies.length, idx: i,
         x: b.x, y: b.y, vx: 0, vy: 0,
-        r: C.BOAT_R, mass: 1, drag: DRAG_MUL_BOAT,
+        r: C.BOAT_R, mass: b.heavy ? C.HEAVY_MASS : 1, drag: DRAG_MUL_BOAT, heavy: !!b.heavy,
         color: b.color != null ? b.color : i,
         angle: b.angle != null ? b.angle : -Math.PI / 2,
         dock: -1, dockT: 0, sink: 0, sinkX: 0, sinkY: 0,
@@ -117,6 +201,34 @@
     (level.logs || []).forEach((l) => w.logs.push({ x1: l.x1, y1: l.y1, x2: l.x2, y2: l.y2, r: l.r || 8 }));
     (level.whirls || []).forEach((v) => w.whirls.push({ x: v.x, y: v.y, r: v.r || 60, power: v.power || 1, dir: v.dir || 1 }));
     (level.currents || []).forEach((c) => w.currents.push({ x: c.x, y: c.y, w: c.w, h: c.h, vx: c.vx || 0, vy: c.vy || 0 }));
+
+    // Regn: en dråpe faller på samme sted i fast takt. Takten starter på nytt
+    // ved hvert trykk, og dråpene faller bare mens noe er i bevegelse (og høyst
+    // RAIN_MAX ganger per trykk). Når alt er i ro, venter skyen til neste trykk. Da ligger båtene stille mens du
+    // tenker, og resultatet blir det samme uansett når du trykker.
+    (level.rain || []).forEach((d) => w.rains.push({
+      x: d.x, y: d.y,
+      p: d.power || C.RAIN_POWER, range: d.range || C.RAIN_RANGE,
+      ds: Math.max(1, Math.round((d.delay != null ? d.delay : C.RAIN_DELAY) / C.DT)),
+      es: Math.max(1, Math.round((d.every || C.RAIN_EVERY) / C.DT)),
+    }));
+    // Tømmer i elva: stokker flyter langs en linje i fast fart, med ujevne
+    // mellomrom. Mellomrommene lages fra et frø, så de er like hver gang du
+    // spiller banen. Treffer en stokk båten, blir den knust og starter på nytt.
+    (level.timber || []).forEach((t, i) => w.timber.push(makeTimber(t, i)));
+    // Molo: en mur som stopper båter og krusninger (skygge bak).
+    (level.walls || []).forEach((l) => w.walls.push({ x1: l.x1, y1: l.y1, x2: l.x2, y2: l.y2, r: C.WALL_R }));
+    // Sluseport: som en molo, men åpnes for godt når en båt treffer bryteren.
+    (level.gates || []).forEach((g) => w.gates.push({ x1: g.x1, y1: g.y1, x2: g.x2, y2: g.y2, r: C.WALL_R, open: false, openT: -1 }));
+    (level.switches || []).forEach((s) => w.switches.push({ x: s.x, y: s.y, r: C.SWITCH_R, gate: s.gate || 0, on: false }));
+    // Frosker: hopper til neste blad når en krusning treffer, og lager en ny der de lander.
+    (level.frogs || []).forEach((f, i) => w.frogs.push({
+      id: i, hops: f.hops, at: 0, x: f.hops[0][0], y: f.hops[0][1], jt: -1, chain: [],
+    }));
+    // Is: båtene glir nesten uten å stoppe.
+    (level.ice || []).forEach((r) => w.ice.push({ x: r.x, y: r.y, w: r.w, h: r.h }));
+    // Vind: blåser jevnt i et felt og tar tak i seilene (bare båter).
+    (level.winds || []).forEach((r) => w.winds.push({ x: r.x, y: r.y, w: r.w, h: r.h, ax: r.ax || 0, ay: r.ay || 0 }));
     return w;
   }
 
@@ -138,9 +250,44 @@
 
   /* ---------- krusninger ---------- */
 
-  function falloff(d) {
-    if (d >= C.RIPPLE_RANGE) return 0;
-    return Math.pow(1 - d / C.RIPPLE_RANGE, C.FALLOFF_POW);
+  function falloff(d, range) {
+    const R = range || C.RIPPLE_RANGE;
+    if (d >= R) return 0;
+    return Math.pow(1 - d / R, C.FALLOFF_POW);
+  }
+
+  // Krysser linja (ax,ay)–(bx,by) linja (cx,cy)–(dx,dy)?
+  function cross(ax, ay, bx, by, cx, cy, dx, dy) {
+    const d1 = (dx - cx) * (ay - cy) - (dy - cy) * (ax - cx);
+    const d2 = (dx - cx) * (by - cy) - (dy - cy) * (bx - cx);
+    const d3 = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+    const d4 = (bx - ax) * (dy - ay) - (by - ay) * (dx - ax);
+    return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+  }
+  // Står en molo eller lukket sluseport i veien mellom to punkter?
+  function blocked(w, x1, y1, x2, y2) {
+    for (const s of w.walls) if (cross(x1, y1, x2, y2, s.x1, s.y1, s.x2, s.y2)) return true;
+    for (const g of w.gates) if (!g.open && cross(x1, y1, x2, y2, g.x1, g.y1, g.x2, g.y2)) return true;
+    return false;
+  }
+  function segDist(px, py, s) {
+    const abx = s.x2 - s.x1, aby = s.y2 - s.y1;
+    const len2 = abx * abx + aby * aby || 1;
+    let t = ((px - s.x1) * abx + (py - s.y1) * aby) / len2;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    return Math.hypot(px - (s.x1 + abx * t), py - (s.y1 + aby * t));
+  }
+  function onWall(w, x, y, m) {
+    for (const s of w.walls) if (segDist(x, y, s) < s.r + m) return true;
+    for (const g of w.gates) if (!g.open && segDist(x, y, g) < g.r + m) return true;
+    return false;
+  }
+
+  function addRipple(w, x, y, p, range, amb, chain, kind) {
+    if (w.ripples.length >= C.MAX_RIPPLES) w.ripples.shift();
+    const rp = { id: ++w.rippleSeq, x, y, r: 0, hit: [], lv: levelAt(w, x, y), p, range, amb, chain, fhit: [], kind };
+    w.ripples.push(rp);
+    return rp;
   }
 
   function insidePond(x, y, margin) {
@@ -152,10 +299,13 @@
     return dx * dx + dy * dy <= (R - m) * (R - m);
   }
 
+  // Kan man trykke her? (i dammen, og ikke oppå en molo eller lukket port)
+  function canTap(w, x, y) { return insidePond(x, y, 2) && !onWall(w, x, y, 2); }
+
   function tap(w, x, y) {
-    if (!insidePond(x, y, 2)) return false;
-    if (w.ripples.length >= C.MAX_RIPPLES) w.ripples.shift();
-    w.ripples.push({ id: ++w.rippleSeq, x, y, r: 0, hit: [], lv: levelAt(w, x, y) });
+    if (!canTap(w, x, y)) return false;
+    addRipple(w, x, y, 1, C.RIPPLE_RANGE, false, [], 'tap');
+    w.tapStep = w.steps;
     w.taps++;
     w.events.push({ type: 'tap', x, y });
     return true;
@@ -168,6 +318,7 @@
     for (const b of w.bodies) {
       if (b.dock >= 0 || b.sink > 0) continue;
       if (b.lv !== lv) continue; // krusningen når ikke over/under en foss
+      if (blocked(w, x, y, b.x, b.y)) continue; // molo i veien
       const dx = b.x - x, dy = b.y - y;
       const d = Math.sqrt(dx * dx + dy * dy);
       const f = falloff(d);
@@ -181,12 +332,41 @@
     }
     return out;
   }
+  // Hvilke frosker vil hoppe av et trykk her (til siktehjelpen).
+  function previewFrogs(w, x, y) {
+    const lv = levelAt(w, x, y);
+    return w.frogs.filter((f) => f.jt < 0 && levelAt(w, f.x, f.y) === lv && !blocked(w, x, y, f.x, f.y)
+      && falloff(Math.hypot(f.x - x, f.y - y)) >= C.FROG_WAKE);
+  }
 
   /* ---------- simulering ---------- */
 
   function step(w) {
     const dt = C.DT;
     w.t += dt; w.steps++;
+
+    // 0) regndråper faller i fast takt etter siste trykk, men bare så lenge
+    //    noe er i bevegelse (når alt er i ro, venter skyen til neste trykk)
+    if (w.rains.length && !isSettled(w)) {
+      const rel = w.steps - w.tapStep;
+      for (const d of w.rains) {
+        if (rel < d.ds || (rel - d.ds) % d.es !== 0 || (rel - d.ds) / d.es >= C.RAIN_MAX) continue;
+        addRipple(w, d.x, d.y, d.p, d.range, true, [], 'rain');
+        w.events.push({ type: 'drop', x: d.x, y: d.y });
+      }
+    }
+
+    // frosker i lufta lander og lager en ny krusning
+    for (const fr of w.frogs) {
+      if (fr.jt < 0) continue;
+      fr.jt += dt;
+      if (fr.jt < C.FROG_JUMP) continue;
+      fr.jt = -1;
+      fr.at = (fr.at + 1) % fr.hops.length;
+      fr.x = fr.hops[fr.at][0]; fr.y = fr.hops[fr.at][1];
+      addRipple(w, fr.x, fr.y, C.FROG_POWER, C.FROG_RANGE, false, fr.chain.concat([fr.id]), 'frog');
+      w.events.push({ type: 'land', id: fr.id, x: fr.x, y: fr.y });
+    }
 
     // 1) krusningene vokser og treffer ting
     for (let i = w.ripples.length - 1; i >= 0; i--) {
@@ -200,15 +380,28 @@
         if (rp.r < d - b.r) continue;
         rp.hit.push(b.id);
         if (b.lv !== rp.lv) continue; // annen vannhøyde: krusningen når ikke fram
-        const f = falloff(d);
+        if (w.walls.length + w.gates.length && blocked(w, rp.x, rp.y, b.x, b.y)) continue; // i skyggen av en molo
+        const f = falloff(d, rp.range);
         if (f <= 0) continue;
         let nx = 0, ny = -1;
         if (d > 1e-6) { nx = dx / d; ny = dy / d; }
-        const j = (C.PUSH * f) / b.mass / C.PUSH_STEPS;
+        const j = (C.PUSH * f * rp.p) / b.mass / C.PUSH_STEPS;
         b.pushes.push(nx * j, ny * j, C.PUSH_STEPS);
-        w.events.push({ type: 'hit', id: b.id, f, x: b.x, y: b.y });
+        w.events.push({ type: 'hit', id: b.id, f: f * rp.p, x: b.x, y: b.y });
       }
-      if (rp.r > C.RIPPLE_RANGE + 24) w.ripples.splice(i, 1);
+      for (const fr of w.frogs) {
+        if (fr.jt >= 0 || rp.fhit.indexOf(fr.id) >= 0) continue;
+        const d = Math.hypot(fr.x - rp.x, fr.y - rp.y);
+        if (rp.r < d - C.FROG_R) continue;
+        rp.fhit.push(fr.id);
+        if (rp.chain.indexOf(fr.id) >= 0) continue; // frosken vekkes ikke av sin egen kjede
+        if (levelAt(w, fr.x, fr.y) !== rp.lv || blocked(w, rp.x, rp.y, fr.x, fr.y)) continue;
+        if (falloff(d, rp.range) * rp.p < C.FROG_WAKE) continue;
+        fr.jt = 0; fr.chain = rp.chain;
+        const to = fr.hops[(fr.at + 1) % fr.hops.length];
+        w.events.push({ type: 'frog', id: fr.id, x: fr.x, y: fr.y, tx: to[0], ty: to[1] });
+      }
+      if (rp.r > rp.range + 24) w.ripples.splice(i, 1);
     }
 
     // 2) krefter og bevegelse
@@ -234,6 +427,15 @@
       for (const c of w.currents) {
         if (b.x >= c.x && b.x <= c.x + c.w && b.y >= c.y && b.y <= c.y + c.h) { fx += c.vx; fy += c.vy; inCurrent = true; }
       }
+
+      // vind tar tak i seilet (tunge båter merker den mindre)
+      if (b.kind === 'boat') {
+        for (const v of w.winds) {
+          if (b.x >= v.x && b.x <= v.x + v.w && b.y >= v.y && b.y <= v.y + v.h) { b.vx += v.ax * dt / b.mass; b.vy += v.ay * dt / b.mass; }
+        }
+      }
+      let onIce = false;
+      for (const r of w.ice) if (b.x >= r.x && b.x <= r.x + r.w && b.y >= r.y && b.y <= r.y + r.h) { onIce = true; break; }
 
       // strømvirvler
       for (const v of w.whirls) {
@@ -280,11 +482,11 @@
       }
 
       // vannmotstand (relativt til strømmen; i strøm griper vannet hardere)
-      const dm = inCurrent ? b.drag * GRIP_MUL : b.drag;
+      const dm = onIce ? ICE_MUL : inCurrent ? b.drag * GRIP_MUL : b.drag;
       let rvx = (b.vx - fx) * dm, rvy = (b.vy - fy) * dm;
       const sp = Math.sqrt(rvx * rvx + rvy * rvy);
       if (sp > 0) {
-        const ns = sp - C.FRICTION * dt;
+        const ns = sp - (onIce ? C.ICE_FRICTION : C.FRICTION) * dt;
         const k = ns > 0 ? ns / sp : 0;
         rvx *= k; rvy *= k;
       }
@@ -309,8 +511,46 @@
           t = t < 0 ? 0 : t > 1 ? 1 : t;
           collideStatic(w, b, l.x1 + abx * t, l.y1 + aby * t, l.r, C.REST_STATIC, report, 'log');
         }
+        for (const s of w.walls) collideSeg(w, b, s, report, 'rock');
+        for (const g of w.gates) if (!g.open) collideSeg(w, b, g, report, 'log');
         collideBounds(w, b, report);
         collideFalls(w, b, report);
+      }
+    }
+
+    // brytere: en båt (eller vannlilje) over bryteren åpner sluseporten
+    for (const s of w.switches) {
+      if (s.on) continue;
+      for (const b of w.bodies) {
+        if (b.dock >= 0 || b.sink > 0) continue;
+        const dx = b.x - s.x, dy = b.y - s.y, rr = s.r + b.r * 0.5;
+        if (dx * dx + dy * dy > rr * rr) continue;
+        s.on = true;
+        const g = w.gates[s.gate];
+        const was = g && g.open;
+        if (g) { g.open = true; if (g.openT < 0) g.openT = w.t; }
+        w.events.push({ type: 'switch', x: s.x, y: s.y, gate: s.gate, opened: g && !was });
+        break;
+      }
+    }
+
+    // tømmer i elva: treffer en stokk en båt, blir båten knust og starter på nytt
+    // en båt som blir liggende fast i elva, blir tatt av elva
+    if (w.timber.length) {
+      for (const b of w.bodies) if (stuckInTimber(w, b)) startSink(w, b, { x: b.x, y: b.y }, 'crash');
+    }
+    if (w.timber.length && !w.noTimber) {
+      for (const tm of w.timber) {
+        eachTimber(w, tm, (ax, ay, bx, by, r) => {
+          const abx = bx - ax, aby = by - ay, len2 = abx * abx + aby * aby || 1;
+          for (const b of w.bodies) {
+            if (b.dock >= 0 || b.sink > 0) continue;
+            let u = ((b.x - ax) * abx + (b.y - ay) * aby) / len2;
+            u = u < 0 ? 0 : u > 1 ? 1 : u;
+            const dx = b.x - (ax + abx * u), dy = b.y - (ay + aby * u), rr = b.r + r - 3;
+            if (dx * dx + dy * dy < rr * rr) startSink(w, b, { x: b.x + tm.ux * 40, y: b.y + tm.uy * 40 }, 'crash');
+          }
+        });
       }
     }
 
@@ -405,6 +645,14 @@
     }
   }
 
+  function collideSeg(w, b, s, report, what) {
+    const abx = s.x2 - s.x1, aby = s.y2 - s.y1;
+    const len2 = abx * abx + aby * aby || 1;
+    let t = ((b.x - s.x1) * abx + (b.y - s.y1) * aby) / len2;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    collideStatic(w, b, s.x1 + abx * t, s.y1 + aby * t, s.r, C.REST_STATIC, report, what);
+  }
+
   function collideBounds(w, b, report) {
     const r = b.r, R = C.CORNER, W = C.W, H = C.H, e = C.REST_WALL;
     let cx = -1, cy = -1;
@@ -456,8 +704,11 @@
 
   /* ---------- tilstand ---------- */
 
+  // Alt i ro? (Da faller heller ingen flere regndråper før neste trykk.)
   function isSettled(w) {
-    if (w.ripples.length) return false;
+    for (const rp of w.ripples) if (!rp.amb || rainPending(w, rp)) return false;
+    if (w.timber.length) for (const b of w.bodies) if (stuckInTimber(w, b)) return false;
+    for (const fr of w.frogs) if (fr.jt >= 0) return false;
     for (const b of w.bodies) {
       if (b.sink > 0) return false;
       if (b.dock >= 0) continue;
@@ -467,6 +718,71 @@
     return true;
   }
 
+  // Kan denne regnkrusningen fortsatt treffe en båt eller frosk? (Regn som
+  // ikke treffer noe, holder ikke dammen i gang.)
+  function rainPending(w, rp) {
+    for (const b of w.bodies) {
+      if (b.dock >= 0 || b.sink > 0 || rp.hit.indexOf(b.id) >= 0) continue;
+      if (Math.hypot(b.x - rp.x, b.y - rp.y) < rp.range) return true;
+    }
+    for (const fr of w.frogs) {
+      if (rp.fhit.indexOf(fr.id) >= 0) continue;
+      if (falloff(Math.hypot(fr.x - rp.x, fr.y - rp.y), rp.range) * rp.p >= C.FROG_WAKE) return true;
+    }
+    return false;
+  }
+
+  // Som isSettled, men godtar krusninger som allerede har passert alt
+  // (brukes av hint-knappen for å stoppe tidlig).
+  function isCalm(w) {
+    if (w.rains.length || w.timber.length) return isSettled(w); // regn og tømmer kan fortsatt flytte noe
+    for (const fr of w.frogs) if (fr.jt >= 0) return false;
+    for (const rp of w.ripples) {
+      if (rp.r >= rp.range) continue;
+      for (const fr of w.frogs) if (rp.fhit.indexOf(fr.id) < 0) return false;
+    }
+    for (const b of w.bodies) {
+      if (b.dock >= 0) continue;
+      if (b.sink > 0 || b.pushes.length) return false;
+      if (b.vx * b.vx + b.vy * b.vy > C.SETTLE_V * C.SETTLE_V) return false;
+      for (const rp of w.ripples) if (rp.r < rp.range && rp.hit.indexOf(b.id) < 0) return false;
+    }
+    return true;
+  }
+
+  // Omtrentlig veilengde mellom to punkter når moloer og lukkede porter står
+  // i veien: går rundt endene av muren (brukes av løseren og hint-knappen).
+  function pathDist(w, x1, y1, x2, y2) {
+    const direct = Math.hypot(x2 - x1, y2 - y1);
+    if (!w.walls.length && !w.gates.length) return direct;
+    if (!blocked(w, x1, y1, x2, y2)) return direct;
+    const pts = [];
+    for (const s of w.walls.concat(w.gates.filter((g) => !g.open))) {
+      const dx = s.x2 - s.x1, dy = s.y2 - s.y1, L = Math.hypot(dx, dy) || 1, m = s.r + 16;
+      pts.push([s.x1 - (dx / L) * m, s.y1 - (dy / L) * m], [s.x2 + (dx / L) * m, s.y2 + (dy / L) * m]);
+    }
+    let best = direct + 400;
+    for (const a of pts) {
+      if (blocked(w, x1, y1, a[0], a[1])) continue;
+      const da = Math.hypot(a[0] - x1, a[1] - y1);
+      if (!blocked(w, a[0], a[1], x2, y2)) { best = Math.min(best, da + Math.hypot(x2 - a[0], y2 - a[1])); continue; }
+      for (const b of pts) {
+        if (b === a || blocked(w, a[0], a[1], b[0], b[1]) || blocked(w, b[0], b[1], x2, y2)) continue;
+        best = Math.min(best, da + Math.hypot(b[0] - a[0], b[1] - a[1]) + Math.hypot(x2 - b[0], y2 - b[1]));
+      }
+    }
+    return best;
+  }
+
+  // Når faller neste dråpe? (antall steg, til tegningen; Infinity når alt er i ro)
+  function nextDrop(w, d) {
+    if (isSettled(w)) return Infinity;
+    const rel = w.steps - w.tapStep;
+    if (rel < d.ds) return d.ds - rel;
+    if (Math.floor((rel - d.ds) / d.es) + 1 >= C.RAIN_MAX) return Infinity; // skuren er over til neste trykk
+    return d.es - ((rel - d.ds) % d.es);
+  }
+
   // Lett kopi av en verden i ro (brukes av løseren).
   function clone(w) {
     const c = Object.assign({}, w);
@@ -474,12 +790,18 @@
     c.boats = c.bodies.filter((b) => b.kind === 'boat');
     c.pads = c.bodies.filter((b) => b.kind === 'pad');
     c.docks = w.docks.map((d) => Object.assign({}, d));
-    c.ripples = w.ripples.map((r) => Object.assign({}, r, { hit: r.hit.slice() }));
+    c.ripples = w.ripples.map((r) => Object.assign({}, r, { hit: r.hit.slice(), fhit: r.fhit.slice() }));
+    c.gates = w.gates.map((g) => Object.assign({}, g));
+    c.switches = w.switches.map((s) => Object.assign({}, s));
+    c.frogs = w.frogs.map((f) => Object.assign({}, f));
     c.events = [];
     return c;
   }
 
-  const Engine = { C, createWorld, step, tap, preview, falloff, insidePond, isSettled, clone, levelAt, fallSide };
+  const Engine = {
+    C, createWorld, step, tap, canTap, preview, previewFrogs, falloff, insidePond, isSettled, isCalm, clone,
+    levelAt, eachTimber, fallSide, blocked, nextDrop, pathDist,
+  };
   root.Engine = Engine;
   if (typeof module !== 'undefined' && module.exports) module.exports = Engine;
 })(typeof window !== 'undefined' ? window : globalThis);

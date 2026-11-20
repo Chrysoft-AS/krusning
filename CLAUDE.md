@@ -38,7 +38,7 @@ tools/build-artifact.js   bygger dist/krusning.html (én fil) for deling
 ## Ny bane
 
 1. Legg et objekt i riktig verden i `js/levels.js`. Dammen er 360 × 600 enheter, med (0,0) øverst til venstre. Båtradius er 13, havneradius 24.
-2. Hold minst ca. 50 enheters avstand mellom en båt og en havn ved start, ellers trekker havna båten inn med en gang.
+2. Hold minst ca. 50 enheters avstand mellom en båt og en havn ved start, ellers trekker havna båten inn med en gang. Båter skal heller ikke starte i strøm, i vind eller innenfor rekkevidden til en regndråpe (de flytter seg før spilleren gjør noe). Med tømmer i elva viser løseren også hvor lange åpningene mellom stokkene er.
 3. `node tools/solve.js <id> --map` viser hvor ett trykk løser banen (`*`). Sett `pearl` til det minste antallet løseren finner, og `par` vanligvis én høyere.
 4. Perla bør ha et vindu på minst ca. 15 trykkpunkter. Under 6 regnes som flaks, og løseren varsler da.
 5. Kjør `node tools/playtest.js <id>`.
@@ -47,9 +47,13 @@ tools/build-artifact.js   bygger dist/krusning.html (én fil) for deling
 
 `node tools/gen.js quick medium 40` legger til 40 brett, `node tools/gen.js daily 60` legger til 60 dager. Verktøyet fortsetter der det slapp. `node tools/gen.js show M12` viser et brett som tekst. Dagens dam #1 er 20. november 2026; når lista er brukt opp, starter den forfra.
 
+## Midlertidig testknapp
+
+`DEV_JUMP` i `js/game.js` viser «Test: velg bane» på tittelskjermen, så man kan hoppe til hvilken som helst bane. Sett den til `false` før lansering.
+
 ## Ny mekanikk
 
-Legg simuleringen i `engine.js` (data inn via `createWorld`, oppførsel i `step`), tegningen i `render.js` og eventuell lyd i `audio.js`. Lag en innføringsbane med `tip`. Strøm (`currents`) er et godt eksempel på hele kjeden.
+Legg simuleringen i `engine.js` (data inn via `createWorld`, oppførsel i `step`), tegningen i `render.js` og eventuell lyd i `audio.js`. Lag en innføringsbane med `tip`. Strøm (`currents`) er et godt eksempel på hele kjeden. Nye ting må ikke endre gamle baner: kjør gjerne en fast trykkrekke på alle baner før og etter, og sjekk at posisjonene blir helt like.
 
 ## Git
 
