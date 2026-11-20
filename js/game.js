@@ -18,12 +18,31 @@
   const t = (k, v) => I.t(k, v);
 
   /* ---------- lagring (localStorage – bare på denne enheten) ---------- */
-  const SAVE_KEY = 'krusning.save.v1';
-  function defaults() { return { v: 1, lang: 'no', sfx: true, music: true, levels: {}, last: null }; }
+  // Versjon 2 (nov. 2026): la til Rask runde (quick) og Dagens dam (daily).
+  // Fremgang fra versjon 1 hentes automatisk inn første gang.
+  const SAVE_KEY = 'krusning.save.v2';
+  const OLD_KEY = 'krusning.save.v1';
+  const TIERS = ['easy', 'medium', 'hard'];
+  function quickDefaults() {
+    const q = {};
+    for (const tr of TIERS) q[tr] = { i: 0, played: 0, three: 0, pearls: 0, streak: 0, best: 0 };
+    return q;
+  }
+  function defaults() { return { v: 2, lang: 'no', sfx: true, music: true, levels: {}, last: null, quick: quickDefaults(), daily: {} }; }
+  function upgrade(s) {
+    const out = Object.assign(defaults(), s, { v: 2 });
+    out.quick = quickDefaults();
+    for (const tr of TIERS) Object.assign(out.quick[tr], (s.quick && s.quick[tr]) || {});
+    out.daily = s.daily || {};
+    out.levels = s.levels || {};
+    return out;
+  }
   function load() {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
-      if (raw) { const s = JSON.parse(raw); if (s && s.v === 1) return Object.assign(defaults(), s); }
+      if (raw) { const s = JSON.parse(raw); if (s && s.v === 2) return upgrade(s); }
+      const old = localStorage.getItem(OLD_KEY);
+      if (old) { const s = JSON.parse(old); if (s && s.v === 1) return upgrade(s); }
     } catch (e) { /* privat modus e.l. – spill uten lagring */ }
     return defaults();
   }
@@ -109,7 +128,7 @@
   /* ---------- bane ---------- */
   function startLevel(entry, quick) {
     G.entry = entry;
-    save.last = entry.lv.id; persist();
+    if (!entry.mode) { save.last = entry.lv.id; persist(); }
     G.world = E.createWorld(entry.lv);
     G.acc = 0; G.particles = []; G.dockFx = {}; G.look = null;
     G.completed = false; G.winAt = -1; G.result = null;
@@ -428,7 +447,7 @@
   function updateHud() {
     if (!G.entry || !G.world) return;
     const lv = G.entry.lv;
-    $('hudId').textContent = lv.id;
+    $('hudId').textContent = entryLabel(G.entry);
     $('hudName').textContent = I.pick(lv.name);
     $('hudTaps').textContent = G.world.taps;
     $('hudPar').textContent = t('par') + ' ' + lv.par;
@@ -460,7 +479,7 @@
 
   function showBanner(lv) {
     const b = $('banner');
-    $('bannerId').textContent = lv.id;
+    $('bannerId').textContent = entryLabel(G.entry);
     $('bannerName').textContent = I.pick(lv.name);
     b.hidden = false;
     b.style.animation = 'none'; void b.offsetWidth; b.style.animation = '';
@@ -517,6 +536,13 @@
     const lv = G.entry.lv, taps = G.world.taps;
     const stars = starsFor(lv, taps);
     const pearl = taps <= lv.pearl && !G.hintUsed;
+    if (G.entry.mode) {
+      G.result = recordMode(G.entry, taps, stars, pearl);
+      G.winAt = G.time + 1.05;
+      hideTip(true);
+      setTimeout(() => { if (G.completed) { S.win(); confetti(); } }, 350);
+      return;
+    }
     const prev = rec(lv.id) ? Object.assign({}, rec(lv.id)) : null;
     const starsBefore = totalStars();
     const r = save.levels[lv.id] || (save.levels[lv.id] = { best: taps, stars: 0, pearl: false, plays: 0 });
@@ -560,6 +586,17 @@
     $('btnRetryTxt').textContent = res.stars < 3 ? t('retryFor3') : t('retry');
     $('btnNextTxt').textContent = t('next');
     $('btnWinMap').textContent = t('toMap');
+    const mode = G.entry.mode;
+    $('btnNext').querySelector('use').setAttribute('href', mode === 'daily' ? '#i-share' : '#i-next');
+    if (mode === 'quick') {
+      $('btnNextTxt').textContent = t('nextBoard');
+      $('btnWinMap').textContent = t('menu');
+      const q = save.quick[G.entry.tier];
+      if (q.streak >= 2) { best.hidden = false; best.textContent = t('quickStreak', { n: q.streak }); }
+    } else if (mode === 'daily') {
+      $('btnNextTxt').textContent = t('share');
+      $('btnWinMap').textContent = t('menu');
+    }
     $('win').hidden = false;
 
     for (let i = 0; i < res.stars; i++) {
@@ -579,6 +616,8 @@
   function goNext() {
     S.click();
     const e = G.entry;
+    if (e.mode === 'quick') { transition(() => startLevel(quickEntry(e.tier))); return; }
+    if (e.mode === 'daily') { shareDaily(e.day); return; }
     const nxt = ALL[e.idx + 1];
     if (nxt && levelOpen(nxt)) { transition(() => startLevel(nxt)); return; }
     // slutten av verdenen: vis neste verden på kartet
@@ -591,7 +630,7 @@
 
   /* ---------- banekart ---------- */
   function openMap(wi) {
-    G.mapWorld = wi != null ? wi : G.entry ? G.entry.wi : nextToPlay().wi;
+    G.mapWorld = wi != null ? wi : G.entry && !G.entry.mode ? G.entry.wi : nextToPlay().wi;
     if (G.screen === 'play' || !G.world) { G.world = G.titleWorld; G.entry = null; spawnDecor('title'); setBoatFx(G.world); }
     renderMap();
     setScreen('map');
@@ -645,6 +684,154 @@
     dots.innerHTML = LV.WORLDS.map((_, i) => `<i class="${i === G.mapWorld ? 'on' : ''}"></i>`).join('');
     $('worldPrev').disabled = G.mapWorld === 0;
     $('worldNext').disabled = G.mapWorld === LV.WORLDS.length - 1;
+  }
+
+  /* ---------- Rask runde og Dagens dam ---------- */
+  // Brettene lages av js/gen.js fra frø i js/pool.js (testet på forhånd med tools/gen.js).
+  const PO = window.Pool, GEN = window.Gen;
+  const TIER_NEED = { easy: null, medium: '1-10', hard: '2-1' }; // mekanikkene må være møtt på Stien
+  const tierOpen = (tr) => !TIER_NEED[tr] || !!rec(TIER_NEED[tr]);
+  const pad2 = (n) => String(n).padStart(2, '0');
+
+  function entryLabel(e) {
+    if (e.mode === 'quick') return t('tier_' + e.tier);
+    if (e.mode === 'daily') return '#' + e.num;
+    return e.lv.id;
+  }
+
+  function quickEntry(tr) {
+    const list = PO.quick[tr], q = save.quick[tr];
+    const lv = GEN.fromPool(list[q.i % list.length], tr);
+    return { lv, mode: 'quick', tier: tr, wi: 0, idx: -1, done: false, stars: 0, pearl: false, prevStreak: 0 };
+  }
+
+  // Datoer som tekst 'ÅÅÅÅ-MM-DD' i lokal tid. Dagnummer telles fra Pool.daily.start.
+  function todayKey() {
+    if (G.fakeToday) return G.fakeToday; // brukes av testene
+    const d = new Date();
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+  function keyUTC(key) { const p = key.split('-').map(Number); return Date.UTC(p[0], p[1] - 1, p[2]); }
+  function keyAdd(key, n) {
+    const d = new Date(keyUTC(key) + n * 86400000);
+    return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
+  }
+  function dayNum(key) { return Math.round((keyUTC(key) - keyUTC(PO.daily.start)) / 86400000); }
+  function weekday(key) { return new Date(keyUTC(key)).getUTCDay(); }
+
+  function dailyEntry(key) {
+    const n = Math.max(0, dayNum(key));
+    const days = PO.daily.days;
+    const row = days[n % days.length]; // [frø, nivå, par, perle]
+    const lv = GEN.fromPool([row[0], row[2], row[3]], row[1], { noCurrent: true });
+    lv.id = 'D' + (n + 1);
+    return { lv, mode: 'daily', tier: row[1], day: key, num: n + 1, wi: 0, idx: -1 };
+  }
+  function dailyStreak() {
+    let k = todayKey();
+    if (!save.daily[k]) k = keyAdd(k, -1);
+    let n = 0;
+    while (save.daily[k]) { n++; k = keyAdd(k, -1); }
+    return n;
+  }
+
+  // Lagrer resultatet i Rask runde / Dagens dam og lager data til resultatkortet.
+  function recordMode(e, taps, stars, pearl) {
+    if (e.mode === 'quick') {
+      const q = save.quick[e.tier];
+      const firstPearl = pearl && !e.pearl;
+      if (!e.done) { e.done = true; e.prevStreak = q.streak; q.i++; q.played++; }
+      if (stars === 3 && e.stars < 3) { q.three++; q.streak = e.prevStreak + 1; q.best = Math.max(q.best, q.streak); }
+      else if (e.stars < 3 && stars < 3) q.streak = 0;
+      if (firstPearl) q.pearls++;
+      e.stars = Math.max(e.stars, stars); e.pearl = e.pearl || pearl;
+      persist();
+      return { stars, pearl, taps, rec: { pearl: e.pearl }, firstPearl, newBest: false, starsBefore: totalStars() };
+    }
+    const prev = save.daily[e.day];
+    const r = save.daily[e.day] = prev ? Object.assign({}, prev) : { best: taps, stars: 0, pearl: false, n: e.num };
+    r.best = Math.min(r.best, taps);
+    r.stars = Math.max(r.stars, stars);
+    r.pearl = !!(r.pearl || pearl);
+    persist();
+    return { stars, pearl, taps, rec: r, firstPearl: pearl && !(prev && prev.pearl), newBest: !!prev && taps < prev.best, starsBefore: totalStars() };
+  }
+
+  function startDaily(key) {
+    $('daily').hidden = true;
+    transition(() => startLevel(dailyEntry(key)));
+  }
+
+  // Tilbake til tittelskjermen med riktig kort åpent.
+  function leaveMode() {
+    const mode = G.entry.mode;
+    transition(() => { toTitle(); if (mode === 'quick') openQuick(); else openDaily(); });
+  }
+
+  function starText(n, pearl) { return '★'.repeat(n) + '☆'.repeat(3 - n) + (pearl ? ' ◉' : ''); }
+
+  function shareDaily(key) {
+    const r = save.daily[key];
+    if (!r) return;
+    const txt = t('shareText', { n: dailyEntry(key).num, used: I.ripples(r.best), stars: starText(r.stars, r.pearl) });
+    const copy = () => {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).then(() => toast(t('copied')), () => toast(txt));
+      } else toast(txt);
+    };
+    if (navigator.share) navigator.share({ text: txt }).catch((err) => { if (!err || err.name !== 'AbortError') copy(); });
+    else copy();
+  }
+
+  function openDaily() { renderDaily(); $('daily').hidden = false; }
+  function renderDaily() {
+    const key = todayKey(), e = dailyEntry(key), r = save.daily[key];
+    $('dailyTitle').textContent = t('daily');
+    $('dailySub').textContent = '#' + e.num + ' · ' + t('wd' + weekday(key)) + ' · ' + t('tier_' + e.tier);
+    // kalender: fire uker, mandag først, denne uka nederst
+    const first = keyAdd(key, -((weekday(key) + 6) % 7) - 21);
+    let h = t('wdShort').split(',').map((d) => `<b>${d}</b>`).join('');
+    for (let i = 0; i < 28; i++) {
+      const k = keyAdd(first, i), d = save.daily[k];
+      const cls = ['cal-day'];
+      if (keyUTC(k) > keyUTC(key)) cls.push('future');
+      else if (dayNum(k) < 0) cls.push('before');
+      if (k === key) cls.push('today');
+      if (d) cls.push('done', 's' + d.stars);
+      h += `<span class="${cls.join(' ')}">${+k.slice(8)}${d && d.pearl ? '<i class="pearl"></i>' : ''}</span>`;
+    }
+    $('dailyCal').innerHTML = h;
+    const st = dailyStreak();
+    $('dailyStreak').textContent = st === 0 ? t('streakNone') : st === 1 ? t('streakDay1') : t('streakDays', { n: st });
+    $('dailyResult').hidden = !r;
+    if (r) $('dailyResult').textContent = t('dailyDone', { used: I.ripples(r.best), stars: starText(r.stars, r.pearl) });
+    $('btnDailyShare').hidden = !r;
+    $('btnDailyShareTxt').textContent = t('share');
+    $('btnDailyPlayTxt').textContent = r ? t('dailyAgain') : t('dailyPlay');
+  }
+
+  function openQuick() { renderQuick(); $('quick').hidden = false; }
+  function renderQuick() {
+    $('quickTitle').textContent = t('quick');
+    $('quickSub').textContent = t('quickSub');
+    const box = $('quickTiers');
+    box.innerHTML = '';
+    TIERS.forEach((tr, ti) => {
+      const q = save.quick[tr], ok = tierOpen(tr);
+      const b = document.createElement('button');
+      b.className = 'tier-btn' + (ok ? '' : ' locked');
+      const dots = [0, 1, 2].map((k) => `<i class="${k <= ti ? '' : 'off'}"></i>`).join('');
+      const sub = !ok ? t('quickNeed', { id: TIER_NEED[tr] })
+        : q.played ? t('quickStats', { n: q.played, s: q.streak, b: q.best }) : t('quickNew');
+      b.innerHTML = `<span class="tier-dots">${dots}</span><span class="tier-text"><b>${t('tier_' + tr)}</b><span>${sub}</span></span>`;
+      b.addEventListener('click', () => {
+        S.click();
+        if (!ok) { toast(sub); return; }
+        $('quick').hidden = true;
+        transition(() => startLevel(quickEntry(tr)));
+      });
+      box.appendChild(b);
+    });
   }
 
   /* ---------- hint (regnes ut fra situasjonen akkurat nå) ---------- */
@@ -765,6 +952,11 @@
     $('tagline').textContent = t('tagline');
     $('btnPlay').textContent = anyProgress() ? t('continueAt', { id: nextToPlay().lv.id }) : t('play');
     $('btnLevelsTxt').textContent = t('levels');
+    $('btnDailyTxt').textContent = t('daily');
+    $('btnQuickTxt').textContent = t('quick');
+    $('dailyDot').hidden = !!save.daily[todayKey()];
+    $('dailyClose').setAttribute('aria-label', t('close'));
+    $('quickClose').setAttribute('aria-label', t('close'));
     $('soundTip').textContent = t('soundTip');
     $('setTitle').textContent = t('settings');
     $('setSfxLbl').textContent = t('sound');
@@ -788,13 +980,21 @@
     transition(() => startLevel(anyProgress() ? nextToPlay() : ALL[0]));
   });
   $('btnLevels').addEventListener('click', () => { S.unlock(); S.click(); openMap(); });
-  $('btnLevels2').addEventListener('click', () => { S.click(); openMap(G.entry ? G.entry.wi : 0); });
+  $('btnLevels2').addEventListener('click', () => { S.click(); if (G.entry && G.entry.mode) leaveMode(); else openMap(G.entry ? G.entry.wi : 0); });
   $('btnSettings').addEventListener('click', openSettings);
   $('btnRestart').addEventListener('click', restart);
   $('btnHint').addEventListener('click', requestHint);
   $('btnRetry').addEventListener('click', () => { $('win').hidden = true; restart(); });
   $('btnNext').addEventListener('click', goNext);
-  $('btnWinMap').addEventListener('click', () => { S.click(); transition(() => openMap(G.entry ? G.entry.wi : 0)); });
+  $('btnWinMap').addEventListener('click', () => { S.click(); if (G.entry && G.entry.mode) leaveMode(); else transition(() => openMap(G.entry ? G.entry.wi : 0)); });
+  $('btnDaily').addEventListener('click', () => { S.unlock(); S.click(); openDaily(); });
+  $('btnQuick').addEventListener('click', () => { S.unlock(); S.click(); openQuick(); });
+  $('dailyClose').addEventListener('click', () => { S.click(); $('daily').hidden = true; });
+  $('quickClose').addEventListener('click', () => { S.click(); $('quick').hidden = true; });
+  $('daily').addEventListener('click', (e) => { if (e.target === $('daily')) $('daily').hidden = true; });
+  $('quick').addEventListener('click', (e) => { if (e.target === $('quick')) $('quick').hidden = true; });
+  $('btnDailyPlay').addEventListener('click', () => { S.click(); startDaily(todayKey()); });
+  $('btnDailyShare').addEventListener('click', () => { S.click(); shareDaily(todayKey()); });
   $('mapBack').addEventListener('click', () => { S.click(); toTitle(); });
   $('worldPrev').addEventListener('click', () => { S.click(); G.mapWorld = Math.max(0, G.mapWorld - 1); renderMap(); });
   $('worldNext').addEventListener('click', () => { S.click(); G.mapWorld = Math.min(LV.WORLDS.length - 1, G.mapWorld + 1); renderMap(); });
@@ -807,6 +1007,8 @@
       save.lang = b.dataset.lang; I.lang = save.lang; persist();
       applyTexts(); paintSettings(); updateHud();
       if (G.screen === 'map') renderMap();
+      if (!$('daily').hidden) renderDaily();
+      if (!$('quick').hidden) renderQuick();
       S.click();
     });
   }
@@ -858,9 +1060,13 @@
 
   // Når en ny versjon publiseres mens spillet er åpent, fortsetter vi der vi var.
   const hot = window.claude && window.claude.hot;
-  try { if (hot && hot.snapshot) hot.snapshot(() => ({ screen: G.screen, level: G.entry && G.entry.lv.id, map: G.mapWorld })); } catch (e) { /* ok */ }
+  try { if (hot && hot.snapshot) hot.snapshot(() => ({ screen: G.screen, level: G.entry && !G.entry.mode && G.entry.lv.id, map: G.mapWorld })); } catch (e) { /* ok */ }
   if (hot && hot.ready) hot.ready(boot); else boot((hot && hot.data) || {});
 
   // til testing i nettleserkonsollen
-  window.Krusning = { G, startLevel: (id) => startLevel(byId(id)), save: () => save, playerTap, openMap };
+  window.Krusning = {
+    G, startLevel: (id) => startLevel(byId(id)), save: () => save, playerTap, openMap,
+    startQuick: (tr) => startLevel(quickEntry(tr)), startDaily: (key) => startLevel(dailyEntry(key || todayKey())),
+    openDaily, openQuick, todayKey,
+  };
 })();

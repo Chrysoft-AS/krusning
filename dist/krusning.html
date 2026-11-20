@@ -203,6 +203,8 @@ svg { fill: currentColor; }
 .tagline { margin: 0; color: #fff; font-size: 18px; font-weight: 500; line-height: 1.35; text-align: center; white-space: pre-line; text-shadow: 0 2px 10px rgba(8, 55, 75, 0.55); }
 .title-bottom { display: flex; flex-direction: column; align-items: center; gap: 14px; }
 .title-row { display: flex; align-items: center; gap: 10px; }
+.modes-row .btn { position: relative; padding: 11px 15px; font-size: 16px; }
+.new-dot { position: absolute; top: -4px; right: -4px; width: 14px; height: 14px; border-radius: 50%; background: var(--coral); box-shadow: 0 0 0 3px var(--paper); }
 .sound-tip { margin: 2px 0 0; font-size: 13px; color: rgba(255, 255, 255, 0.92); text-shadow: 0 1px 6px rgba(8, 55, 75, 0.6); }
 
 .map-screen {
@@ -338,6 +340,33 @@ svg { fill: currentColor; }
 .confirm-btns { display: flex; gap: 8px; }
 .credits { margin: 10px 0 2px; font-size: 13px; line-height: 1.4; color: var(--ink-soft); }
 
+/* Dagens dam og Rask runde */
+.daily-card, .quick-card { display: flex; flex-direction: column; gap: 8px; }
+.daily-sub { margin: -4px 0 4px; font-size: 15px; font-weight: 500; color: var(--ink-soft); }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.cal b { font-size: 12px; font-weight: 600; color: var(--ink-soft); text-align: center; }
+.cal-day { position: relative; aspect-ratio: 1; display: grid; place-items: center; border-radius: 10px; background: rgba(18, 52, 61, 0.06); font-size: 13px; font-weight: 500; color: var(--ink-soft); }
+.cal-day.before, .cal-day.future { background: none; opacity: 0.4; }
+.cal-day.today { box-shadow: inset 0 0 0 2px var(--coral); color: var(--ink); }
+.cal-day.done { background: #ffe9a8; color: #8a5a00; }
+.cal-day.done.s3 { background: var(--sun); color: #6a4300; }
+.cal-day .pearl { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; }
+.daily-streak { margin: 2px 0 0; font-size: 15px; font-weight: 600; color: var(--teal); text-align: center; }
+.daily-result { margin: 0; font-size: 17px; font-weight: 600; text-align: center; color: var(--ink); }
+.daily-actions { display: flex; gap: 10px; margin-top: 4px; }
+.daily-actions .btn { flex: 1; padding: 13px 10px; }
+.tiers { display: flex; flex-direction: column; gap: 10px; }
+.tier-btn { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 0; border-radius: 16px; background: #fff; text-align: left; box-shadow: 0 3px 0 var(--paper-shade), 0 6px 14px rgba(8, 40, 50, 0.1); }
+.tier-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--paper-shade); }
+.tier-btn .tier-dots { display: flex; gap: 3px; flex: none; width: 46px; justify-content: center; }
+.tier-btn .tier-dots i { width: 11px; height: 11px; border-radius: 50%; background: var(--coral); }
+.tier-btn .tier-dots i.off { background: rgba(18, 52, 61, 0.15); }
+.tier-btn .tier-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tier-btn .tier-text b { font-size: 19px; font-weight: 600; color: var(--ink); }
+.tier-btn .tier-text span { font-size: 13px; color: var(--ink-soft); }
+.tier-btn.locked { opacity: 0.6; }
+.tier-btn.locked .tier-dots i { background: rgba(18, 52, 61, 0.2); }
+
 .fade { position: absolute; inset: 0; z-index: 40; background: #c9f1f2; opacity: 0; pointer-events: none; transition: opacity 0.22s ease; }
 .fade.on { opacity: 1; }
 
@@ -364,6 +393,9 @@ svg { fill: currentColor; }
     <symbol id="i-back" viewBox="0 0 24 24"><path d="M14.5 5.5L8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-next" viewBox="0 0 24 24"><path d="M9.5 5.5L16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="3" fill="currentColor"/><path d="M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5" fill="none" stroke="currentColor" stroke-width="2.4"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3.5" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M3.5 10h17M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/><circle cx="12" cy="15" r="2.2" fill="currentColor"/></symbol>
+    <symbol id="i-dice" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="4.5" fill="none" stroke="currentColor" stroke-width="2.3"/><g fill="currentColor"><circle cx="8.5" cy="8.5" r="1.7"/><circle cx="15.5" cy="15.5" r="1.7"/><circle cx="12" cy="12" r="1.7"/></g></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3.5v11M7.5 8L12 3.5 16.5 8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 12.5v5.5a2.5 2.5 0 0 0 2.5 2.5h7a2.5 2.5 0 0 0 2.5-2.5v-5.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
   </defs>
 </svg>
@@ -405,6 +437,10 @@ svg { fill: currentColor; }
     </div>
     <div class="title-bottom">
       <button id="btnPlay" class="btn btn-primary btn-big">Spill</button>
+      <div class="title-row modes-row">
+        <button id="btnDaily" class="btn btn-paper"><svg class="btn-icon"><use href="#i-cal"/></svg><span id="btnDailyTxt">Dagens dam</span><i class="new-dot" id="dailyDot" hidden></i></button>
+        <button id="btnQuick" class="btn btn-paper"><svg class="btn-icon"><use href="#i-dice"/></svg><span id="btnQuickTxt">Rask runde</span></button>
+      </div>
       <div class="title-row">
         <button id="btnLevels" class="btn btn-paper"><svg class="btn-icon"><use href="#i-grid"/></svg><span id="btnLevelsTxt">Baner</span></button>
         <button id="btnSettings" class="icon-btn" aria-label="Innstillinger"><svg><use href="#i-sliders"/></svg></button>
@@ -458,6 +494,36 @@ svg { fill: currentColor; }
         <button id="btnNext" class="btn btn-primary"><span id="btnNextTxt">Neste</span><svg class="btn-icon"><use href="#i-next"/></svg></button>
       </div>
       <button id="btnWinMap" class="link-btn">Baner</button>
+    </div>
+  </div>
+
+  <!-- Dagens dam -->
+  <div id="daily" class="modal" hidden>
+    <div class="card daily-card">
+      <div class="card-head">
+        <h2 id="dailyTitle">Dagens dam</h2>
+        <button id="dailyClose" class="icon-btn small" aria-label="Lukk"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <p class="daily-sub" id="dailySub"></p>
+      <div class="cal" id="dailyCal"></div>
+      <p class="daily-streak" id="dailyStreak"></p>
+      <p class="daily-result" id="dailyResult" hidden></p>
+      <div class="daily-actions">
+        <button id="btnDailyShare" class="btn btn-paper" hidden><svg class="btn-icon"><use href="#i-share"/></svg><span id="btnDailyShareTxt">Del</span></button>
+        <button id="btnDailyPlay" class="btn btn-primary"><span id="btnDailyPlayTxt">Spill</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rask runde -->
+  <div id="quick" class="modal" hidden>
+    <div class="card quick-card">
+      <div class="card-head">
+        <h2 id="quickTitle">Rask runde</h2>
+        <button id="quickClose" class="icon-btn small" aria-label="Lukk"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <p class="daily-sub" id="quickSub"></p>
+      <div class="tiers" id="quickTiers"></div>
     </div>
   </div>
 
@@ -545,6 +611,29 @@ svg { fill: currentColor; }
       needStars: 'Samle {n} ★ til for å åpne {name}',
       credits: 'Laget med Claude Code. Alt kjører lokalt på enheten – ingen konto, ingen server.',
       tapToStart: 'Trykk på vannet',
+      daily: 'Dagens dam',
+      dailyNo: 'Dagens dam #{n}',
+      dailyPlay: 'Spill dagens dam',
+      dailyAgain: 'Prøv igjen',
+      dailyDone: 'I dag: {used} {stars}',
+      dailyTomorrow: 'Ny dam i morgen',
+      streakDays: '{n} dager på rad',
+      streakDay1: '1 dag på rad',
+      streakNone: 'Spill i dag for å starte en rekke',
+      share: 'Del',
+      copied: 'Kopiert – lim inn hvor du vil',
+      shareText: '🌊 Krusning #{n} · {used} · {stars}',
+      quick: 'Rask runde',
+      quickSub: 'Tilfeldige brett. Alle er testet og kan løses.',
+      tier_easy: 'Lett', tier_medium: 'Middels', tier_hard: 'Vrien',
+      quickStats: '{n} klart · ★★★ på rad: {s} (beste {b})',
+      quickNew: 'Ikke spilt ennå',
+      quickNeed: 'Klar bane {id} på Stien først',
+      quickStreak: '★★★ på rad: {n}',
+      nextBoard: 'Nytt brett',
+      menu: 'Til menyen',
+      wd0: 'søndag', wd1: 'mandag', wd2: 'tirsdag', wd3: 'onsdag', wd4: 'torsdag', wd5: 'fredag', wd6: 'lørdag',
+      wdShort: 'M,T,O,T,F,L,S',
     },
     en: {
       tagline: 'Guide the paper boats home.\nOne ripple at a time.',
@@ -594,6 +683,29 @@ svg { fill: currentColor; }
       needStars: 'Collect {n} more ★ to open {name}',
       credits: 'Made with Claude Code. Everything runs on your device – no account, no server.',
       tapToStart: 'Tap the water',
+      daily: 'Daily Pond',
+      dailyNo: 'Daily Pond #{n}',
+      dailyPlay: "Play today's pond",
+      dailyAgain: 'Try again',
+      dailyDone: 'Today: {used} {stars}',
+      dailyTomorrow: 'New pond tomorrow',
+      streakDays: '{n} days in a row',
+      streakDay1: '1 day in a row',
+      streakNone: 'Play today to start a streak',
+      share: 'Share',
+      copied: 'Copied – paste it anywhere',
+      shareText: '🌊 Krusning #{n} · {used} · {stars}',
+      quick: 'Quick round',
+      quickSub: 'Random boards. Every one is tested and solvable.',
+      tier_easy: 'Easy', tier_medium: 'Medium', tier_hard: 'Tricky',
+      quickStats: '{n} solved · ★★★ streak: {s} (best {b})',
+      quickNew: 'Not played yet',
+      quickNeed: 'Beat level {id} on the path first',
+      quickStreak: '★★★ streak: {n}',
+      nextBoard: 'New board',
+      menu: 'Menu',
+      wd0: 'Sunday', wd1: 'Monday', wd2: 'Tuesday', wd3: 'Wednesday', wd4: 'Thursday', wd5: 'Friday', wd6: 'Saturday',
+      wdShort: 'M,T,W,T,F,S,S',
     },
   };
 
@@ -1249,6 +1361,478 @@ svg { fill: currentColor; }
   const api = { WORLDS };
   root.Levels = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* =====================================================================
+ * Krusning – brettgenerator (Rask runde og Dagens dam)
+ * ---------------------------------------------------------------------
+ * Lager et brett fra et tall («frø»). Samme frø og samme nivå gir
+ * ALLTID det samme brettet, på alle telefoner. Derfor kan vi teste
+ * brettene på forhånd (tools/gen.js) og bare lagre frøene i js/pool.js.
+ *
+ * VIKTIG: endrer du noe her (eller i Engine.C), blir brettene andre.
+ * Kjør da `node tools/gen.js` på nytt, så lista i pool.js stemmer.
+ *
+ * Nivåer:
+ *   easy   – 1 båt, litt stein og stokk
+ *   medium – 1–2 båter, også vannliljer og virvel
+ *   hard   – 2–3 båter, også strøm (bare i Rask runde)
+ * ===================================================================== */
+(function (root) {
+  'use strict';
+
+  const VERSION = 1; // øk når brettene endres, og lag pool.js på nytt
+
+  // Liten, rask tilfeldighetsgenerator som alltid gir samme rekke for samme frø.
+  function rng(seed) {
+    let a = (seed >>> 0) || 1;
+    return function () {
+      a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  const TIERS = {
+    easy:   { boats: [1, 1], rocks: [0, 1], logs: [0, 1], pads: [0, 0], whirl: 0,    current: 0,    gap: [120, 300] },
+    medium: { boats: [1, 2], rocks: [0, 2], logs: [0, 1], pads: [0, 1], whirl: 0.35, current: 0,    gap: [140, 380] },
+    hard:   { boats: [2, 3], rocks: [1, 2], logs: [0, 1], pads: [0, 2], whirl: 0.4,  current: 0.45, gap: [140, 420] },
+  };
+
+  // Navn som settes sammen: «Stille vik», «Quiet cove» osv.
+  const ADJ = [
+    ['Stille', 'Quiet'], ['Lune', 'Snug'], ['Blank', 'Glassy'], ['Grønn', 'Green'], ['Lys', 'Bright'],
+    ['Dyp', 'Deep'], ['Liten', 'Little'], ['Kald', 'Cool'], ['Solrik', 'Sunny'], ['Skjult', 'Hidden'],
+    ['Rolig', 'Calm'], ['Gammel', 'Old'], ['Ny', 'New'], ['Lang', 'Long'], ['Vind', 'Windy'], ['Sølv', 'Silver'],
+  ];
+  const NOUN = [
+    ['vik', 'cove'], ['dam', 'pond'], ['pytt', 'puddle'], ['bukt', 'bay'], ['kulp', 'pool'], ['tjern', 'tarn'],
+    ['os', 'inlet'], ['sund', 'sound'], ['våg', 'creek'], ['strand', 'shore'], ['brygge', 'pier'], ['havn', 'harbour'],
+  ];
+
+  function make(seed, tier, opts) {
+    const cfg = TIERS[tier] || TIERS.easy;
+    const o = opts || {};
+    const r = rng(seed * 7919 + (tier === 'easy' ? 1 : tier === 'medium' ? 2 : 3));
+    const between = (a, b) => a + r() * (b - a);
+    const count = (mm) => mm[0] + Math.floor(r() * (mm[1] - mm[0] + 1));
+
+    const W = 360, H = 600;
+    const circles = [];          // alt rundt som er plassert: { x, y, r }
+    const segs = [];             // stokker
+    const lv = { boats: [], docks: [], rocks: [], logs: [], pads: [], whirls: [], currents: [] };
+
+    function segDist(px, py, s) {
+      const dx = s.x2 - s.x1, dy = s.y2 - s.y1;
+      const L = dx * dx + dy * dy || 1;
+      let tt = ((px - s.x1) * dx + (py - s.y1) * dy) / L;
+      tt = tt < 0 ? 0 : tt > 1 ? 1 : tt;
+      return Math.hypot(px - (s.x1 + dx * tt), py - (s.y1 + dy * tt));
+    }
+    function free(x, y, rad, pad) {
+      if (x < rad + 28 || x > W - rad - 28 || y < rad + 28 || y > H - rad - 28) return false;
+      for (const c of circles) if (Math.hypot(c.x - x, c.y - y) < c.r + rad + pad) return false;
+      for (const s of segs) if (segDist(x, y, s) < s.r + rad + pad) return false;
+      return true;
+    }
+    function inCurrent(x, y, m) {
+      return lv.currents.some((c) => x > c.x - m && x < c.x + c.w + m && y > c.y - m && y < c.y + c.h + m);
+    }
+    function place(rad, pad, extra) {
+      for (let k = 0; k < 60; k++) {
+        const x = between(rad + 28, W - rad - 28), y = between(rad + 70, H - rad - 40);
+        if (free(x, y, rad, pad) && (!extra || extra(x, y))) return { x: Math.round(x), y: Math.round(y) };
+      }
+      return null;
+    }
+
+    // strøm: et bredt bånd på tvers eller på langs
+    if (!o.noCurrent && r() < cfg.current) {
+      if (r() < 0.5) {
+        const h = Math.round(between(70, 110)), y = Math.round(between(200, 380));
+        lv.currents.push({ x: 0, y, w: W, h, vx: (r() < 0.5 ? -1 : 1) * Math.round(between(60, 95)), vy: 0 });
+      } else {
+        const w = Math.round(between(70, 100)), x = Math.round(between(110, 250 - w / 2));
+        lv.currents.push({ x, y: 60, w, h: 480, vx: 0, vy: (r() < 0.5 ? -1 : 1) * Math.round(between(60, 95)) });
+      }
+    }
+    // virvel
+    if (r() < cfg.whirl) {
+      const rad = Math.round(between(48, 62));
+      const p = place(rad, 30, (x, y) => !inCurrent(x, y, rad));
+      if (p) { lv.whirls.push({ x: p.x, y: p.y, r: rad, power: 1 }); circles.push({ x: p.x, y: p.y, r: rad }); }
+    }
+    // steiner
+    for (let i = count(cfg.rocks); i > 0; i--) {
+      const rad = Math.round(between(18, 32));
+      const p = place(rad, 40, (x, y) => !inCurrent(x, y, rad));
+      if (p) { lv.rocks.push({ x: p.x, y: p.y, r: rad }); circles.push({ x: p.x, y: p.y, r: rad }); }
+    }
+    // stokker
+    for (let i = count(cfg.logs); i > 0; i--) {
+      for (let k = 0; k < 40; k++) {
+        const len = between(80, 150), a = r() * Math.PI;
+        const cx = between(80, W - 80), cy = between(140, H - 110);
+        const s = {
+          x1: Math.round(cx - Math.cos(a) * len / 2), y1: Math.round(cy - Math.sin(a) * len / 2),
+          x2: Math.round(cx + Math.cos(a) * len / 2), y2: Math.round(cy + Math.sin(a) * len / 2), r: 8,
+        };
+        if (!free(s.x1, s.y1, 8, 36) || !free(s.x2, s.y2, 8, 36) || !free(cx, cy, 8, 36)) continue;
+        if (inCurrent(s.x1, s.y1, 10) || inCurrent(s.x2, s.y2, 10)) continue;
+        lv.logs.push(s); segs.push(s); break;
+      }
+    }
+    // vannliljer
+    for (let i = count(cfg.pads); i > 0; i--) {
+      const rad = Math.round(between(20, 26));
+      const p = place(rad, 36, (x, y) => !inCurrent(x, y, rad));
+      if (p) { lv.pads.push({ x: p.x, y: p.y, r: rad, flower: r() < 0.5 }); circles.push({ x: p.x, y: p.y, r: rad }); }
+    }
+    // havner og båter, i par, med god avstand mellom båt og havn
+    const nBoats = count(cfg.boats);
+    for (let i = 0; i < nBoats; i++) {
+      const d = place(24, 26, (x, y) => !inCurrent(x, y, 26));
+      if (!d) return null;
+      circles.push({ x: d.x, y: d.y, r: 24 });
+      const b = place(13, 22, (x, y) => {
+        if (inCurrent(x, y, 14)) return false;
+        const g = Math.hypot(x - d.x, y - d.y);
+        if (g < cfg.gap[0] || g > cfg.gap[1]) return false;
+        for (const dd of lv.docks) if (Math.hypot(x - dd.x, y - dd.y) < 90) return false;
+        return true;
+      });
+      if (!b) return null;
+      lv.docks.push(d);
+      lv.boats.push({ x: b.x, y: b.y, angle: Math.round((r() * 2 - 1) * Math.PI * 100) / 100 });
+      circles.push({ x: b.x, y: b.y, r: 13 });
+    }
+    // ingen båt for nær en havn den ikke skal til
+    for (const b of lv.boats) for (const d of lv.docks) if (Math.hypot(b.x - d.x, b.y - d.y) < 70) return null;
+
+    const ai = Math.floor(r() * ADJ.length), ni = Math.floor(r() * NOUN.length);
+    lv.name = { no: ADJ[ai][0] + ' ' + NOUN[ni][0], en: ADJ[ai][1] + ' ' + NOUN[ni][1] };
+    lv.id = tier[0].toUpperCase() + seed;
+    lv.seed = seed; lv.tier = tier;
+    for (const k of ['rocks', 'logs', 'pads', 'whirls', 'currents']) if (!lv[k].length) delete lv[k];
+    return lv;
+  }
+
+  // Ferdig bane fra en rad i pool.js: [frø, par, perle]
+  function fromPool(row, tier, opts) {
+    const lv = make(row[0], tier, opts);
+    if (!lv) return null;
+    lv.par = row[1]; lv.pearl = row[2];
+    return lv;
+  }
+
+  const api = { VERSION, TIERS, rng, make, fromPool };
+  root.Gen = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* =====================================================================
+ * Krusning – ferdig testede brett (LAGES AV tools/gen.js – IKKE REDIGER)
+ * ---------------------------------------------------------------------
+ * quick.<nivå>: [frø, par, perle]
+ * daily.days:   [frø, nivå, par, perle] – én rad per dag fra daily.start
+ * Brettet lages fra frøet av js/gen.js. Versjon 1 av generatoren.
+ * ===================================================================== */
+(function (root) {
+  'use strict';
+  const POOL = {
+  "v": 1,
+  "nextSeed": {"easy":64,"medium":75,"hard":71},
+  "quick": {
+    "easy": [
+      [1,2,1],
+      [2,2,1],
+      [3,2,1],
+      [4,2,1],
+      [6,2,1],
+      [7,2,1],
+      [8,2,1],
+      [9,2,1],
+      [10,2,1],
+      [11,2,1],
+      [12,2,1],
+      [13,2,1],
+      [14,2,1],
+      [15,2,1],
+      [16,2,1],
+      [17,2,1],
+      [18,2,1],
+      [19,3,2],
+      [20,2,1],
+      [21,2,1],
+      [22,2,1],
+      [23,3,2],
+      [24,2,1],
+      [25,2,1],
+      [26,2,1],
+      [28,2,1],
+      [29,2,1],
+      [30,2,1],
+      [31,2,1],
+      [32,2,1],
+      [33,2,1],
+      [34,2,1],
+      [35,2,1],
+      [36,2,1],
+      [37,2,1],
+      [38,2,1],
+      [39,2,1],
+      [40,2,1],
+      [41,2,1],
+      [42,2,1],
+      [43,2,1],
+      [44,2,1],
+      [45,2,1],
+      [46,2,1],
+      [47,2,1],
+      [48,2,1],
+      [49,2,1],
+      [50,2,1],
+      [51,2,1],
+      [52,2,1],
+      [53,2,1],
+      [54,2,1],
+      [55,2,1],
+      [56,2,1],
+      [57,2,1],
+      [58,2,1],
+      [59,2,1],
+      [61,2,1],
+      [62,2,1],
+      [63,2,1]
+    ],
+    "medium": [
+      [1,3,2],
+      [2,3,2],
+      [3,3,2],
+      [5,2,1],
+      [6,2,1],
+      [7,3,2],
+      [8,3,2],
+      [9,2,1],
+      [10,3,2],
+      [11,3,2],
+      [13,3,2],
+      [14,2,1],
+      [16,3,2],
+      [17,2,1],
+      [18,3,2],
+      [20,3,2],
+      [21,3,2],
+      [24,2,1],
+      [25,3,2],
+      [27,2,1],
+      [28,3,2],
+      [29,4,3],
+      [30,2,1],
+      [31,2,1],
+      [32,2,1],
+      [33,3,2],
+      [35,2,1],
+      [37,3,2],
+      [38,3,2],
+      [39,3,2],
+      [40,2,1],
+      [41,3,2],
+      [42,2,1],
+      [43,3,2],
+      [44,2,1],
+      [47,2,1],
+      [48,3,2],
+      [49,2,1],
+      [51,2,1],
+      [52,2,1],
+      [53,2,1],
+      [54,3,2],
+      [55,3,2],
+      [56,3,2],
+      [57,2,1],
+      [58,3,2],
+      [60,2,1],
+      [61,2,1],
+      [62,3,2],
+      [63,3,2],
+      [65,3,2],
+      [66,3,2],
+      [67,2,1],
+      [68,2,1],
+      [69,2,1],
+      [70,3,2],
+      [71,2,1],
+      [72,2,1],
+      [73,2,1],
+      [74,2,1]
+    ],
+    "hard": [
+      [2,3,2],
+      [3,3,2],
+      [4,4,3],
+      [5,3,2],
+      [7,4,3],
+      [8,3,2],
+      [10,4,3],
+      [11,3,2],
+      [12,3,2],
+      [13,3,2],
+      [14,4,3],
+      [16,3,2],
+      [17,3,2],
+      [18,3,2],
+      [19,3,2],
+      [20,3,2],
+      [21,4,3],
+      [22,3,2],
+      [23,3,2],
+      [24,3,2],
+      [25,3,2],
+      [26,4,3],
+      [28,4,3],
+      [29,3,2],
+      [30,3,2],
+      [31,3,2],
+      [32,3,2],
+      [33,3,2],
+      [34,3,2],
+      [35,4,3],
+      [36,3,2],
+      [37,3,2],
+      [38,3,2],
+      [39,3,2],
+      [40,3,2],
+      [42,3,2],
+      [43,4,3],
+      [44,3,2],
+      [45,4,3],
+      [46,3,2],
+      [47,3,2],
+      [48,4,3],
+      [49,3,2],
+      [50,3,2],
+      [51,5,4],
+      [52,3,2],
+      [53,4,3],
+      [55,3,2],
+      [56,3,2],
+      [57,4,3],
+      [58,3,2],
+      [59,3,2],
+      [61,4,3],
+      [62,3,2],
+      [63,3,2],
+      [64,4,3],
+      [65,3,2],
+      [66,3,2],
+      [69,3,2],
+      [70,3,2]
+    ]
+  },
+  "daily": {
+    "start": "2026-11-20",
+    "days": [
+      [100000,"medium",3,2],
+      [100097,"hard",4,3],
+      [100198,"hard",3,2],
+      [100291,"easy",2,1],
+      [100388,"easy",2,1],
+      [100485,"medium",3,2],
+      [100582,"medium",2,1],
+      [100679,"medium",2,1],
+      [100776,"hard",3,2],
+      [100873,"hard",3,2],
+      [100970,"easy",2,1],
+      [101067,"easy",2,1],
+      [101164,"medium",3,2],
+      [101261,"medium",3,2],
+      [101358,"medium",3,2],
+      [101455,"hard",3,2],
+      [101552,"hard",3,2],
+      [101649,"easy",2,1],
+      [101746,"easy",2,1],
+      [101843,"medium",2,1],
+      [101940,"medium",3,2],
+      [102037,"medium",3,2],
+      [102134,"hard",3,2],
+      [102232,"hard",3,2],
+      [102328,"easy",2,1],
+      [102425,"easy",2,1],
+      [102522,"medium",3,2],
+      [102619,"medium",3,2],
+      [102716,"medium",3,2],
+      [102813,"hard",3,2],
+      [102910,"hard",3,2],
+      [103007,"easy",2,1],
+      [103104,"easy",2,1],
+      [103201,"medium",3,2],
+      [103298,"medium",3,2],
+      [103395,"medium",3,2],
+      [103492,"hard",3,2],
+      [103590,"hard",3,2],
+      [103686,"easy",3,2],
+      [103783,"easy",2,1],
+      [103880,"medium",3,2],
+      [103978,"medium",3,2],
+      [104074,"medium",2,1],
+      [104173,"hard",3,2],
+      [104268,"hard",4,3],
+      [104365,"easy",2,1],
+      [104462,"easy",2,1],
+      [104559,"medium",2,1],
+      [104656,"medium",3,2],
+      [104753,"medium",3,2],
+      [104850,"hard",4,3],
+      [104947,"hard",3,2],
+      [105044,"easy",2,1],
+      [105141,"easy",2,1],
+      [105238,"medium",3,2],
+      [105335,"medium",3,2],
+      [105432,"medium",3,2],
+      [105529,"hard",4,3],
+      [105626,"hard",3,2],
+      [105723,"easy",2,1],
+      [105820,"easy",2,1],
+      [105917,"medium",2,1],
+      [106014,"medium",2,1],
+      [106111,"medium",3,2],
+      [106208,"hard",3,2],
+      [106305,"hard",3,2],
+      [106402,"easy",2,1],
+      [106499,"easy",2,1],
+      [106596,"medium",3,2],
+      [106693,"medium",2,1],
+      [106790,"medium",3,2],
+      [106888,"hard",3,2],
+      [106984,"hard",4,3],
+      [107081,"easy",2,1],
+      [107178,"easy",3,2],
+      [107276,"medium",2,1],
+      [107372,"medium",2,1],
+      [107470,"medium",3,2],
+      [107566,"hard",4,3],
+      [107663,"hard",3,2],
+      [107760,"easy",2,1],
+      [107857,"easy",2,1],
+      [107954,"medium",3,2],
+      [108052,"medium",3,2],
+      [108148,"medium",3,2],
+      [108245,"hard",3,2],
+      [108343,"hard",3,2],
+      [108439,"easy",2,1],
+      [108536,"easy",2,1],
+      [108633,"medium",2,1]
+    ]
+  }
+};
+  root.Pool = POOL;
+  if (typeof module !== 'undefined' && module.exports) module.exports = POOL;
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -2357,12 +2941,31 @@ svg { fill: currentColor; }
   const t = (k, v) => I.t(k, v);
 
   /* ---------- lagring (localStorage – bare på denne enheten) ---------- */
-  const SAVE_KEY = 'krusning.save.v1';
-  function defaults() { return { v: 1, lang: 'no', sfx: true, music: true, levels: {}, last: null }; }
+  // Versjon 2 (nov. 2026): la til Rask runde (quick) og Dagens dam (daily).
+  // Fremgang fra versjon 1 hentes automatisk inn første gang.
+  const SAVE_KEY = 'krusning.save.v2';
+  const OLD_KEY = 'krusning.save.v1';
+  const TIERS = ['easy', 'medium', 'hard'];
+  function quickDefaults() {
+    const q = {};
+    for (const tr of TIERS) q[tr] = { i: 0, played: 0, three: 0, pearls: 0, streak: 0, best: 0 };
+    return q;
+  }
+  function defaults() { return { v: 2, lang: 'no', sfx: true, music: true, levels: {}, last: null, quick: quickDefaults(), daily: {} }; }
+  function upgrade(s) {
+    const out = Object.assign(defaults(), s, { v: 2 });
+    out.quick = quickDefaults();
+    for (const tr of TIERS) Object.assign(out.quick[tr], (s.quick && s.quick[tr]) || {});
+    out.daily = s.daily || {};
+    out.levels = s.levels || {};
+    return out;
+  }
   function load() {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
-      if (raw) { const s = JSON.parse(raw); if (s && s.v === 1) return Object.assign(defaults(), s); }
+      if (raw) { const s = JSON.parse(raw); if (s && s.v === 2) return upgrade(s); }
+      const old = localStorage.getItem(OLD_KEY);
+      if (old) { const s = JSON.parse(old); if (s && s.v === 1) return upgrade(s); }
     } catch (e) { /* privat modus e.l. – spill uten lagring */ }
     return defaults();
   }
@@ -2448,7 +3051,7 @@ svg { fill: currentColor; }
   /* ---------- bane ---------- */
   function startLevel(entry, quick) {
     G.entry = entry;
-    save.last = entry.lv.id; persist();
+    if (!entry.mode) { save.last = entry.lv.id; persist(); }
     G.world = E.createWorld(entry.lv);
     G.acc = 0; G.particles = []; G.dockFx = {}; G.look = null;
     G.completed = false; G.winAt = -1; G.result = null;
@@ -2767,7 +3370,7 @@ svg { fill: currentColor; }
   function updateHud() {
     if (!G.entry || !G.world) return;
     const lv = G.entry.lv;
-    $('hudId').textContent = lv.id;
+    $('hudId').textContent = entryLabel(G.entry);
     $('hudName').textContent = I.pick(lv.name);
     $('hudTaps').textContent = G.world.taps;
     $('hudPar').textContent = t('par') + ' ' + lv.par;
@@ -2799,7 +3402,7 @@ svg { fill: currentColor; }
 
   function showBanner(lv) {
     const b = $('banner');
-    $('bannerId').textContent = lv.id;
+    $('bannerId').textContent = entryLabel(G.entry);
     $('bannerName').textContent = I.pick(lv.name);
     b.hidden = false;
     b.style.animation = 'none'; void b.offsetWidth; b.style.animation = '';
@@ -2856,6 +3459,13 @@ svg { fill: currentColor; }
     const lv = G.entry.lv, taps = G.world.taps;
     const stars = starsFor(lv, taps);
     const pearl = taps <= lv.pearl && !G.hintUsed;
+    if (G.entry.mode) {
+      G.result = recordMode(G.entry, taps, stars, pearl);
+      G.winAt = G.time + 1.05;
+      hideTip(true);
+      setTimeout(() => { if (G.completed) { S.win(); confetti(); } }, 350);
+      return;
+    }
     const prev = rec(lv.id) ? Object.assign({}, rec(lv.id)) : null;
     const starsBefore = totalStars();
     const r = save.levels[lv.id] || (save.levels[lv.id] = { best: taps, stars: 0, pearl: false, plays: 0 });
@@ -2899,6 +3509,17 @@ svg { fill: currentColor; }
     $('btnRetryTxt').textContent = res.stars < 3 ? t('retryFor3') : t('retry');
     $('btnNextTxt').textContent = t('next');
     $('btnWinMap').textContent = t('toMap');
+    const mode = G.entry.mode;
+    $('btnNext').querySelector('use').setAttribute('href', mode === 'daily' ? '#i-share' : '#i-next');
+    if (mode === 'quick') {
+      $('btnNextTxt').textContent = t('nextBoard');
+      $('btnWinMap').textContent = t('menu');
+      const q = save.quick[G.entry.tier];
+      if (q.streak >= 2) { best.hidden = false; best.textContent = t('quickStreak', { n: q.streak }); }
+    } else if (mode === 'daily') {
+      $('btnNextTxt').textContent = t('share');
+      $('btnWinMap').textContent = t('menu');
+    }
     $('win').hidden = false;
 
     for (let i = 0; i < res.stars; i++) {
@@ -2918,6 +3539,8 @@ svg { fill: currentColor; }
   function goNext() {
     S.click();
     const e = G.entry;
+    if (e.mode === 'quick') { transition(() => startLevel(quickEntry(e.tier))); return; }
+    if (e.mode === 'daily') { shareDaily(e.day); return; }
     const nxt = ALL[e.idx + 1];
     if (nxt && levelOpen(nxt)) { transition(() => startLevel(nxt)); return; }
     // slutten av verdenen: vis neste verden på kartet
@@ -2930,7 +3553,7 @@ svg { fill: currentColor; }
 
   /* ---------- banekart ---------- */
   function openMap(wi) {
-    G.mapWorld = wi != null ? wi : G.entry ? G.entry.wi : nextToPlay().wi;
+    G.mapWorld = wi != null ? wi : G.entry && !G.entry.mode ? G.entry.wi : nextToPlay().wi;
     if (G.screen === 'play' || !G.world) { G.world = G.titleWorld; G.entry = null; spawnDecor('title'); setBoatFx(G.world); }
     renderMap();
     setScreen('map');
@@ -2984,6 +3607,154 @@ svg { fill: currentColor; }
     dots.innerHTML = LV.WORLDS.map((_, i) => `<i class="${i === G.mapWorld ? 'on' : ''}"></i>`).join('');
     $('worldPrev').disabled = G.mapWorld === 0;
     $('worldNext').disabled = G.mapWorld === LV.WORLDS.length - 1;
+  }
+
+  /* ---------- Rask runde og Dagens dam ---------- */
+  // Brettene lages av js/gen.js fra frø i js/pool.js (testet på forhånd med tools/gen.js).
+  const PO = window.Pool, GEN = window.Gen;
+  const TIER_NEED = { easy: null, medium: '1-10', hard: '2-1' }; // mekanikkene må være møtt på Stien
+  const tierOpen = (tr) => !TIER_NEED[tr] || !!rec(TIER_NEED[tr]);
+  const pad2 = (n) => String(n).padStart(2, '0');
+
+  function entryLabel(e) {
+    if (e.mode === 'quick') return t('tier_' + e.tier);
+    if (e.mode === 'daily') return '#' + e.num;
+    return e.lv.id;
+  }
+
+  function quickEntry(tr) {
+    const list = PO.quick[tr], q = save.quick[tr];
+    const lv = GEN.fromPool(list[q.i % list.length], tr);
+    return { lv, mode: 'quick', tier: tr, wi: 0, idx: -1, done: false, stars: 0, pearl: false, prevStreak: 0 };
+  }
+
+  // Datoer som tekst 'ÅÅÅÅ-MM-DD' i lokal tid. Dagnummer telles fra Pool.daily.start.
+  function todayKey() {
+    if (G.fakeToday) return G.fakeToday; // brukes av testene
+    const d = new Date();
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+  function keyUTC(key) { const p = key.split('-').map(Number); return Date.UTC(p[0], p[1] - 1, p[2]); }
+  function keyAdd(key, n) {
+    const d = new Date(keyUTC(key) + n * 86400000);
+    return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
+  }
+  function dayNum(key) { return Math.round((keyUTC(key) - keyUTC(PO.daily.start)) / 86400000); }
+  function weekday(key) { return new Date(keyUTC(key)).getUTCDay(); }
+
+  function dailyEntry(key) {
+    const n = Math.max(0, dayNum(key));
+    const days = PO.daily.days;
+    const row = days[n % days.length]; // [frø, nivå, par, perle]
+    const lv = GEN.fromPool([row[0], row[2], row[3]], row[1], { noCurrent: true });
+    lv.id = 'D' + (n + 1);
+    return { lv, mode: 'daily', tier: row[1], day: key, num: n + 1, wi: 0, idx: -1 };
+  }
+  function dailyStreak() {
+    let k = todayKey();
+    if (!save.daily[k]) k = keyAdd(k, -1);
+    let n = 0;
+    while (save.daily[k]) { n++; k = keyAdd(k, -1); }
+    return n;
+  }
+
+  // Lagrer resultatet i Rask runde / Dagens dam og lager data til resultatkortet.
+  function recordMode(e, taps, stars, pearl) {
+    if (e.mode === 'quick') {
+      const q = save.quick[e.tier];
+      const firstPearl = pearl && !e.pearl;
+      if (!e.done) { e.done = true; e.prevStreak = q.streak; q.i++; q.played++; }
+      if (stars === 3 && e.stars < 3) { q.three++; q.streak = e.prevStreak + 1; q.best = Math.max(q.best, q.streak); }
+      else if (e.stars < 3 && stars < 3) q.streak = 0;
+      if (firstPearl) q.pearls++;
+      e.stars = Math.max(e.stars, stars); e.pearl = e.pearl || pearl;
+      persist();
+      return { stars, pearl, taps, rec: { pearl: e.pearl }, firstPearl, newBest: false, starsBefore: totalStars() };
+    }
+    const prev = save.daily[e.day];
+    const r = save.daily[e.day] = prev ? Object.assign({}, prev) : { best: taps, stars: 0, pearl: false, n: e.num };
+    r.best = Math.min(r.best, taps);
+    r.stars = Math.max(r.stars, stars);
+    r.pearl = !!(r.pearl || pearl);
+    persist();
+    return { stars, pearl, taps, rec: r, firstPearl: pearl && !(prev && prev.pearl), newBest: !!prev && taps < prev.best, starsBefore: totalStars() };
+  }
+
+  function startDaily(key) {
+    $('daily').hidden = true;
+    transition(() => startLevel(dailyEntry(key)));
+  }
+
+  // Tilbake til tittelskjermen med riktig kort åpent.
+  function leaveMode() {
+    const mode = G.entry.mode;
+    transition(() => { toTitle(); if (mode === 'quick') openQuick(); else openDaily(); });
+  }
+
+  function starText(n, pearl) { return '★'.repeat(n) + '☆'.repeat(3 - n) + (pearl ? ' ◉' : ''); }
+
+  function shareDaily(key) {
+    const r = save.daily[key];
+    if (!r) return;
+    const txt = t('shareText', { n: dailyEntry(key).num, used: I.ripples(r.best), stars: starText(r.stars, r.pearl) });
+    const copy = () => {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).then(() => toast(t('copied')), () => toast(txt));
+      } else toast(txt);
+    };
+    if (navigator.share) navigator.share({ text: txt }).catch((err) => { if (!err || err.name !== 'AbortError') copy(); });
+    else copy();
+  }
+
+  function openDaily() { renderDaily(); $('daily').hidden = false; }
+  function renderDaily() {
+    const key = todayKey(), e = dailyEntry(key), r = save.daily[key];
+    $('dailyTitle').textContent = t('daily');
+    $('dailySub').textContent = '#' + e.num + ' · ' + t('wd' + weekday(key)) + ' · ' + t('tier_' + e.tier);
+    // kalender: fire uker, mandag først, denne uka nederst
+    const first = keyAdd(key, -((weekday(key) + 6) % 7) - 21);
+    let h = t('wdShort').split(',').map((d) => `<b>${d}</b>`).join('');
+    for (let i = 0; i < 28; i++) {
+      const k = keyAdd(first, i), d = save.daily[k];
+      const cls = ['cal-day'];
+      if (keyUTC(k) > keyUTC(key)) cls.push('future');
+      else if (dayNum(k) < 0) cls.push('before');
+      if (k === key) cls.push('today');
+      if (d) cls.push('done', 's' + d.stars);
+      h += `<span class="${cls.join(' ')}">${+k.slice(8)}${d && d.pearl ? '<i class="pearl"></i>' : ''}</span>`;
+    }
+    $('dailyCal').innerHTML = h;
+    const st = dailyStreak();
+    $('dailyStreak').textContent = st === 0 ? t('streakNone') : st === 1 ? t('streakDay1') : t('streakDays', { n: st });
+    $('dailyResult').hidden = !r;
+    if (r) $('dailyResult').textContent = t('dailyDone', { used: I.ripples(r.best), stars: starText(r.stars, r.pearl) });
+    $('btnDailyShare').hidden = !r;
+    $('btnDailyShareTxt').textContent = t('share');
+    $('btnDailyPlayTxt').textContent = r ? t('dailyAgain') : t('dailyPlay');
+  }
+
+  function openQuick() { renderQuick(); $('quick').hidden = false; }
+  function renderQuick() {
+    $('quickTitle').textContent = t('quick');
+    $('quickSub').textContent = t('quickSub');
+    const box = $('quickTiers');
+    box.innerHTML = '';
+    TIERS.forEach((tr, ti) => {
+      const q = save.quick[tr], ok = tierOpen(tr);
+      const b = document.createElement('button');
+      b.className = 'tier-btn' + (ok ? '' : ' locked');
+      const dots = [0, 1, 2].map((k) => `<i class="${k <= ti ? '' : 'off'}"></i>`).join('');
+      const sub = !ok ? t('quickNeed', { id: TIER_NEED[tr] })
+        : q.played ? t('quickStats', { n: q.played, s: q.streak, b: q.best }) : t('quickNew');
+      b.innerHTML = `<span class="tier-dots">${dots}</span><span class="tier-text"><b>${t('tier_' + tr)}</b><span>${sub}</span></span>`;
+      b.addEventListener('click', () => {
+        S.click();
+        if (!ok) { toast(sub); return; }
+        $('quick').hidden = true;
+        transition(() => startLevel(quickEntry(tr)));
+      });
+      box.appendChild(b);
+    });
   }
 
   /* ---------- hint (regnes ut fra situasjonen akkurat nå) ---------- */
@@ -3104,6 +3875,11 @@ svg { fill: currentColor; }
     $('tagline').textContent = t('tagline');
     $('btnPlay').textContent = anyProgress() ? t('continueAt', { id: nextToPlay().lv.id }) : t('play');
     $('btnLevelsTxt').textContent = t('levels');
+    $('btnDailyTxt').textContent = t('daily');
+    $('btnQuickTxt').textContent = t('quick');
+    $('dailyDot').hidden = !!save.daily[todayKey()];
+    $('dailyClose').setAttribute('aria-label', t('close'));
+    $('quickClose').setAttribute('aria-label', t('close'));
     $('soundTip').textContent = t('soundTip');
     $('setTitle').textContent = t('settings');
     $('setSfxLbl').textContent = t('sound');
@@ -3127,13 +3903,21 @@ svg { fill: currentColor; }
     transition(() => startLevel(anyProgress() ? nextToPlay() : ALL[0]));
   });
   $('btnLevels').addEventListener('click', () => { S.unlock(); S.click(); openMap(); });
-  $('btnLevels2').addEventListener('click', () => { S.click(); openMap(G.entry ? G.entry.wi : 0); });
+  $('btnLevels2').addEventListener('click', () => { S.click(); if (G.entry && G.entry.mode) leaveMode(); else openMap(G.entry ? G.entry.wi : 0); });
   $('btnSettings').addEventListener('click', openSettings);
   $('btnRestart').addEventListener('click', restart);
   $('btnHint').addEventListener('click', requestHint);
   $('btnRetry').addEventListener('click', () => { $('win').hidden = true; restart(); });
   $('btnNext').addEventListener('click', goNext);
-  $('btnWinMap').addEventListener('click', () => { S.click(); transition(() => openMap(G.entry ? G.entry.wi : 0)); });
+  $('btnWinMap').addEventListener('click', () => { S.click(); if (G.entry && G.entry.mode) leaveMode(); else transition(() => openMap(G.entry ? G.entry.wi : 0)); });
+  $('btnDaily').addEventListener('click', () => { S.unlock(); S.click(); openDaily(); });
+  $('btnQuick').addEventListener('click', () => { S.unlock(); S.click(); openQuick(); });
+  $('dailyClose').addEventListener('click', () => { S.click(); $('daily').hidden = true; });
+  $('quickClose').addEventListener('click', () => { S.click(); $('quick').hidden = true; });
+  $('daily').addEventListener('click', (e) => { if (e.target === $('daily')) $('daily').hidden = true; });
+  $('quick').addEventListener('click', (e) => { if (e.target === $('quick')) $('quick').hidden = true; });
+  $('btnDailyPlay').addEventListener('click', () => { S.click(); startDaily(todayKey()); });
+  $('btnDailyShare').addEventListener('click', () => { S.click(); shareDaily(todayKey()); });
   $('mapBack').addEventListener('click', () => { S.click(); toTitle(); });
   $('worldPrev').addEventListener('click', () => { S.click(); G.mapWorld = Math.max(0, G.mapWorld - 1); renderMap(); });
   $('worldNext').addEventListener('click', () => { S.click(); G.mapWorld = Math.min(LV.WORLDS.length - 1, G.mapWorld + 1); renderMap(); });
@@ -3146,6 +3930,8 @@ svg { fill: currentColor; }
       save.lang = b.dataset.lang; I.lang = save.lang; persist();
       applyTexts(); paintSettings(); updateHud();
       if (G.screen === 'map') renderMap();
+      if (!$('daily').hidden) renderDaily();
+      if (!$('quick').hidden) renderQuick();
       S.click();
     });
   }
@@ -3197,11 +3983,15 @@ svg { fill: currentColor; }
 
   // Når en ny versjon publiseres mens spillet er åpent, fortsetter vi der vi var.
   const hot = window.claude && window.claude.hot;
-  try { if (hot && hot.snapshot) hot.snapshot(() => ({ screen: G.screen, level: G.entry && G.entry.lv.id, map: G.mapWorld })); } catch (e) { /* ok */ }
+  try { if (hot && hot.snapshot) hot.snapshot(() => ({ screen: G.screen, level: G.entry && !G.entry.mode && G.entry.lv.id, map: G.mapWorld })); } catch (e) { /* ok */ }
   if (hot && hot.ready) hot.ready(boot); else boot((hot && hot.data) || {});
 
   // til testing i nettleserkonsollen
-  window.Krusning = { G, startLevel: (id) => startLevel(byId(id)), save: () => save, playerTap, openMap };
+  window.Krusning = {
+    G, startLevel: (id) => startLevel(byId(id)), save: () => save, playerTap, openMap,
+    startQuick: (tr) => startLevel(quickEntry(tr)), startDaily: (key) => startLevel(dailyEntry(key || todayKey())),
+    openDaily, openQuick, todayKey,
+  };
 })();
 
 </script>

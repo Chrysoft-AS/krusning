@@ -11,11 +11,14 @@ index.html          siden (HUD, menyer, kort)  – åpnes direkte i nettleser
 css/style.css       utseende på menyer og knapper
 js/engine.js        fysikk – deterministisk, uten DOM, uten tilfeldighet
 js/levels.js        ALLE baner som data (den fila som endres oftest)
+js/gen.js           brettgenerator for Rask runde og Dagens dam (frø → brett)
+js/pool.js          ferdig testede frø (LAGES av tools/gen.js, ikke rediger)
 js/render.js        tegning på canvas (dam, båter, krusninger, effekter)
 js/audio.js         syntetisert lyd og musikk (Web Audio, ingen lydfiler)
 js/strings.js       all tekst, norsk + engelsk
 js/game.js          skjermer, input, stjerner/perler, lagring, hint
 tools/solve.js      banetester: finner minste antall trykk, sjekker par/perle
+tools/gen.js        lager og tester brett til Rask runde og Dagens dam → js/pool.js
 tools/playtest.js   spiller alle baner i ekte nettleser (følger hint-knappen)
 tools/shots.js      skjermbilder av alle skjermer (iPhone-størrelse)
 tools/build-artifact.js   bygger dist/krusning.html (én fil) for deling
@@ -25,11 +28,12 @@ tools/build-artifact.js   bygger dist/krusning.html (én fil) for deling
 
 1. **Alt kjører lokalt.** Ingen server, ingen innlogging, ingen nettverkskall. Eneste unntak er Google Fonts i nettversjonen, og den fonten skal pakkes inn i iOS-appen.
 2. **`engine.js` skal være deterministisk.** Ingen `Math.random`, ingen tid fra klokka og ingen DOM. Samme trykk skal alltid gi samme resultat, ellers slutter løseren og hint-systemet å virke.
-3. **Etter endringer i baner eller fysikk:** kjør `node tools/solve.js <bane-id>`, og hele `node tools/solve.js` før publisering. Konstantene i `Engine.C` påvirker *alle* baner.
+3. **Etter endringer i baner eller fysikk:** kjør `node tools/solve.js <bane-id>`, og hele `node tools/solve.js` før publisering. Konstantene i `Engine.C` påvirker *alle* baner, også brettene i Rask runde og Dagens dam.
+   **Endrer du `Engine.C` eller `js/gen.js`:** øk `VERSION` i `gen.js` og kjør `node tools/gen.js --fresh` (tar 1–2 timer). Ellers stemmer ikke par/perle i `pool.js`. Merk at Dagens dam da endres for alle.
 4. **Etter endringer i grafikk eller menyer:** kjør `node tools/shots.js shots` og se på bildene. Kjør `node tools/playtest.js` for å sjekke hele flyten (alle baner skal bli «✔»).
 5. **All tekst ligger i `strings.js`** (både norsk og engelsk). Banenavn og tips ligger i `levels.js` som `{ no: '…', en: '…' }`.
 6. **Kommentarer skrives på norsk, og enkelt.** Ingen nye avhengigheter eller byggeverktøy uten god grunn.
-7. **Lagring** går gjennom `save`/`persist()` i `game.js` (localStorage, nøkkel `krusning.save.v1`). Endrer du formatet, må du øke versjonen og ta vare på gammel fremgang.
+7. **Lagring** går gjennom `save`/`persist()` i `game.js` (localStorage, nøkkel `krusning.save.v2`; v1 hentes inn automatisk). Endrer du formatet, må du øke versjonen og ta vare på gammel fremgang (se `upgrade()`).
 
 ## Ny bane
 
@@ -38,6 +42,10 @@ tools/build-artifact.js   bygger dist/krusning.html (én fil) for deling
 3. `node tools/solve.js <id> --map` viser hvor ett trykk løser banen (`*`). Sett `pearl` til det minste antallet løseren finner, og `par` vanligvis én høyere.
 4. Perla bør ha et vindu på minst ca. 15 trykkpunkter. Under 6 regnes som flaks, og løseren varsler da.
 5. Kjør `node tools/playtest.js <id>`.
+
+## Flere brett i Rask runde / Dagens dam
+
+`node tools/gen.js quick medium 40` legger til 40 brett, `node tools/gen.js daily 60` legger til 60 dager. Verktøyet fortsetter der det slapp. `node tools/gen.js show M12` viser et brett som tekst. Dagens dam #1 er 20. november 2026; når lista er brukt opp, starter den forfra.
 
 ## Ny mekanikk
 

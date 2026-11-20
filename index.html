@@ -25,6 +25,9 @@
     <symbol id="i-back" viewBox="0 0 24 24"><path d="M14.5 5.5L8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-next" viewBox="0 0 24 24"><path d="M9.5 5.5L16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="3" fill="currentColor"/><path d="M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5" fill="none" stroke="currentColor" stroke-width="2.4"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3.5" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M3.5 10h17M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/><circle cx="12" cy="15" r="2.2" fill="currentColor"/></symbol>
+    <symbol id="i-dice" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="4.5" fill="none" stroke="currentColor" stroke-width="2.3"/><g fill="currentColor"><circle cx="8.5" cy="8.5" r="1.7"/><circle cx="15.5" cy="15.5" r="1.7"/><circle cx="12" cy="12" r="1.7"/></g></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3.5v11M7.5 8L12 3.5 16.5 8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 12.5v5.5a2.5 2.5 0 0 0 2.5 2.5h7a2.5 2.5 0 0 0 2.5-2.5v-5.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
   </defs>
 </svg>
@@ -66,6 +69,10 @@
     </div>
     <div class="title-bottom">
       <button id="btnPlay" class="btn btn-primary btn-big">Spill</button>
+      <div class="title-row modes-row">
+        <button id="btnDaily" class="btn btn-paper"><svg class="btn-icon"><use href="#i-cal"/></svg><span id="btnDailyTxt">Dagens dam</span><i class="new-dot" id="dailyDot" hidden></i></button>
+        <button id="btnQuick" class="btn btn-paper"><svg class="btn-icon"><use href="#i-dice"/></svg><span id="btnQuickTxt">Rask runde</span></button>
+      </div>
       <div class="title-row">
         <button id="btnLevels" class="btn btn-paper"><svg class="btn-icon"><use href="#i-grid"/></svg><span id="btnLevelsTxt">Baner</span></button>
         <button id="btnSettings" class="icon-btn" aria-label="Innstillinger"><svg><use href="#i-sliders"/></svg></button>
@@ -122,6 +129,36 @@
     </div>
   </div>
 
+  <!-- Dagens dam -->
+  <div id="daily" class="modal" hidden>
+    <div class="card daily-card">
+      <div class="card-head">
+        <h2 id="dailyTitle">Dagens dam</h2>
+        <button id="dailyClose" class="icon-btn small" aria-label="Lukk"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <p class="daily-sub" id="dailySub"></p>
+      <div class="cal" id="dailyCal"></div>
+      <p class="daily-streak" id="dailyStreak"></p>
+      <p class="daily-result" id="dailyResult" hidden></p>
+      <div class="daily-actions">
+        <button id="btnDailyShare" class="btn btn-paper" hidden><svg class="btn-icon"><use href="#i-share"/></svg><span id="btnDailyShareTxt">Del</span></button>
+        <button id="btnDailyPlay" class="btn btn-primary"><span id="btnDailyPlayTxt">Spill</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rask runde -->
+  <div id="quick" class="modal" hidden>
+    <div class="card quick-card">
+      <div class="card-head">
+        <h2 id="quickTitle">Rask runde</h2>
+        <button id="quickClose" class="icon-btn small" aria-label="Lukk"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <p class="daily-sub" id="quickSub"></p>
+      <div class="tiers" id="quickTiers"></div>
+    </div>
+  </div>
+
   <!-- innstillinger -->
   <div id="settings" class="modal" hidden>
     <div class="card settings-card">
@@ -151,6 +188,8 @@
 <script src="js/strings.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/levels.js"></script>
+<script src="js/gen.js"></script>
+<script src="js/pool.js"></script>
 <script src="js/render.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/game.js"></script>

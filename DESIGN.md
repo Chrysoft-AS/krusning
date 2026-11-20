@@ -107,8 +107,8 @@ Verdenene vises som en svingete sti langs en bekk fra dammen til fjorden, med en
 | Modus | Hva | Gratis? | Prioritet |
 |---|---|---|---|
 | **Stien** | Hovedløpet med verdener, stjerner og perler | Verden 1–2 | Finnes (17 baner) |
-| **Dagens dam** | Én bane per dag, lik for alle, delbart resultat | Ja | Fase 1 |
-| **Rask runde** | Tilfeldig testet brett, velg Lett / Middels / Vrien | Lett er gratis | Fase 1 |
+| **Dagens dam** | Én bane per dag, lik for alle, delbart resultat | Ja | **Laget** (fase 1) |
+| **Rask runde** | Tilfeldig testet brett, velg Lett / Middels / Vrien | Lett er gratis | **Laget** (fase 1) |
 | **Bare vann** | Ingen mål. Trykk og lag musikk mens båtene flyter. For barn og for å slappe av | Ja | Liten, når det passer |
 | **Perlebukta** | Mesterbaner for perlejegere | Fullversjon | Fase 4 |
 | **Baneverkstedet** | Lag egne baner med dra og slipp, del dem som en kort kode | Fullversjon | Senere |
@@ -127,6 +127,7 @@ Helt tilfeldige brett blir ofte enten umulige eller kjedelige. Derfor:
 Hvorfor ikke lage brett mens man spiller: løseren bruker 2–3 sekunder per bane på en kraftig maskin, og vi vil ikke ha venting eller dårlige brett på telefonen.
 
 **Vanskelighet:** Lett = 1 båt, få hindringer, par 1–2. Middels = 1–2 båter, par 2–3. Vrien = 2–3 båter, flere mekanikker, par 3–4.
+**Åpnes:** Lett er åpen fra start. Middels åpnes når bane 1-10 (virvelen) er klart, og Vrien når 2-1 (strømmen) er klart, slik at du har møtt mekanikkene først.
 **Belønning:** stjerner og perler teller i en egen «Rask runde»-statistikk og gir «Rekke» (antall ★★★ på rad). De teller ikke mot stjerneportene, ellers kunne man hoppet over Stien.
 
 ### Dagens dam
