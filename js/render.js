@@ -284,12 +284,14 @@
     if (st.fish) drawFish(ctx, st.fish, t);
     if (w) {
       drawCurrents(ctx, w, t);
+      drawFalls(ctx, w, t);
       for (const v of w.whirls) drawWhirl(ctx, v, t);
+      for (const c of w.cascades) drawCascadeWater(ctx, c, t);
       for (const d of w.docks) drawDockWater(ctx, d, t);
       drawShadows(ctx, w);
     }
     if (st.leaves) drawLeaves(ctx, st.leaves);
-    if (w) drawRipples(ctx, w.ripples);
+    if (w) drawRipples(ctx, w.ripples, w.falls);
     drawParticles(ctx, st.particles, 'under');
     ctx.restore();
 
@@ -299,6 +301,7 @@
       for (const p of w.pads) drawPad(ctx, p, t);
       for (let i = 0; i < w.docks.length; i++) drawDock(ctx, w.docks[i], t, st.dockFx && st.dockFx[i]);
       for (const b of w.boats) drawBoat(ctx, b, t, st.boatFx && st.boatFx[b.id], st.look);
+      for (const c of w.cascades) drawCascadeTop(ctx, c, t);
     }
     drawParticles(ctx, st.particles, 'over');
     if (st.hint) drawHint(ctx, st.hint, t);
@@ -452,30 +455,139 @@
     }
   }
 
-  function drawRipples(ctx, ripples) {
+  // Halvplanet på én side av en foss (brukes til å farge og klippe).
+  function halfPlane(ctx, f, below) {
+    const dx = f.x2 - f.x1, dy = f.y2 - f.y1, L = Math.hypot(dx, dy) || 1;
+    const ux = dx / L * 3000, uy = dy / L * 3000;
+    const k = below ? 3000 : -3000;
+    ctx.moveTo(f.x1 - ux, f.y1 - uy);
+    ctx.lineTo(f.x1 + ux, f.y1 + uy);
+    ctx.lineTo(f.x1 + ux + f.nx * k, f.y1 + uy + f.ny * k);
+    ctx.lineTo(f.x1 - ux + f.nx * k, f.y1 - uy + f.ny * k);
+    ctx.closePath();
+  }
+
+  // Foss nedover: dypere (mørkere) vann nedenfor, skum og striper langs kanten.
+  function drawFalls(ctx, w, t) {
+    for (const f of w.falls) {
+      ctx.fillStyle = 'rgba(8,48,88,0.16)';
+      ctx.beginPath(); halfPlane(ctx, f, true); ctx.fill();
+      const dx = f.x2 - f.x1, dy = f.y2 - f.y1, L = Math.hypot(dx, dy) || 1;
+      const ux = dx / L, uy = dy / L;
+      // skygge under kanten
+      const g = ctx.createLinearGradient(f.x1, f.y1, f.x1 + f.nx * 26, f.y1 + f.ny * 26);
+      g.addColorStop(0, 'rgba(6,40,70,0.28)'); g.addColorStop(1, 'rgba(6,40,70,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(f.x1 - ux * 40, f.y1 - uy * 40); ctx.lineTo(f.x2 + ux * 40, f.y2 + uy * 40);
+      ctx.lineTo(f.x2 + ux * 40 + f.nx * 26, f.y2 + uy * 40 + f.ny * 26); ctx.lineTo(f.x1 - ux * 40 + f.nx * 26, f.y1 - uy * 40 + f.ny * 26);
+      ctx.closePath(); ctx.fill();
+      // vann som renner over kanten (striper som glir nedover)
+      ctx.lineCap = 'round';
+      const n = Math.ceil(L / 9) + 8;
+      for (let i = -4; i < n; i++) {
+        const along = i * 9 + ((i * 37) % 5);
+        const ph = ((t * 1.4 + (i * 0.37) % 1) % 1);
+        const len = 6 + ((i * 53) % 9);
+        const d0 = ph * 18, a = 0.5 * (1 - ph);
+        const x = f.x1 + ux * along, y = f.y1 + uy * along;
+        ctx.strokeStyle = `rgba(255,255,255,${a})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x + f.nx * d0, y + f.ny * d0);
+        ctx.lineTo(x + f.nx * (d0 + len), y + f.ny * (d0 + len));
+        ctx.stroke();
+      }
+      // kanten: lys leppe og skum
+      ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(f.x1 - ux * 40, f.y1 - uy * 40); ctx.lineTo(f.x2 + ux * 40, f.y2 + uy * 40); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(f.x1 - ux * 40 - f.nx * 5, f.y1 - uy * 40 - f.ny * 5); ctx.lineTo(f.x2 + ux * 40 - f.nx * 5, f.y2 + uy * 40 - f.ny * 5); ctx.stroke();
+    }
+  }
+
+  // Foss ovenfra, i vannet: lyst skum og ringer som går utover.
+  function drawCascadeWater(ctx, c, t) {
+    const g = ctx.createRadialGradient(c.x, c.y, 4, c.x, c.y, c.r);
+    g.addColorStop(0, 'rgba(255,255,255,0.55)');
+    g.addColorStop(0.4, 'rgba(225,250,255,0.25)');
+    g.addColorStop(1, 'rgba(225,250,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, TAU); ctx.fill();
+    for (let k = 0; k < 3; k++) {
+      const u = (t * 0.9 + k / 3) % 1;
+      const rr = C.CASCADE_CORE + u * (c.r - C.CASCADE_CORE);
+      ctx.strokeStyle = `rgba(255,255,255,${0.5 * (1 - u)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(c.x, c.y, rr, 0, TAU); ctx.stroke();
+    }
+  }
+  // Foss ovenfra, over båtene: den fallende vannsøylen sett ovenfra.
+  function drawCascadeTop(ctx, c, t) {
+    ctx.save();
+    ctx.translate(c.x, c.y);
+    const R0 = C.CASCADE_CORE + 1;
+    ctx.fillStyle = 'rgba(10,60,90,0.18)';
+    ctx.beginPath(); ctx.arc(2, 3, R0, 0, TAU); ctx.fill();
+    const g = ctx.createRadialGradient(-3, -4, 1, 0, 0, R0);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(0.7, '#e6fbff'); g.addColorStop(1, '#bfeef7');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    for (let i = 0; i <= 24; i++) {
+      const a = (i / 24) * TAU;
+      const rr = R0 + Math.sin(a * 5 + t * 9) * 1.4 + Math.sin(a * 3 - t * 7) * 1;
+      if (i === 0) ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr); else ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    }
+    ctx.closePath(); ctx.fill();
+    // dråper som spruter ut
+    for (let i = 0; i < 10; i++) {
+      const u = (t * 1.7 + i * 0.13) % 1;
+      const a = i * 2.39 + Math.floor(t * 1.7 + i * 0.13) * 1.3;
+      const rr = R0 + u * 14;
+      ctx.fillStyle = `rgba(255,255,255,${0.9 * (1 - u)})`;
+      ctx.beginPath(); ctx.arc(Math.cos(a) * rr, Math.sin(a) * rr, 1.6, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawRipples(ctx, ripples, falls) {
     ctx.lineCap = 'round';
     for (const rp of ripples) {
       const r = rp.r;
       if (r < 1) continue;
-      const life = 1 - r / (C.RIPPLE_RANGE + 24);
-      const a = Math.max(0, E.falloff(r * 0.92)) * Math.min(1, life * 3);
-      if (a <= 0.01) continue;
-      // mørk kant utenfor (gir dybde)
-      ctx.strokeStyle = `rgba(10,60,90,${0.16 * a})`;
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(rp.x, rp.y, r + 2.5, 0, TAU); ctx.stroke();
-      // hovedringen
-      ctx.strokeStyle = `rgba(255,255,255,${0.75 * a})`;
-      ctx.lineWidth = 2.6;
-      ctx.beginPath(); ctx.arc(rp.x, rp.y, r, 0, TAU); ctx.stroke();
-      // ringene bak
-      for (let k = 1; k <= 2; k++) {
-        const rr = r - k * 11;
-        if (rr <= 2) break;
-        ctx.strokeStyle = `rgba(255,255,255,${(0.38 / k) * a})`;
-        ctx.lineWidth = 2 - k * 0.4;
-        ctx.beginPath(); ctx.arc(rp.x, rp.y, rr, 0, TAU); ctx.stroke();
+      // med fosser: ringen vises bare på sin egen vannhøyde
+      let clipped = false;
+      if (falls && falls.length) {
+        ctx.save(); clipped = true;
+        for (const f of falls) {
+          ctx.beginPath(); halfPlane(ctx, f, E.fallSide(f, rp.x, rp.y) > 0); ctx.clip();
+        }
       }
+      drawRing(ctx, rp, r);
+      if (clipped) ctx.restore();
+    }
+  }
+  function drawRing(ctx, rp, r) {
+    const life = 1 - r / (C.RIPPLE_RANGE + 24);
+    const a = Math.max(0, E.falloff(r * 0.92)) * Math.min(1, life * 3);
+    if (a <= 0.01) return;
+    // mørk kant utenfor (gir dybde)
+    ctx.strokeStyle = `rgba(10,60,90,${0.16 * a})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(rp.x, rp.y, r + 2.5, 0, TAU); ctx.stroke();
+    // hovedringen
+    ctx.strokeStyle = `rgba(255,255,255,${0.75 * a})`;
+    ctx.lineWidth = 2.6;
+    ctx.beginPath(); ctx.arc(rp.x, rp.y, r, 0, TAU); ctx.stroke();
+    // ringene bak
+    for (let k = 1; k <= 2; k++) {
+      const rr = r - k * 11;
+      if (rr <= 2) break;
+      ctx.strokeStyle = `rgba(255,255,255,${(0.38 / k) * a})`;
+      ctx.lineWidth = 2 - k * 0.4;
+      ctx.beginPath(); ctx.arc(rp.x, rp.y, rr, 0, TAU); ctx.stroke();
     }
   }
 
@@ -604,11 +716,31 @@
     ctx.setLineDash(occ ? [] : [3, 4]);
     ctx.beginPath(); ctx.arc(0, 0, d.r, 0, TAU); ctx.stroke();
     ctx.setLineDash([]);
+    if (d.color >= 0) drawMark(ctx, d.color, 0, 0, 6.5, col, occ ? 0.35 : 0.85);
     if (flash > 0) {
       ctx.strokeStyle = `rgba(255,240,180,${flash})`;
       ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(0, 0, d.r + (1 - flash) * 22, 0, TAU); ctx.stroke();
     }
+    ctx.restore();
+  }
+
+  // Merke per farge (prikk, trekant, firkant, rute …), så fargene også
+  // kan skilles uten å se farge.
+  function drawMark(ctx, ci, x, y, s, col, alpha) {
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.translate(x, y);
+    ctx.fillStyle = col;
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    const k = ci % 5;
+    if (k === 0) ctx.arc(0, 0, s * 0.8, 0, TAU);
+    else if (k === 1) { ctx.moveTo(0, -s); ctx.lineTo(s * 0.95, s * 0.7); ctx.lineTo(-s * 0.95, s * 0.7); ctx.closePath(); }
+    else if (k === 2) ctx.rect(-s * 0.72, -s * 0.72, s * 1.44, s * 1.44);
+    else if (k === 3) { ctx.moveTo(0, -s); ctx.lineTo(s, 0); ctx.lineTo(0, s); ctx.lineTo(-s, 0); ctx.closePath(); }
+    else { for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? s * 0.45 : s; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } ctx.closePath(); }
+    ctx.fill(); ctx.stroke();
     ctx.restore();
   }
 
@@ -666,6 +798,8 @@
 
     // ansikt (alltid oppreist – ser søtere ut)
     drawFace(ctx, b, t, fx, look, scale);
+    // fargemerke når banen har fargede havner
+    if (b.mark) drawMark(ctx, b.color, 0, 11 * scale, 3.6 * scale, pal[1], alpha);
     ctx.restore();
   }
 

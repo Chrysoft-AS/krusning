@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /* Krusning – skjermbilder og røyktest i ekte nettleser (Playwright/Chromium).
  * Bruk: node tools/shots.js [mappe]   (standard: ./shots)
- * Tar bilder av tittel, første bane, sikting, resultat og banekart,
+ * Tar bilder av tittel, første bane, sikting, resultat, banekart,
+ * Dagens dam og Rask runde,
  * og melder fra om feil i konsollen. */
 'use strict';
 const path = require('path');
@@ -70,6 +71,21 @@ const file = 'file://' + path.resolve(__dirname, '..', 'index.html');
   await page.click('#btnSettings');
   await page.waitForTimeout(500);
   await page.screenshot({ path: path.join(out, '12-settings.png') });
+  await page.click('#setClose');
+
+  // Dagens dam og Rask runde
+  await page.click('#btnDaily');
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: path.join(out, '13-daily.png') });
+  await page.click('#dailyClose');
+  await page.click('#btnQuick');
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: path.join(out, '14-quick.png') });
+  for (const tr of ['easy', 'medium', 'hard']) {
+    await page.evaluate((tr) => { document.getElementById('quick').hidden = true; Krusning.startQuick(tr); }, tr);
+    await page.waitForTimeout(2200);
+    await page.screenshot({ path: path.join(out, `15-quick-${tr}.png`) });
+  }
 
   console.log(errors.length ? errors.join('\n') : 'Ingen feil i konsollen ✔');
   await browser.close();

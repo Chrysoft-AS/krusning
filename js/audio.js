@@ -183,6 +183,20 @@
     for (let i = 0; i < 4; i++) tone({ f: 300 + Math.random() * 300, f2: 700, glide: 0.05, dur: 0.06, vol: 0.06, t: t + 0.15 + i * 0.16 });
   };
 
+  // Båt går utfor en foss: et lite "plopp" nedover og sprut.
+  S.fall = function () {
+    if (!ready()) return;
+    tone({ f: 640, f2: 260, glide: 0.18, dur: 0.22, vol: 0.12, send: 0.5 });
+    noise({ dur: 0.18, freq: 1800, q: 0.6, vol: 0.09 });
+  };
+
+  // Båt krasjer i en foss ovenfra: brus og en kort, lav tone.
+  S.crash = function () {
+    if (!ready()) return;
+    noise({ dur: 0.45, freq: 1400, q: 0.5, vol: 0.16 });
+    tone({ f: 200, f2: 90, glide: 0.3, dur: 0.35, vol: 0.12, type: 'triangle' });
+  };
+
   S.pop = function () {
     if (!ready()) return;
     tone({ f: 300, f2: 900, glide: 0.08, dur: 0.12, vol: 0.14, send: 0.4 });

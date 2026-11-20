@@ -84,7 +84,7 @@ function gridPoints(step) {
 /* ---------------- arbeidstråd ---------------- */
 if (!isMainThread) {
   parentPort.on('message', (job) => {
-    const level = findLevel(job.levelId);
+    const level = job.level || findLevel(job.levelId);
     const base = play(level, job.prefix).w;
     const results = [];
     for (const [x, y] of job.points) {
@@ -99,32 +99,63 @@ if (!isMainThread) {
 }
 
 /* ---------------- hovedtråd ---------------- */
-const args = process.argv.slice(2);
-const opt = { grid: 9, beam: 24, only: null, map: false };
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === '--grid') opt.grid = +args[++i];
-  else if (args[i] === '--beam') opt.beam = +args[++i];
-  else if (args[i] === '--map') opt.map = true;
-  else opt.only = args[i];
+// Løseren kan også brukes fra andre verktøy (f.eks. tools/gen.js):
+//   const { makeSolver } = require('./solve.js');
+//   const s = makeSolver(); const r = await s.analyze(bane); s.close();
+function makeSolver(threads) {
+  const n = Math.max(1, Math.min(threads || os.cpus().length, 8));
+  const workers = Array.from({ length: n }, () => new Worker(__filename));
+  let jobSeq = 0;
+  function runJob(worker, job) {
+    return new Promise((resolve) => {
+      const id = ++jobSeq;
+      const onMsg = (m) => { if (m.id === id) { worker.off('message', onMsg); resolve(m.results); } };
+      worker.on('message', onMsg);
+      worker.postMessage(Object.assign({ id }, job));
+    });
+  }
+  async function evaluate(level, prefix, points) {
+    const chunk = Math.ceil(points.length / n);
+    const parts = await Promise.all(workers.map((wk, i) =>
+      runJob(wk, { level, prefix, points: points.slice(i * chunk, (i + 1) * chunk) })));
+    return parts.flat();
+  }
+
+  // Finner minste antall trykk. Søker helt ned til maxDepth hvis ingen
+  // løsning er funnet, og stopper ved stopDepth når en løsning finnes.
+  async function analyze(level, o) {
+    o = Object.assign({ grid: 9, beam: 24, maxDepth: 4, stopDepth: 1 }, o || {});
+    const fine = gridPoints(Math.max(3, o.grid / 2));
+    const r1 = await evaluate(level, [], fine);
+    const wins1 = r1.filter((r) => r.done);
+    const found = { 1: wins1.length };
+    let min = wins1.length ? 1 : 0;
+    let example = wins1.length ? [centerOf(wins1.map((r) => r.tap))] : null;
+    let beam = dedupe(r1.filter((r) => !r.done)).slice(0, o.beam).map((r) => ({ taps: [r.tap] }));
+    const coarse = gridPoints(o.grid);
+    for (let depth = 2; depth <= o.maxDepth; depth++) {
+      if (min && depth > o.stopDepth) break;
+      const next = [];
+      let wins = 0, firstWin = null;
+      for (const s of beam) {
+        const res = await evaluate(level, s.taps, coarse);
+        for (const r of res) {
+          if (r.done) { wins++; if (!firstWin) firstWin = s.taps.concat([r.tap]); }
+          else next.push({ taps: s.taps.concat([r.tap]), score: r.score, key: r.key });
+        }
+      }
+      found[depth] = wins;
+      if (wins && !min) { min = depth; example = firstWin; }
+      beam = dedupe(next).slice(0, o.beam);
+    }
+    return { min, found, total1: fine.length, wins1: wins1.map((r) => r.tap), example };
+  }
+
+  return { evaluate, analyze, close: () => Promise.all(workers.map((w) => w.terminate())) };
 }
 
-const N = Math.max(1, Math.min(os.cpus().length, 8));
-const workers = Array.from({ length: N }, () => new Worker(__filename));
-let jobSeq = 0;
-function runJob(worker, job) {
-  return new Promise((resolve) => {
-    const id = ++jobSeq;
-    const onMsg = (m) => { if (m.id === id) { worker.off('message', onMsg); resolve(m.results); } };
-    worker.on('message', onMsg);
-    worker.postMessage(Object.assign({ id }, job));
-  });
-}
-async function evaluate(levelId, prefix, points) {
-  const chunk = Math.ceil(points.length / N);
-  const parts = await Promise.all(workers.map((wk, i) =>
-    runJob(wk, { levelId, prefix, points: points.slice(i * chunk, (i + 1) * chunk) })));
-  return parts.flat();
-}
+let solver = null;
+const opt = { grid: 9, beam: 24, only: null, map: false };
 
 async function solveLevel(level) {
   const t0 = Date.now();
@@ -133,38 +164,15 @@ async function solveLevel(level) {
   const warn = [];
   lines.push(`\n■ ${level.id}  «${name}»   par ${level.par}  perle ${level.pearl}`);
 
-  // 1) ett trykk, fint rutenett
-  const fine = gridPoints(Math.max(3, opt.grid / 2));
-  const r1 = await evaluate(level.id, [], fine);
-  const wins1 = r1.filter((r) => r.done);
-  const pct = (100 * wins1.length / fine.length).toFixed(1);
-  lines.push(`  1 krusning: ${wins1.length} av ${fine.length} trykkpunkter løser banen (${pct} %)`);
-  if (opt.map) lines.push(asciiMap(level, wins1.map((r) => r.tap)));
-
-  // 2) flere trykk (strålesøk). Vi leter alltid helt ned til perle-nivået
-  //    for å se om perla er mulig uten flaks.
-  const found = { 1: wins1.length };
-  let min = wins1.length ? 1 : 0;
-  let example = wins1.length ? [centerOf(wins1.map((r) => r.tap))] : null;
-  const maxDepth = Math.max(level.pearl, min ? 1 : level.par + 1);
-  let beam = dedupe(r1.filter((r) => !r.done)).slice(0, opt.beam).map((r) => ({ taps: [r.tap] }));
-  const coarse = gridPoints(opt.grid);
-  for (let depth = 2; depth <= maxDepth; depth++) {
-    const next = [];
-    let wins = 0, firstWin = null;
-    for (const s of beam) {
-      const res = await evaluate(level.id, s.taps, coarse);
-      for (const r of res) {
-        if (r.done) { wins++; if (!firstWin) firstWin = s.taps.concat([r.tap]); }
-        else next.push({ taps: s.taps.concat([r.tap]), score: r.score, key: r.key });
-      }
-    }
-    found[depth] = wins;
-    lines.push(`  ${depth} krusninger: ${wins ? wins + ' løsninger funnet' : 'ingen løsning'}`);
-    if (wins && !min) { min = depth; example = firstWin; }
-    if (min && depth >= level.pearl) break;
-    beam = dedupe(next).slice(0, opt.beam);
-  }
+  // ett trykk på fint rutenett, og så strålesøk med flere trykk. Vi leter
+  // alltid helt ned til perle-nivået for å se om perla er mulig uten flaks.
+  const res = await solver.analyze(level, { grid: opt.grid, beam: opt.beam, maxDepth: level.par + 1, stopDepth: level.pearl });
+  const { found, min, example } = res;
+  const pct = (100 * found[1] / res.total1).toFixed(1);
+  lines.push(`  1 krusning: ${found[1]} av ${res.total1} trykkpunkter løser banen (${pct} %)`);
+  if (opt.map) lines.push(asciiMap(level, res.wins1));
+  for (let d = 2; found[d] != null; d++) lines.push(`  ${d} krusninger: ${found[d] ? found[d] + ' løsninger funnet' : 'ingen løsning'}`);
+  const maxDepth = level.par + 1;
   if (example) lines.push(`  eksempel: ${fmt(example)}`);
 
   if (!min) warn.push(`fant ingen løsning på ${maxDepth} krusninger – sjekk banen`);
@@ -203,7 +211,8 @@ function centerOf(pts) {
   return best;
 }
 
-// Banen som tekst: B båt, H havn, O stein, # stokk, L vannlilje, @ virvel, * vinnende trykk
+// Banen som tekst: B båt, H havn (tall = farget havn), O stein, # stokk, L vannlilje, @ virvel,
+// = foss nedover, V foss ovenfra, * vinnende trykk
 function asciiMap(level, wins) {
   const cw = 9, ch = 15, cols = Math.ceil(C.W / cw), rows = Math.ceil(C.H / ch);
   const g = Array.from({ length: rows }, () => Array(cols).fill(' '));
@@ -215,18 +224,33 @@ function asciiMap(level, wins) {
   for (const r of level.rocks || []) disc(r.x, r.y, r.r, 'O');
   for (const p of level.pads || []) disc(p.x, p.y, p.r, 'L');
   for (const l of level.logs || []) { for (let t = 0; t <= 1; t += 0.02) put(l.x1 + (l.x2 - l.x1) * t, l.y1 + (l.y2 - l.y1) * t, '#'); }
-  for (const d of level.docks || []) disc(d.x, d.y, 12, 'H');
-  for (const b of level.boats || []) disc(b.x, b.y, 9, 'B');
+  for (const f of level.falls || []) { for (let t = -0.2; t <= 1.2; t += 0.01) put(f.x1 + (f.x2 - f.x1) * t, f.y1 + (f.y2 - f.y1) * t, '='); }
+  for (const c of level.cascades || []) disc(c.x, c.y, 12, 'V');
+  for (const d of level.docks || []) disc(d.x, d.y, 12, d.color != null ? String(d.color) : 'H');
+  const colored = (level.docks || []).some((d) => d.color != null);
+  (level.boats || []).forEach((b, i) => disc(b.x, b.y, 9, colored ? String.fromCharCode(97 + (b.color != null ? b.color : i)) : 'B'));
   return g.map((r) => '    |' + r.join('') + '|').join('\n');
 }
 
 function fmt(taps) { return taps.map(([x, y]) => `(${Math.round(x)}, ${Math.round(y)})`).join(' → '); }
 
-(async () => {
-  const levels = opt.only ? allLevels().filter((l) => l.id === opt.only || l.id.startsWith(opt.only + '-')) : allLevels();
-  if (!levels.length) { console.log('Fant ingen bane med id', opt.only); process.exit(1); }
-  let problems = 0;
-  for (const l of levels) problems += (await solveLevel(l)).warn.length;
-  console.log(problems ? `\n${problems} merknad(er) å se på.` : '\nAlle baner ser bra ut ✔');
-  await Promise.all(workers.map((w) => w.terminate()));
-})();
+module.exports = { makeSolver, asciiMap };
+
+if (require.main === module) {
+  const args = process.argv.slice(2);
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--grid') opt.grid = +args[++i];
+    else if (args[i] === '--beam') opt.beam = +args[++i];
+    else if (args[i] === '--map') opt.map = true;
+    else opt.only = args[i];
+  }
+  solver = makeSolver();
+  (async () => {
+    const levels = opt.only ? allLevels().filter((l) => l.id === opt.only || l.id.startsWith(opt.only + '-')) : allLevels();
+    if (!levels.length) { console.log('Fant ingen bane med id', opt.only); process.exit(1); }
+    let problems = 0;
+    for (const l of levels) problems += (await solveLevel(l)).warn.length;
+    console.log(problems ? `\n${problems} merknad(er) å se på.` : '\nAlle baner ser bra ut ✔');
+    await solver.close();
+  })();
+}
