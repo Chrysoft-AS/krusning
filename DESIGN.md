@@ -63,7 +63,7 @@ En vanlig spiller spiller 10–20 minutter om gangen, gjerne én eller to ganger
 
 | Lag | Hva | Hvor lenge det varer |
 |---|---|---|
-| **Stien** (hovedløpet) | 6 verdener × 15 baner = **90 baner** ved lansering, pluss **Perlebukta** (12 mesterbaner) | Første gjennomgang ca. 2 timer. Med stjerner og perler 4–6 timer |
+| **Stien** (hovedløpet) | 7 verdener × 15 baner = **105 baner** ved lansering, pluss **Perlebukta** (12 mesterbaner) | Første gjennomgang ca. 2 timer. Med stjerner og perler 4–6 timer |
 | **Dagens dam** | Én ny bane hver dag, lik for alle | 3–5 minutter hver dag, uten slutt |
 | **Rask runde** | Tilfeldige, testede brett i tre vanskelighetsgrader | Uten slutt |
 
@@ -81,7 +81,8 @@ Tallene for spilletid er anslag (ca. 1 minutt per bane første gang, med omstart
 | 4 | 81 | 135 |
 | 5 | 108 | 180 |
 | 6 | 135 | 225 |
-| ◉ Perlebukta | 30 perler | 90 |
+| 7 | 162 | 270 |
+| ◉ Perlebukta | 30 perler | 105 |
 
   Hvorfor 60 %: det er nok til at du *må* hente noen ekstra stjerner, men aldri så mye at du sitter fast. Hintet hjelper deg alltid til minst én stjerne.
 - **Ingen energi, ingen ventetid, ingen liv.** Det passer ikke med et rolig spill, og det gir dårlige anmeldelser. Fart i progresjonen styres bare av stjerneportene og av at Dagens dam kommer én gang om dagen.
@@ -146,12 +147,13 @@ Hver verden legger til **én hovedmekanikk** og ofte én liten krydder. Rekkefø
 
 | Verden | Ny mekanikk | Hva den gjør vanskeligere | Status |
 |---|---|---|---|
-| 1 · Dammen | trykk, retning, styrke, stein, stokk, flere båter, biljard, vannliljer, virvel | Sikte og styrke | 12 baner (mål 15) |
-| 2 · Bekken | **strøm** + **fargede havner** (båten må til havna med samme farge og mønster) | Planlegge med noe som beveger seg, og sortere båter | 5 baner (mål 15) |
-| 3 · Regnværet | **regndråper** som lager egne krusninger i et fast mønster, og **tunge båter** (lasteskuter) | Timing: bruk regnet, eller vent på det | Ny |
-| 4 · Slusene | **moloer** som stopper krusninger (skygge bak), **brytere** som åpner en **sluse** når en båt treffer dem | Rekkefølge: gjør ting i riktig rekkefølge | Ny |
-| 5 · Natten | **mørke** (du ser bare nær lyktene) og **frosker** som hopper når krusningen treffer dem og lager en ny krusning der de lander | Kjedereaksjoner og å huske banen | Ny |
-| 6 · Isen | **glatt is** (båtene glir uten å stoppe) og **vind** i faste kast | Små trykk og fin kontroll | Ny |
+| 1 · Dammen | trykk, retning, styrke, stein, stokk, flere båter, biljard, vannliljer, virvel | Sikte og styrke | **15 baner** |
+| 2 · Bekken | **strøm** + **fargede havner** (båten må til havna med samme farge og merke) | Planlegge med noe som beveger seg, og sortere båter | **15 baner** |
+| 3 · Fossen | **foss nedover** (båten glir ned til en lavere vannhøyde, men kommer aldri opp igjen, og krusninger når bare båter på samme høyde) og **foss ovenfra** (vann som faller ned dytter båter bort, og treffer båten midten, krasjer den) | Tenke i etasjer: hva må skje før båten går utfor? | **15 baner** |
+| 4 · Regnværet | **regndråper** som lager egne krusninger i et fast mønster, og **tunge båter** (lasteskuter) | Timing: bruk regnet, eller vent på det | Ny |
+| 5 · Slusene | **moloer** som stopper krusninger (skygge bak), **brytere** som åpner en **sluse** når en båt treffer dem | Rekkefølge: gjør ting i riktig rekkefølge | Ny |
+| 6 · Natten | **mørke** (du ser bare nær lyktene) og **frosker** som hopper når krusningen treffer dem og lager en ny krusning der de lander | Kjedereaksjoner og å huske banen | Ny |
+| 7 · Isen | **glatt is** (båtene glir uten å stoppe) og **vind** i faste kast | Små trykk og fin kontroll | Ny |
 | ◉ Perlebukta | ingen ny regel, alt kombinert | Perfekte løsninger | Ny |
 | Senere: Fjorden | tidevann (steiner kommer og går), bølger | | Idé |
 
@@ -282,15 +284,12 @@ Et sunt tegn er 1–3 omstarter per bane og at folk *selv* prøver igjen for å 
 Hver fase gir noe som kan spilles og testes med en gang.
 
 1. **Fase 1 – Daglig innhold:** brettgenerator, `tools/gen.js`, Dagens dam (med kalender og deling) og Rask runde (Lett/Middels/Vrien). Ny lagring (versjon 2) som tar vare på gammel fremgang. *Spilltest demoen med 5–10 personer etterpå.*
-2. **Fase 2 – Stien:** verden 1 og 2 opp til 15 baner hver, fargede havner og trykkesoner, nye stjerneporter, stikart.
+2. **Fase 2 – Stien:** verden 1 og 2 opp til 15 baner hver, fargede havner, ny verden 3 «Fossen», nye stjerneporter og finale-krav. **Laget.** Gjenstår: trykkesoner og stikart.
 3. **Fase 3 – Nye mekanikker:** Regnværet og Slusene med 15 baner hver.
 4. **Fase 4 – Dybde:** Natten, Isen, Perlebukta og Båthuset.
 5. **Fase 5 – App:** iOS-app med Capacitor, engangskjøp via Apple, haptikk, app-ikon, TestFlight med venner.
 6. **Lansering** i App Store. Etterpå: ny verden hver 1–2 måned, Baneverkstedet, Android.
 
-## 18. Åpne valg (må bestemmes av Jonathan)
+## 18. Valg som er tatt
 
-1. **Inntekt:** engangskjøp 49 kr med verden 1–2 gratis (anbefalt), helt gratis, eller noe annet?
-2. **Rask runde:** ferdig testede brett fra en liste (anbefalt), eller ekte tilfeldige brett som kan være dårlige?
-3. **Hva bygges først:** Dagens dam + Rask runde (anbefalt, fordi det gir daglig innhold med én gang), eller flere baner på Stien?
-4. **Mekanikker:** er rekkefølgen regn → sluser → natt med frosker → is grei?
+Jonathan godkjente 20. november 2026: engangskjøp 49 kr med verden 1–2 gratis, ferdig testede brett i Rask runde, Dagens dam og Rask runde først, og rekkefølgen på mekanikkene. Samme dag kom fossen inn som verden 3 (Jonathans idé), og de andre verdenene ble flyttet ett hakk.

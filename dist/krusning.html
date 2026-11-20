@@ -609,6 +609,7 @@ svg { fill: currentColor; }
       back: 'Tilbake',
       unlocked: '{name} er åpnet!',
       needStars: 'Samle {n} ★ til for å åpne {name}',
+      needFinale: 'Klar finalen {id} for å åpne',
       credits: 'Laget med Claude Code. Alt kjører lokalt på enheten – ingen konto, ingen server.',
       tapToStart: 'Trykk på vannet',
       daily: 'Dagens dam',
@@ -681,6 +682,7 @@ svg { fill: currentColor; }
       back: 'Back',
       unlocked: '{name} is open!',
       needStars: 'Collect {n} more ★ to open {name}',
+      needFinale: 'Beat the finale {id} to open',
       credits: 'Made with Claude Code. Everything runs on your device – no account, no server.',
       tapToStart: 'Tap the water',
       daily: 'Daily Pond',
@@ -779,6 +781,11 @@ svg { fill: currentColor; }
     SINK_R: 9,
     SINK_TIME: 1.1,
 
+    FALL_KICK: 70,                // fart nedover når en båt går utfor en foss
+    FALL_LIP: 2,                  // båter under fossen kommer ikke opp igjen
+    CASCADE_PUSH: 520,            // foss ovenfra: vannet dytter båter bort
+    CASCADE_CORE: 15,             // treffer båten midten, krasjer den
+
     SETTLE_V: 3,
     MAX_RIPPLES: 16,
   };
@@ -794,10 +801,19 @@ svg { fill: currentColor; }
       level,
       t: 0, steps: 0, taps: 0,
       bodies: [], boats: [], pads: [],
-      docks: [], rocks: [], logs: [], whirls: [], currents: [],
+      docks: [], rocks: [], logs: [], whirls: [], currents: [], falls: [], cascades: [],
       ripples: [], events: [], rippleSeq: 0,
       done: false, doneAt: -1,
     };
+
+    // Fosser nedover: en linje tvers over dammen. Siden til høyre når du går
+    // fra (x1,y1) til (x2,y2) ligger lavere. Båter kan falle ned, men ikke opp.
+    (level.falls || []).forEach((f) => {
+      const dx = f.x2 - f.x1, dy = f.y2 - f.y1, L = Math.hypot(dx, dy) || 1;
+      w.falls.push({ x1: f.x1, y1: f.y1, x2: f.x2, y2: f.y2, nx: -dy / L, ny: dx / L });
+    });
+    // Fosser ovenfra: vann som faller ned i dammen og dytter alt bort.
+    (level.cascades || []).forEach((c) => w.cascades.push({ x: c.x, y: c.y, r: c.r || 48 }));
 
     (level.boats || []).forEach((b, i) => {
       const body = {
@@ -809,6 +825,7 @@ svg { fill: currentColor; }
         dock: -1, dockT: 0, sink: 0, sinkX: 0, sinkY: 0,
         sx: b.x, sy: b.y, pushes: [],
       };
+      setLevel(w, body);
       w.bodies.push(body); w.boats.push(body);
     });
 
@@ -821,6 +838,7 @@ svg { fill: currentColor; }
         angle: p.angle || 0, flower: !!p.flower,
         dock: -1, sink: 0, pushes: [],
       };
+      setLevel(w, body);
       w.bodies.push(body); w.pads.push(body);
     });
 
@@ -834,6 +852,22 @@ svg { fill: currentColor; }
     (level.whirls || []).forEach((v) => w.whirls.push({ x: v.x, y: v.y, r: v.r || 60, power: v.power || 1, dir: v.dir || 1 }));
     (level.currents || []).forEach((c) => w.currents.push({ x: c.x, y: c.y, w: c.w, h: c.h, vx: c.vx || 0, vy: c.vy || 0 }));
     return w;
+  }
+
+  /* ---------- vannhøyder (fosser nedover) ---------- */
+
+  // Hvor langt (med fortegn) et punkt er fra fosselinja. Positivt = nedenfor.
+  function fallSide(f, x, y) { return (x - f.x1) * f.nx + (y - f.y1) * f.ny; }
+  // Vannhøyde: hvor mange fosser punktet ligger nedenfor (0 = øverst).
+  function levelAt(w, x, y) {
+    let n = 0;
+    for (const f of w.falls) if (fallSide(f, x, y) > 0) n++;
+    return n;
+  }
+  function setLevel(w, b) {
+    b.down = w.falls.map((f) => fallSide(f, b.x, b.y) > 0);
+    b.lv = b.down.filter(Boolean).length;
+    b.sdown = b.down.slice();
   }
 
   /* ---------- krusninger ---------- */
@@ -855,7 +889,7 @@ svg { fill: currentColor; }
   function tap(w, x, y) {
     if (!insidePond(x, y, 2)) return false;
     if (w.ripples.length >= C.MAX_RIPPLES) w.ripples.shift();
-    w.ripples.push({ id: ++w.rippleSeq, x, y, r: 0, hit: [] });
+    w.ripples.push({ id: ++w.rippleSeq, x, y, r: 0, hit: [], lv: levelAt(w, x, y) });
     w.taps++;
     w.events.push({ type: 'tap', x, y });
     return true;
@@ -864,8 +898,10 @@ svg { fill: currentColor; }
   // Brukes til siktehjelpen: hvilke ting vil bli dyttet, hvor og hvor mye.
   function preview(w, x, y) {
     const out = [];
+    const lv = levelAt(w, x, y);
     for (const b of w.bodies) {
       if (b.dock >= 0 || b.sink > 0) continue;
+      if (b.lv !== lv) continue; // krusningen når ikke over/under en foss
       const dx = b.x - x, dy = b.y - y;
       const d = Math.sqrt(dx * dx + dy * dy);
       const f = falloff(d);
@@ -897,6 +933,7 @@ svg { fill: currentColor; }
         const d = Math.sqrt(dx * dx + dy * dy);
         if (rp.r < d - b.r) continue;
         rp.hit.push(b.id);
+        if (b.lv !== rp.lv) continue; // annen vannhøyde: krusningen når ikke fram
         const f = falloff(d);
         if (f <= 0) continue;
         let nx = 0, ny = -1;
@@ -948,6 +985,18 @@ svg { fill: currentColor; }
       }
       if (b.sink > 0) continue;
 
+      // fosser ovenfra: dytter bort, og midt i krasjer båten
+      for (const c of w.cascades) {
+        const dx = b.x - c.x, dy = b.y - c.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d >= c.r || d < 1e-6) continue;
+        if (b.kind === 'boat' && d < C.CASCADE_CORE) { startSink(w, b, c, 'crash'); break; }
+        const s = 1 - d / c.r;
+        b.vx += (dx / d) * C.CASCADE_PUSH * s * dt / b.mass;
+        b.vy += (dy / d) * C.CASCADE_PUSH * s * dt / b.mass;
+      }
+      if (b.sink > 0) continue;
+
       // havna trekker forsiktig i båter som kommer nær
       if (b.kind === 'boat') {
         for (const dk of w.docks) {
@@ -995,6 +1044,7 @@ svg { fill: currentColor; }
           collideStatic(w, b, l.x1 + abx * t, l.y1 + aby * t, l.r, C.REST_STATIC, report, 'log');
         }
         collideBounds(w, b, report);
+        collideFalls(w, b, report);
       }
     }
 
@@ -1028,10 +1078,35 @@ svg { fill: currentColor; }
     b.dockT += C.DT;
   }
 
-  function startSink(w, b, v) {
+  function startSink(w, b, v, type) {
     b.sink = 1e-6; b.sinkX = v.x; b.sinkY = v.y;
     b.vx = 0; b.vy = 0; b.pushes.length = 0;
-    w.events.push({ type: 'sink', id: b.id, x: v.x, y: v.y });
+    w.events.push({ type: type || 'sink', id: b.id, x: v.x, y: v.y });
+  }
+
+  // Fosser nedover: ovenfra går båten utfor (og får litt fart), nedenfra er
+  // fossen en vegg.
+  function collideFalls(w, b, report) {
+    for (let i = 0; i < w.falls.length; i++) {
+      const f = w.falls[i];
+      const s = fallSide(f, b.x, b.y);
+      if (!b.down[i]) {
+        if (s > 0) {
+          b.down[i] = true; b.lv++;
+          b.vx += f.nx * C.FALL_KICK; b.vy += f.ny * C.FALL_KICK;
+          w.events.push({ type: 'fall', id: b.id, kind: b.kind, x: b.x, y: b.y, nx: f.nx, ny: f.ny });
+        }
+        continue;
+      }
+      if (s < C.FALL_LIP) {
+        b.x += f.nx * (C.FALL_LIP - s); b.y += f.ny * (C.FALL_LIP - s);
+        const vn = b.vx * f.nx + b.vy * f.ny;
+        if (vn < 0) {
+          b.vx -= (1 + C.REST_STATIC) * vn * f.nx; b.vy -= (1 + C.REST_STATIC) * vn * f.ny;
+          bump(w, report, b.x - f.nx * b.r, b.y - f.ny * b.r, -vn, 'rock');
+        }
+      }
+    }
   }
 
   function sinkUpdate(w, b, dt) {
@@ -1040,6 +1115,7 @@ svg { fill: currentColor; }
     b.y += (b.sinkY - b.y) * 0.12;
     if (b.sink >= C.SINK_TIME) {
       b.sink = 0; b.x = b.sx; b.y = b.sy; b.vx = 0; b.vy = 0;
+      b.down = b.sdown.slice(); b.lv = b.down.filter(Boolean).length;
       w.events.push({ type: 'respawn', id: b.id, x: b.x, y: b.y });
     }
   }
@@ -1128,7 +1204,7 @@ svg { fill: currentColor; }
   // Lett kopi av en verden i ro (brukes av løseren).
   function clone(w) {
     const c = Object.assign({}, w);
-    c.bodies = w.bodies.map((b) => Object.assign({}, b, { pushes: b.pushes.slice() }));
+    c.bodies = w.bodies.map((b) => Object.assign({}, b, { pushes: b.pushes.slice(), down: b.down.slice() }));
     c.boats = c.bodies.filter((b) => b.kind === 'boat');
     c.pads = c.bodies.filter((b) => b.kind === 'pad');
     c.docks = w.docks.map((d) => Object.assign({}, d));
@@ -1137,7 +1213,7 @@ svg { fill: currentColor; }
     return c;
   }
 
-  const Engine = { C, createWorld, step, tap, preview, falloff, insidePond, isSettled, clone };
+  const Engine = { C, createWorld, step, tap, preview, falloff, insidePond, isSettled, clone, levelAt, fallSide };
   root.Engine = Engine;
   if (typeof module !== 'undefined' && module.exports) module.exports = Engine;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -1157,6 +1233,9 @@ svg { fill: currentColor; }
  *   pads:   vannliljer       { x, y, r }         (flytbare, tunge)
  *   whirls: strømvirvler     { x, y, r, power }  (suger båter ned)
  *   currents: strøm          { x, y, w, h, vx, vy }
+ *   falls:  foss nedover     { x1, y1, x2, y2 }  (linje tvers over dammen; til
+ *                                                 høyre for retningen er det lavere)
+ *   cascades: foss ovenfra   { x, y, r }         (dytter bort, krasj i midten)
  *   par:    antall krusninger for ★★★
  *   pearl:  beste løsning vi kjenner (gir perle)
  *   hand:   viser en animert hånd (kun i første bane)
@@ -1282,13 +1361,39 @@ svg { fill: currentColor; }
           whirls: [{ x: 180, y: 195, r: 55, power: 1 }],
           docks: [{ x: 40, y: 470 }, { x: 320, y: 470 }, { x: 180, y: 90 }],
         },
+        {
+          id: '1-13',
+          name: { no: 'Stein og stokk', en: 'Rock and log' },
+          par: 3, pearl: 2,
+          boats: [{ x: 110, y: 470 }, { x: 250, y: 470 }],
+          rocks: [{ x: 180, y: 330, r: 30 }],
+          logs: [{ x1: 60, y1: 230, x2: 150, y2: 230, r: 9 }],
+          docks: [{ x: 290, y: 150 }, { x: 70, y: 140 }],
+        },
+        {
+          id: '1-14',
+          name: { no: 'Vifta', en: 'The fan' },
+          par: 2, pearl: 1,
+          boats: [{ x: 180, y: 430 }, { x: 214, y: 435 }, { x: 146, y: 435 }, { x: 245, y: 451 }, { x: 115, y: 451 }],
+          docks: [{ x: 180, y: 300 }, { x: 254, y: 312 }, { x: 106, y: 312 }, { x: 321, y: 346 }, { x: 39, y: 346 }],
+        },
+        {
+          id: '1-15',
+          name: { no: 'Dammens finale', en: 'Pond finale' },
+          par: 4, pearl: 3,
+          boats: [{ x: 70, y: 500 }, { x: 290, y: 500 }, { x: 180, y: 420 }],
+          pads: [{ x: 180, y: 300, r: 26, flower: true }],
+          logs: [{ x1: 40, y1: 260, x2: 130, y2: 300, r: 9 }, { x1: 320, y1: 260, x2: 230, y2: 300, r: 9 }],
+          whirls: [{ x: 180, y: 160, r: 55, power: 1 }],
+          docks: [{ x: 60, y: 140 }, { x: 300, y: 140 }, { x: 180, y: 540 }],
+        },
       ],
     },
     {
       id: 2,
       name: { no: 'Bekken', en: 'The Brook' },
       blurb: { no: 'Strømmen tar båtene med seg.', en: 'The current carries the boats.' },
-      unlockStars: 24,
+      unlockStars: 27,
       levels: [
         {
           id: '2-1',
@@ -1351,11 +1456,234 @@ svg { fill: currentColor; }
           rocks: [{ x: 180, y: 470, r: 26 }],
           docks: [{ x: 52, y: 470 }, { x: 180, y: 545 }, { x: 308, y: 470 }],
         },
+        {
+          id: '2-6',
+          name: { no: 'Hver sin farge', en: 'Matching colours' },
+          tip: { no: 'Båten må til havna med samme farge og merke', en: 'Each boat must reach the harbour with its colour and mark' },
+          par: 3, pearl: 2,
+          boats: [{ x: 110, y: 420 }, { x: 250, y: 420 }],
+          docks: [{ x: 110, y: 200, color: 0 }, { x: 250, y: 200, color: 1 }],
+        },
+        {
+          id: '2-7',
+          name: { no: 'Bytt plass', en: 'Swap sides' },
+          par: 3, pearl: 2,
+          boats: [{ x: 110, y: 400 }, { x: 250, y: 400 }],
+          rocks: [{ x: 180, y: 300, r: 26 }],
+          docks: [{ x: 270, y: 170, color: 0 }, { x: 90, y: 170, color: 1 }],
+        },
+        {
+          id: '2-8',
+          name: { no: 'Delt strøm', en: 'Split stream' },
+          par: 3, pearl: 2,
+          boats: [{ x: 150, y: 110 }, { x: 210, y: 110 }],
+          currents: [{ x: 120, y: 150, w: 120, h: 230, vx: 0, vy: 80 }],
+          docks: [{ x: 70, y: 470, color: 0 }, { x: 290, y: 470, color: 1 }],
+        },
+        {
+          id: '2-9',
+          name: { no: 'Medvind', en: 'Tailwind' },
+          par: 2, pearl: 1,
+          boats: [{ x: 80, y: 200 }],
+          currents: [{ x: 0, y: 250, w: 360, h: 100, vx: 90, vy: 0 }],
+          docks: [{ x: 250, y: 420 }],
+        },
+        {
+          id: '2-10',
+          name: { no: 'Slalåm', en: 'Slalom' },
+          par: 3, pearl: 2,
+          boats: [{ x: 180, y: 90 }],
+          currents: [{ x: 110, y: 140, w: 140, h: 410, vx: 0, vy: 85 }],
+          rocks: [{ x: 150, y: 230, r: 20 }, { x: 215, y: 350, r: 20 }],
+          whirls: [{ x: 180, y: 520, r: 55, power: 1 }],
+          docks: [{ x: 60, y: 470 }],
+        },
+        {
+          id: '2-11',
+          name: { no: 'Motstrøms', en: 'Upstream' },
+          tip: { no: 'Strømmen er svakere ved kanten', en: 'The current is weaker near the edge' },
+          par: 3, pearl: 2,
+          boats: [{ x: 180, y: 500 }],
+          currents: [{ x: 120, y: 60, w: 120, h: 400, vx: 0, vy: 70 }],
+          docks: [{ x: 180, y: 120 }],
+        },
+        {
+          id: '2-12',
+          name: { no: 'Fargebiljard', en: 'Colour billiards' },
+          par: 3, pearl: 2,
+          boats: [{ x: 180, y: 470, color: 0 }, { x: 180, y: 330, color: 1 }],
+          rocks: [{ x: 100, y: 220, r: 24 }, { x: 260, y: 220, r: 24 }],
+          docks: [{ x: 180, y: 120, color: 0 }, { x: 60, y: 520, color: 1 }],
+        },
+        {
+          id: '2-13',
+          name: { no: 'Kryss strømmen', en: 'Cross the stream' },
+          par: 4, pearl: 3,
+          boats: [{ x: 120, y: 130 }, { x: 240, y: 130 }],
+          currents: [{ x: 0, y: 260, w: 360, h: 90, vx: -75, vy: 0 }],
+          docks: [{ x: 240, y: 480, color: 0 }, { x: 120, y: 480, color: 1 }],
+        },
+        {
+          id: '2-14',
+          name: { no: 'Opp bekken', en: 'Up the brook' },
+          par: 2, pearl: 1,
+          boats: [{ x: 120, y: 470 }, { x: 240, y: 470 }],
+          currents: [{ x: 90, y: 100, w: 180, h: 330, vx: 0, vy: -80 }],
+          docks: [{ x: 130, y: 110 }, { x: 230, y: 110 }],
+        },
+        {
+          id: '2-15',
+          name: { no: 'Elvemunningen', en: 'The river mouth' },
+          par: 5, pearl: 4,
+          boats: [{ x: 80, y: 90, color: 0 }, { x: 280, y: 90, color: 1 }, { x: 180, y: 300, color: 2 }],
+          currents: [{ x: 140, y: 40, w: 80, h: 220, vx: 0, vy: 80 }, { x: 0, y: 380, w: 360, h: 70, vx: 80, vy: 0 }],
+          whirls: [{ x: 300, y: 520, r: 50, power: 1.1 }],
+          rocks: [{ x: 180, y: 200, r: 20 }],
+          docks: [{ x: 300, y: 300, color: 0 }, { x: 60, y: 300, color: 1 }, { x: 80, y: 530, color: 2 }],
+        },
       ],
     },
-    { id: 3, name: { no: 'Regnværet', en: 'The Rain' }, blurb: { no: 'Regndråper lager egne krusninger.', en: 'Raindrops make ripples of their own.' }, soon: true, levels: [] },
-    { id: 4, name: { no: 'Natten', en: 'The Night' }, blurb: { no: 'Lykter i mørket.', en: 'Lanterns in the dark.' }, soon: true, levels: [] },
-    { id: 5, name: { no: 'Perlebukta', en: 'Pearl Bay' }, blurb: { no: 'Hemmelige baner for perlejegere.', en: 'Secret levels for pearl hunters.' }, soon: true, unlockPearls: 10, levels: [] },
+    {
+      id: 3,
+      name: { no: 'Fossen', en: 'The Falls' },
+      blurb: { no: 'Båtene kan gli ned, men aldri opp.', en: 'Boats can slide down, but never up.' },
+      unlockStars: 54,
+      levels: [
+        {
+          id: '3-1',
+          name: { no: 'Utfor', en: 'Over the edge' },
+          tip: { no: 'Båter kan gli ned en foss, men aldri opp igjen', en: 'Boats can slide down a waterfall, but never back up' },
+          par: 1, pearl: 1,
+          boats: [{ x: 180, y: 210 }],
+          falls: [{ x1: 0, y1: 300, x2: 360, y2: 300 }],
+          docks: [{ x: 180, y: 440 }],
+        },
+        {
+          id: '3-2',
+          name: { no: 'To vannhøyder', en: 'Two levels' },
+          tip: { no: 'Krusninger når bare båter på samme høyde', en: 'Ripples only reach boats on the same level' },
+          par: 2, pearl: 1,
+          boats: [{ x: 180, y: 310 }],
+          falls: [{ x1: 0, y1: 255, x2: 360, y2: 255 }],
+          docks: [{ x: 180, y: 490 }],
+        },
+        {
+          id: '3-3',
+          name: { no: 'Trappa', en: 'The steps' },
+          par: 2, pearl: 1,
+          boats: [{ x: 90, y: 110 }],
+          falls: [{ x1: 0, y1: 220, x2: 360, y2: 220 }, { x1: 0, y1: 400, x2: 360, y2: 400 }],
+          docks: [{ x: 270, y: 510 }],
+        },
+        {
+          id: '3-4',
+          name: { no: 'Hold deg oppe', en: 'Stay up there' },
+          tip: { no: 'Havna ligger ovenfor. Ikke dytt båten utfor!', en: "The harbour is up top. Don't push the boat over!" },
+          par: 2, pearl: 1,
+          boats: [{ x: 80, y: 250 }],
+          falls: [{ x1: 0, y1: 330, x2: 360, y2: 330 }],
+          rocks: [{ x: 180, y: 200, r: 24 }],
+          docks: [{ x: 290, y: 210 }],
+        },
+        {
+          id: '3-5',
+          name: { no: 'Vann ovenfra', en: 'Falling water' },
+          tip: { no: 'Vann ovenfra dytter båter bort. Treffer båten midten, krasjer den', en: 'Falling water pushes boats away. Hit the middle and the boat crashes' },
+          par: 2, pearl: 1,
+          boats: [{ x: 100, y: 470 }],
+          cascades: [{ x: 200, y: 320, r: 52 }],
+          docks: [{ x: 110, y: 170 }],
+        },
+        {
+          id: '3-6',
+          name: { no: 'Rundt sprutet', en: 'Around the spray' },
+          par: 2, pearl: 1,
+          boats: [{ x: 90, y: 470 }],
+          cascades: [{ x: 250, y: 330, r: 55 }],
+          docks: [{ x: 280, y: 160 }],
+        },
+        {
+          id: '3-7',
+          name: { no: 'Hopp sammen', en: 'Jump together' },
+          par: 2, pearl: 1,
+          boats: [{ x: 130, y: 190 }, { x: 230, y: 190 }],
+          falls: [{ x1: 0, y1: 290, x2: 360, y2: 290 }],
+          docks: [{ x: 90, y: 420 }, { x: 270, y: 420 }],
+        },
+        {
+          id: '3-8',
+          name: { no: 'Skråkanten', en: 'The slanted edge' },
+          par: 2, pearl: 1,
+          boats: [{ x: 280, y: 120 }],
+          falls: [{ x1: 0, y1: 200, x2: 360, y2: 380 }],
+          docks: [{ x: 80, y: 470 }],
+        },
+        {
+          id: '3-9',
+          name: { no: 'To etasjer', en: 'Two floors' },
+          par: 3, pearl: 2,
+          boats: [{ x: 120, y: 90 }, { x: 240, y: 90 }],
+          falls: [{ x1: 0, y1: 200, x2: 360, y2: 200 }, { x1: 0, y1: 380, x2: 360, y2: 380 }],
+          docks: [{ x: 90, y: 290 }, { x: 270, y: 500 }],
+        },
+        {
+          id: '3-10',
+          name: { no: 'Steinbunn', en: 'Rocky bottom' },
+          par: 3, pearl: 2,
+          boats: [{ x: 180, y: 120 }],
+          falls: [{ x1: 0, y1: 260, x2: 360, y2: 260 }],
+          rocks: [{ x: 180, y: 380, r: 30 }, { x: 80, y: 470, r: 22 }],
+          docks: [{ x: 180, y: 520 }],
+        },
+        {
+          id: '3-11',
+          name: { no: 'Strøm mot kanten', en: 'Current to the edge' },
+          par: 3, pearl: 2,
+          boats: [{ x: 60, y: 120 }],
+          currents: [{ x: 0, y: 160, w: 360, h: 70, vx: 80, vy: 0 }],
+          falls: [{ x1: 0, y1: 330, x2: 360, y2: 260 }],
+          docks: [{ x: 120, y: 480 }],
+        },
+        {
+          id: '3-12',
+          name: { no: 'Fargefossen', en: 'Colour falls' },
+          par: 3, pearl: 2,
+          boats: [{ x: 110, y: 150, color: 0 }, { x: 250, y: 150, color: 1 }],
+          falls: [{ x1: 0, y1: 300, x2: 360, y2: 300 }],
+          docks: [{ x: 250, y: 230, color: 0 }, { x: 110, y: 470, color: 1 }],
+        },
+        {
+          id: '3-13',
+          name: { no: 'Virvel i kulpen', en: 'Whirlpool below' },
+          par: 3, pearl: 2,
+          boats: [{ x: 180, y: 130 }, { x: 100, y: 330 }],
+          falls: [{ x1: 0, y1: 250, x2: 360, y2: 250 }],
+          whirls: [{ x: 180, y: 420, r: 60, power: 1 }],
+          docks: [{ x: 180, y: 540 }, { x: 290, y: 330 }],
+        },
+        {
+          id: '3-14',
+          name: { no: 'Alle utfor', en: 'Everyone over' },
+          par: 3, pearl: 2,
+          boats: [{ x: 70, y: 180 }, { x: 140, y: 180 }, { x: 220, y: 180 }, { x: 290, y: 180 }],
+          falls: [{ x1: 0, y1: 260, x2: 360, y2: 260 }],
+          docks: [{ x: 70, y: 400 }, { x: 140, y: 440 }, { x: 220, y: 440 }, { x: 290, y: 400 }],
+        },
+        {
+          id: '3-15',
+          name: { no: 'Storfossen', en: 'The great falls' },
+          par: 4, pearl: 3,
+          boats: [{ x: 90, y: 90 }, { x: 270, y: 90 }, { x: 180, y: 160 }],
+          falls: [{ x1: 0, y1: 230, x2: 360, y2: 230 }, { x1: 0, y1: 420, x2: 360, y2: 380 }],
+          cascades: [{ x: 180, y: 320, r: 50 }],
+          pads: [{ x: 80, y: 300, r: 22, flower: true }],
+          docks: [{ x: 280, y: 520, color: 0 }, { x: 80, y: 500, color: 1 }, { x: 290, y: 300, color: 2 }],
+        },
+      ],
+    },
+    { id: 4, name: { no: 'Regnværet', en: 'The Rain' }, blurb: { no: 'Regndråper lager egne krusninger.', en: 'Raindrops make ripples of their own.' }, soon: true, levels: [] },
+    { id: 5, name: { no: 'Natten', en: 'The Night' }, blurb: { no: 'Lykter i mørket.', en: 'Lanterns in the dark.' }, soon: true, levels: [] },
+    { id: 6, name: { no: 'Perlebukta', en: 'Pearl Bay' }, blurb: { no: 'Hemmelige baner for perlejegere.', en: 'Secret levels for pearl hunters.' }, soon: true, unlockPearls: 30, levels: [] },
   ];
 
   const api = { WORLDS };
@@ -2123,12 +2451,14 @@ svg { fill: currentColor; }
     if (st.fish) drawFish(ctx, st.fish, t);
     if (w) {
       drawCurrents(ctx, w, t);
+      drawFalls(ctx, w, t);
       for (const v of w.whirls) drawWhirl(ctx, v, t);
+      for (const c of w.cascades) drawCascadeWater(ctx, c, t);
       for (const d of w.docks) drawDockWater(ctx, d, t);
       drawShadows(ctx, w);
     }
     if (st.leaves) drawLeaves(ctx, st.leaves);
-    if (w) drawRipples(ctx, w.ripples);
+    if (w) drawRipples(ctx, w.ripples, w.falls);
     drawParticles(ctx, st.particles, 'under');
     ctx.restore();
 
@@ -2138,6 +2468,7 @@ svg { fill: currentColor; }
       for (const p of w.pads) drawPad(ctx, p, t);
       for (let i = 0; i < w.docks.length; i++) drawDock(ctx, w.docks[i], t, st.dockFx && st.dockFx[i]);
       for (const b of w.boats) drawBoat(ctx, b, t, st.boatFx && st.boatFx[b.id], st.look);
+      for (const c of w.cascades) drawCascadeTop(ctx, c, t);
     }
     drawParticles(ctx, st.particles, 'over');
     if (st.hint) drawHint(ctx, st.hint, t);
@@ -2291,30 +2622,139 @@ svg { fill: currentColor; }
     }
   }
 
-  function drawRipples(ctx, ripples) {
+  // Halvplanet på én side av en foss (brukes til å farge og klippe).
+  function halfPlane(ctx, f, below) {
+    const dx = f.x2 - f.x1, dy = f.y2 - f.y1, L = Math.hypot(dx, dy) || 1;
+    const ux = dx / L * 3000, uy = dy / L * 3000;
+    const k = below ? 3000 : -3000;
+    ctx.moveTo(f.x1 - ux, f.y1 - uy);
+    ctx.lineTo(f.x1 + ux, f.y1 + uy);
+    ctx.lineTo(f.x1 + ux + f.nx * k, f.y1 + uy + f.ny * k);
+    ctx.lineTo(f.x1 - ux + f.nx * k, f.y1 - uy + f.ny * k);
+    ctx.closePath();
+  }
+
+  // Foss nedover: dypere (mørkere) vann nedenfor, skum og striper langs kanten.
+  function drawFalls(ctx, w, t) {
+    for (const f of w.falls) {
+      ctx.fillStyle = 'rgba(8,48,88,0.16)';
+      ctx.beginPath(); halfPlane(ctx, f, true); ctx.fill();
+      const dx = f.x2 - f.x1, dy = f.y2 - f.y1, L = Math.hypot(dx, dy) || 1;
+      const ux = dx / L, uy = dy / L;
+      // skygge under kanten
+      const g = ctx.createLinearGradient(f.x1, f.y1, f.x1 + f.nx * 26, f.y1 + f.ny * 26);
+      g.addColorStop(0, 'rgba(6,40,70,0.28)'); g.addColorStop(1, 'rgba(6,40,70,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(f.x1 - ux * 40, f.y1 - uy * 40); ctx.lineTo(f.x2 + ux * 40, f.y2 + uy * 40);
+      ctx.lineTo(f.x2 + ux * 40 + f.nx * 26, f.y2 + uy * 40 + f.ny * 26); ctx.lineTo(f.x1 - ux * 40 + f.nx * 26, f.y1 - uy * 40 + f.ny * 26);
+      ctx.closePath(); ctx.fill();
+      // vann som renner over kanten (striper som glir nedover)
+      ctx.lineCap = 'round';
+      const n = Math.ceil(L / 9) + 8;
+      for (let i = -4; i < n; i++) {
+        const along = i * 9 + ((i * 37) % 5);
+        const ph = ((t * 1.4 + (i * 0.37) % 1) % 1);
+        const len = 6 + ((i * 53) % 9);
+        const d0 = ph * 18, a = 0.5 * (1 - ph);
+        const x = f.x1 + ux * along, y = f.y1 + uy * along;
+        ctx.strokeStyle = `rgba(255,255,255,${a})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x + f.nx * d0, y + f.ny * d0);
+        ctx.lineTo(x + f.nx * (d0 + len), y + f.ny * (d0 + len));
+        ctx.stroke();
+      }
+      // kanten: lys leppe og skum
+      ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(f.x1 - ux * 40, f.y1 - uy * 40); ctx.lineTo(f.x2 + ux * 40, f.y2 + uy * 40); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(f.x1 - ux * 40 - f.nx * 5, f.y1 - uy * 40 - f.ny * 5); ctx.lineTo(f.x2 + ux * 40 - f.nx * 5, f.y2 + uy * 40 - f.ny * 5); ctx.stroke();
+    }
+  }
+
+  // Foss ovenfra, i vannet: lyst skum og ringer som går utover.
+  function drawCascadeWater(ctx, c, t) {
+    const g = ctx.createRadialGradient(c.x, c.y, 4, c.x, c.y, c.r);
+    g.addColorStop(0, 'rgba(255,255,255,0.55)');
+    g.addColorStop(0.4, 'rgba(225,250,255,0.25)');
+    g.addColorStop(1, 'rgba(225,250,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, TAU); ctx.fill();
+    for (let k = 0; k < 3; k++) {
+      const u = (t * 0.9 + k / 3) % 1;
+      const rr = C.CASCADE_CORE + u * (c.r - C.CASCADE_CORE);
+      ctx.strokeStyle = `rgba(255,255,255,${0.5 * (1 - u)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(c.x, c.y, rr, 0, TAU); ctx.stroke();
+    }
+  }
+  // Foss ovenfra, over båtene: den fallende vannsøylen sett ovenfra.
+  function drawCascadeTop(ctx, c, t) {
+    ctx.save();
+    ctx.translate(c.x, c.y);
+    const R0 = C.CASCADE_CORE + 1;
+    ctx.fillStyle = 'rgba(10,60,90,0.18)';
+    ctx.beginPath(); ctx.arc(2, 3, R0, 0, TAU); ctx.fill();
+    const g = ctx.createRadialGradient(-3, -4, 1, 0, 0, R0);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(0.7, '#e6fbff'); g.addColorStop(1, '#bfeef7');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    for (let i = 0; i <= 24; i++) {
+      const a = (i / 24) * TAU;
+      const rr = R0 + Math.sin(a * 5 + t * 9) * 1.4 + Math.sin(a * 3 - t * 7) * 1;
+      if (i === 0) ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr); else ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    }
+    ctx.closePath(); ctx.fill();
+    // dråper som spruter ut
+    for (let i = 0; i < 10; i++) {
+      const u = (t * 1.7 + i * 0.13) % 1;
+      const a = i * 2.39 + Math.floor(t * 1.7 + i * 0.13) * 1.3;
+      const rr = R0 + u * 14;
+      ctx.fillStyle = `rgba(255,255,255,${0.9 * (1 - u)})`;
+      ctx.beginPath(); ctx.arc(Math.cos(a) * rr, Math.sin(a) * rr, 1.6, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawRipples(ctx, ripples, falls) {
     ctx.lineCap = 'round';
     for (const rp of ripples) {
       const r = rp.r;
       if (r < 1) continue;
-      const life = 1 - r / (C.RIPPLE_RANGE + 24);
-      const a = Math.max(0, E.falloff(r * 0.92)) * Math.min(1, life * 3);
-      if (a <= 0.01) continue;
-      // mørk kant utenfor (gir dybde)
-      ctx.strokeStyle = `rgba(10,60,90,${0.16 * a})`;
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(rp.x, rp.y, r + 2.5, 0, TAU); ctx.stroke();
-      // hovedringen
-      ctx.strokeStyle = `rgba(255,255,255,${0.75 * a})`;
-      ctx.lineWidth = 2.6;
-      ctx.beginPath(); ctx.arc(rp.x, rp.y, r, 0, TAU); ctx.stroke();
-      // ringene bak
-      for (let k = 1; k <= 2; k++) {
-        const rr = r - k * 11;
-        if (rr <= 2) break;
-        ctx.strokeStyle = `rgba(255,255,255,${(0.38 / k) * a})`;
-        ctx.lineWidth = 2 - k * 0.4;
-        ctx.beginPath(); ctx.arc(rp.x, rp.y, rr, 0, TAU); ctx.stroke();
+      // med fosser: ringen vises bare på sin egen vannhøyde
+      let clipped = false;
+      if (falls && falls.length) {
+        ctx.save(); clipped = true;
+        for (const f of falls) {
+          ctx.beginPath(); halfPlane(ctx, f, E.fallSide(f, rp.x, rp.y) > 0); ctx.clip();
+        }
       }
+      drawRing(ctx, rp, r);
+      if (clipped) ctx.restore();
+    }
+  }
+  function drawRing(ctx, rp, r) {
+    const life = 1 - r / (C.RIPPLE_RANGE + 24);
+    const a = Math.max(0, E.falloff(r * 0.92)) * Math.min(1, life * 3);
+    if (a <= 0.01) return;
+    // mørk kant utenfor (gir dybde)
+    ctx.strokeStyle = `rgba(10,60,90,${0.16 * a})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(rp.x, rp.y, r + 2.5, 0, TAU); ctx.stroke();
+    // hovedringen
+    ctx.strokeStyle = `rgba(255,255,255,${0.75 * a})`;
+    ctx.lineWidth = 2.6;
+    ctx.beginPath(); ctx.arc(rp.x, rp.y, r, 0, TAU); ctx.stroke();
+    // ringene bak
+    for (let k = 1; k <= 2; k++) {
+      const rr = r - k * 11;
+      if (rr <= 2) break;
+      ctx.strokeStyle = `rgba(255,255,255,${(0.38 / k) * a})`;
+      ctx.lineWidth = 2 - k * 0.4;
+      ctx.beginPath(); ctx.arc(rp.x, rp.y, rr, 0, TAU); ctx.stroke();
     }
   }
 
@@ -2443,11 +2883,31 @@ svg { fill: currentColor; }
     ctx.setLineDash(occ ? [] : [3, 4]);
     ctx.beginPath(); ctx.arc(0, 0, d.r, 0, TAU); ctx.stroke();
     ctx.setLineDash([]);
+    if (d.color >= 0) drawMark(ctx, d.color, 0, 0, 6.5, col, occ ? 0.35 : 0.85);
     if (flash > 0) {
       ctx.strokeStyle = `rgba(255,240,180,${flash})`;
       ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(0, 0, d.r + (1 - flash) * 22, 0, TAU); ctx.stroke();
     }
+    ctx.restore();
+  }
+
+  // Merke per farge (prikk, trekant, firkant, rute …), så fargene også
+  // kan skilles uten å se farge.
+  function drawMark(ctx, ci, x, y, s, col, alpha) {
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.translate(x, y);
+    ctx.fillStyle = col;
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    const k = ci % 5;
+    if (k === 0) ctx.arc(0, 0, s * 0.8, 0, TAU);
+    else if (k === 1) { ctx.moveTo(0, -s); ctx.lineTo(s * 0.95, s * 0.7); ctx.lineTo(-s * 0.95, s * 0.7); ctx.closePath(); }
+    else if (k === 2) ctx.rect(-s * 0.72, -s * 0.72, s * 1.44, s * 1.44);
+    else if (k === 3) { ctx.moveTo(0, -s); ctx.lineTo(s, 0); ctx.lineTo(0, s); ctx.lineTo(-s, 0); ctx.closePath(); }
+    else { for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? s * 0.45 : s; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } ctx.closePath(); }
+    ctx.fill(); ctx.stroke();
     ctx.restore();
   }
 
@@ -2505,6 +2965,8 @@ svg { fill: currentColor; }
 
     // ansikt (alltid oppreist – ser søtere ut)
     drawFace(ctx, b, t, fx, look, scale);
+    // fargemerke når banen har fargede havner
+    if (b.mark) drawMark(ctx, b.color, 0, 11 * scale, 3.6 * scale, pal[1], alpha);
     ctx.restore();
   }
 
@@ -2864,6 +3326,20 @@ svg { fill: currentColor; }
     for (let i = 0; i < 4; i++) tone({ f: 300 + Math.random() * 300, f2: 700, glide: 0.05, dur: 0.06, vol: 0.06, t: t + 0.15 + i * 0.16 });
   };
 
+  // Båt går utfor en foss: et lite "plopp" nedover og sprut.
+  S.fall = function () {
+    if (!ready()) return;
+    tone({ f: 640, f2: 260, glide: 0.18, dur: 0.22, vol: 0.12, send: 0.5 });
+    noise({ dur: 0.18, freq: 1800, q: 0.6, vol: 0.09 });
+  };
+
+  // Båt krasjer i en foss ovenfra: brus og en kort, lav tone.
+  S.crash = function () {
+    if (!ready()) return;
+    noise({ dur: 0.45, freq: 1400, q: 0.5, vol: 0.16 });
+    tone({ f: 200, f2: 90, glide: 0.3, dur: 0.35, vol: 0.12, type: 'triangle' });
+  };
+
   S.pop = function () {
     if (!ready()) return;
     tone({ f: 300, f2: 900, glide: 0.08, dur: 0.12, vol: 0.14, send: 0.4 });
@@ -2982,8 +3458,19 @@ svg { fill: currentColor; }
   function starsFor(lv, taps) { const [a, b] = thresholds(lv); return taps <= a ? 3 : taps <= b ? 2 : 1; }
   function totalStars() { let n = 0; for (const k in save.levels) n += save.levels[k].stars || 0; return n; }
   function totalPearls() { let n = 0; for (const k in save.levels) if (save.levels[k].pearl) n++; return n; }
+  // En verden åpnes med nok stjerner, og når finalen i verdenen før er klart.
+  function prevFinale(w) {
+    const i = LV.WORLDS.indexOf(w);
+    for (let k = i - 1; k >= 0; k--) {
+      const lv = LV.WORLDS[k].levels;
+      if (lv && lv.length) return lv[lv.length - 1];
+    }
+    return null;
+  }
   function worldOpen(w) {
     if (w.soon) return false;
+    const fin = prevFinale(w);
+    if (fin && !w.unlockPearls && !rec(fin.id)) return false;
     return totalStars() >= (w.unlockStars || 0) && totalPearls() >= (w.unlockPearls || 0);
   }
   function levelOpen(e) {
@@ -3077,6 +3564,8 @@ svg { fill: currentColor; }
 
   function setBoatFx(w) {
     G.boatFx = {};
+    const colored = w.docks.some((d) => d.color >= 0);
+    for (const b of w.boats) b.mark = colored;
     for (const b of w.boats) G.boatFx[b.id] = { squash: 0, blink: 0, nextBlink: 1 + Math.random() * 3, angle: b.angle, pop: 0, wake: 0 };
   }
 
@@ -3172,6 +3661,8 @@ svg { fill: currentColor; }
         case 'dock': dockFx(ev); S.dock(ev.n); break;
         case 'complete': if (G.screen === 'play' && w === G.world && G.entry) onComplete(); break;
         case 'sink': sinkFx(ev); S.sink(); break;
+        case 'crash': crashFx(ev); S.crash(); break;
+        case 'fall': fallFx(ev); S.fall(); break;
         case 'respawn': respawnFx(ev); S.pop(); break;
       }
     }
@@ -3211,6 +3702,21 @@ svg { fill: currentColor; }
     for (let i = 0; i < 14; i++) {
       addP({ type: 'bubble', layer: 'under', x: ev.x + (Math.random() - 0.5) * 16, y: ev.y + (Math.random() - 0.5) * 16, vx: 0, vy: 0, size: 1.5 + Math.random() * 2.5, life: 0.4 + Math.random() * 0.9 });
     }
+  }
+  function crashFx(ev) {
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * TAU, sp = 40 + Math.random() * 90;
+      addP({ type: 'drop', x: ev.x, y: ev.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, drag: 4, size: 1.2 + Math.random() * 1.6, life: 0.4 + Math.random() * 0.3 });
+    }
+    const f = G.boatFx[ev.id]; if (f) f.squash = 1;
+  }
+  function fallFx(ev) {
+    addP({ type: 'ringfx', x: ev.x + ev.nx * 10, y: ev.y + ev.ny * 10, r0: 6, size: 24, life: 0.5, rgb: '255,255,255' });
+    for (let i = 0; i < 10; i++) {
+      const a = Math.atan2(ev.ny, ev.nx) + (Math.random() - 0.5) * 2.4, sp = 30 + Math.random() * 70;
+      addP({ type: 'drop', x: ev.x, y: ev.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, drag: 4.5, size: 1 + Math.random() * 1.4, life: 0.3 + Math.random() * 0.3 });
+    }
+    const f = G.boatFx[ev.id]; if (f) f.squash = 0.8;
   }
   function respawnFx(ev) {
     addP({ type: 'ringfx', x: ev.x, y: ev.y, r0: 6, size: 30, life: 0.5, rgb: '255,255,255' });
@@ -3468,6 +3974,7 @@ svg { fill: currentColor; }
     }
     const prev = rec(lv.id) ? Object.assign({}, rec(lv.id)) : null;
     const starsBefore = totalStars();
+    G.openBefore = LV.WORLDS.map(worldOpen);
     const r = save.levels[lv.id] || (save.levels[lv.id] = { best: taps, stars: 0, pearl: false, plays: 0 });
     r.best = Math.min(r.best, taps);
     r.stars = Math.max(r.stars, stars);
@@ -3528,11 +4035,10 @@ svg { fill: currentColor; }
     if (res.firstPearl) setTimeout(() => { if (!$('win').hidden) S.pearl(); }, 480 + res.stars * 300);
 
     // åpnet dette en ny verden?
-    const after = totalStars();
-    for (const w of LV.WORLDS) {
-      if (!w.soon && w.unlockStars && res.starsBefore < w.unlockStars && after >= w.unlockStars) {
-        setTimeout(() => toast(t('unlocked', { name: I.pick(w.name) })), 1400);
-      }
+    if (!G.entry.mode && G.openBefore) {
+      LV.WORLDS.forEach((w, i) => {
+        if (!G.openBefore[i] && worldOpen(w)) setTimeout(() => toast(t('unlocked', { name: I.pick(w.name) })), 1400);
+      });
     }
   }
 
@@ -3547,7 +4053,7 @@ svg { fill: currentColor; }
     transition(() => {
       openMap(Math.min(LV.WORLDS.length - 1, e.wi + 1));
       const w = LV.WORLDS[e.wi + 1];
-      if (w && !w.soon && !worldOpen(w)) toast(t('needStars', { n: w.unlockStars - totalStars(), name: I.pick(w.name) }));
+      if (w && !w.soon && !worldOpen(w) && w.unlockStars > totalStars()) toast(t('needStars', { n: w.unlockStars - totalStars(), name: I.pick(w.name) }));
     });
   }
 
@@ -3596,7 +4102,8 @@ svg { fill: currentColor; }
       $('lockBlurb').textContent = I.pick(w.blurb);
       let need = '', frac = 0;
       if (w.unlockPearls) { need = t('unlockPearls', { n: w.unlockPearls }); frac = totalPearls() / w.unlockPearls; }
-      else if (!open && w.unlockStars) { need = t('unlockStars', { n: w.unlockStars }); frac = totalStars() / w.unlockStars; }
+      else if (!open && w.unlockStars && totalStars() < w.unlockStars) { need = t('unlockStars', { n: w.unlockStars }); frac = totalStars() / w.unlockStars; }
+      else if (!open && prevFinale(w)) { need = t('needFinale', { id: prevFinale(w).id }); frac = 0.95; }
       if (w.soon) need = (need ? need + ' · ' : '') + t('soon');
       else if (open) { need = t('demoSoon'); frac = 1; }
       $('lockNeed').textContent = need;

@@ -47,6 +47,11 @@
     SINK_R: 9,
     SINK_TIME: 1.1,
 
+    FALL_KICK: 70,                // fart nedover når en båt går utfor en foss
+    FALL_LIP: 2,                  // båter under fossen kommer ikke opp igjen
+    CASCADE_PUSH: 520,            // foss ovenfra: vannet dytter båter bort
+    CASCADE_CORE: 15,             // treffer båten midten, krasjer den
+
     SETTLE_V: 3,
     MAX_RIPPLES: 16,
   };
@@ -62,10 +67,19 @@
       level,
       t: 0, steps: 0, taps: 0,
       bodies: [], boats: [], pads: [],
-      docks: [], rocks: [], logs: [], whirls: [], currents: [],
+      docks: [], rocks: [], logs: [], whirls: [], currents: [], falls: [], cascades: [],
       ripples: [], events: [], rippleSeq: 0,
       done: false, doneAt: -1,
     };
+
+    // Fosser nedover: en linje tvers over dammen. Siden til høyre når du går
+    // fra (x1,y1) til (x2,y2) ligger lavere. Båter kan falle ned, men ikke opp.
+    (level.falls || []).forEach((f) => {
+      const dx = f.x2 - f.x1, dy = f.y2 - f.y1, L = Math.hypot(dx, dy) || 1;
+      w.falls.push({ x1: f.x1, y1: f.y1, x2: f.x2, y2: f.y2, nx: -dy / L, ny: dx / L });
+    });
+    // Fosser ovenfra: vann som faller ned i dammen og dytter alt bort.
+    (level.cascades || []).forEach((c) => w.cascades.push({ x: c.x, y: c.y, r: c.r || 48 }));
 
     (level.boats || []).forEach((b, i) => {
       const body = {
@@ -77,6 +91,7 @@
         dock: -1, dockT: 0, sink: 0, sinkX: 0, sinkY: 0,
         sx: b.x, sy: b.y, pushes: [],
       };
+      setLevel(w, body);
       w.bodies.push(body); w.boats.push(body);
     });
 
@@ -89,6 +104,7 @@
         angle: p.angle || 0, flower: !!p.flower,
         dock: -1, sink: 0, pushes: [],
       };
+      setLevel(w, body);
       w.bodies.push(body); w.pads.push(body);
     });
 
@@ -102,6 +118,22 @@
     (level.whirls || []).forEach((v) => w.whirls.push({ x: v.x, y: v.y, r: v.r || 60, power: v.power || 1, dir: v.dir || 1 }));
     (level.currents || []).forEach((c) => w.currents.push({ x: c.x, y: c.y, w: c.w, h: c.h, vx: c.vx || 0, vy: c.vy || 0 }));
     return w;
+  }
+
+  /* ---------- vannhøyder (fosser nedover) ---------- */
+
+  // Hvor langt (med fortegn) et punkt er fra fosselinja. Positivt = nedenfor.
+  function fallSide(f, x, y) { return (x - f.x1) * f.nx + (y - f.y1) * f.ny; }
+  // Vannhøyde: hvor mange fosser punktet ligger nedenfor (0 = øverst).
+  function levelAt(w, x, y) {
+    let n = 0;
+    for (const f of w.falls) if (fallSide(f, x, y) > 0) n++;
+    return n;
+  }
+  function setLevel(w, b) {
+    b.down = w.falls.map((f) => fallSide(f, b.x, b.y) > 0);
+    b.lv = b.down.filter(Boolean).length;
+    b.sdown = b.down.slice();
   }
 
   /* ---------- krusninger ---------- */
@@ -123,7 +155,7 @@
   function tap(w, x, y) {
     if (!insidePond(x, y, 2)) return false;
     if (w.ripples.length >= C.MAX_RIPPLES) w.ripples.shift();
-    w.ripples.push({ id: ++w.rippleSeq, x, y, r: 0, hit: [] });
+    w.ripples.push({ id: ++w.rippleSeq, x, y, r: 0, hit: [], lv: levelAt(w, x, y) });
     w.taps++;
     w.events.push({ type: 'tap', x, y });
     return true;
@@ -132,8 +164,10 @@
   // Brukes til siktehjelpen: hvilke ting vil bli dyttet, hvor og hvor mye.
   function preview(w, x, y) {
     const out = [];
+    const lv = levelAt(w, x, y);
     for (const b of w.bodies) {
       if (b.dock >= 0 || b.sink > 0) continue;
+      if (b.lv !== lv) continue; // krusningen når ikke over/under en foss
       const dx = b.x - x, dy = b.y - y;
       const d = Math.sqrt(dx * dx + dy * dy);
       const f = falloff(d);
@@ -165,6 +199,7 @@
         const d = Math.sqrt(dx * dx + dy * dy);
         if (rp.r < d - b.r) continue;
         rp.hit.push(b.id);
+        if (b.lv !== rp.lv) continue; // annen vannhøyde: krusningen når ikke fram
         const f = falloff(d);
         if (f <= 0) continue;
         let nx = 0, ny = -1;
@@ -216,6 +251,18 @@
       }
       if (b.sink > 0) continue;
 
+      // fosser ovenfra: dytter bort, og midt i krasjer båten
+      for (const c of w.cascades) {
+        const dx = b.x - c.x, dy = b.y - c.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d >= c.r || d < 1e-6) continue;
+        if (b.kind === 'boat' && d < C.CASCADE_CORE) { startSink(w, b, c, 'crash'); break; }
+        const s = 1 - d / c.r;
+        b.vx += (dx / d) * C.CASCADE_PUSH * s * dt / b.mass;
+        b.vy += (dy / d) * C.CASCADE_PUSH * s * dt / b.mass;
+      }
+      if (b.sink > 0) continue;
+
       // havna trekker forsiktig i båter som kommer nær
       if (b.kind === 'boat') {
         for (const dk of w.docks) {
@@ -263,6 +310,7 @@
           collideStatic(w, b, l.x1 + abx * t, l.y1 + aby * t, l.r, C.REST_STATIC, report, 'log');
         }
         collideBounds(w, b, report);
+        collideFalls(w, b, report);
       }
     }
 
@@ -296,10 +344,35 @@
     b.dockT += C.DT;
   }
 
-  function startSink(w, b, v) {
+  function startSink(w, b, v, type) {
     b.sink = 1e-6; b.sinkX = v.x; b.sinkY = v.y;
     b.vx = 0; b.vy = 0; b.pushes.length = 0;
-    w.events.push({ type: 'sink', id: b.id, x: v.x, y: v.y });
+    w.events.push({ type: type || 'sink', id: b.id, x: v.x, y: v.y });
+  }
+
+  // Fosser nedover: ovenfra går båten utfor (og får litt fart), nedenfra er
+  // fossen en vegg.
+  function collideFalls(w, b, report) {
+    for (let i = 0; i < w.falls.length; i++) {
+      const f = w.falls[i];
+      const s = fallSide(f, b.x, b.y);
+      if (!b.down[i]) {
+        if (s > 0) {
+          b.down[i] = true; b.lv++;
+          b.vx += f.nx * C.FALL_KICK; b.vy += f.ny * C.FALL_KICK;
+          w.events.push({ type: 'fall', id: b.id, kind: b.kind, x: b.x, y: b.y, nx: f.nx, ny: f.ny });
+        }
+        continue;
+      }
+      if (s < C.FALL_LIP) {
+        b.x += f.nx * (C.FALL_LIP - s); b.y += f.ny * (C.FALL_LIP - s);
+        const vn = b.vx * f.nx + b.vy * f.ny;
+        if (vn < 0) {
+          b.vx -= (1 + C.REST_STATIC) * vn * f.nx; b.vy -= (1 + C.REST_STATIC) * vn * f.ny;
+          bump(w, report, b.x - f.nx * b.r, b.y - f.ny * b.r, -vn, 'rock');
+        }
+      }
+    }
   }
 
   function sinkUpdate(w, b, dt) {
@@ -308,6 +381,7 @@
     b.y += (b.sinkY - b.y) * 0.12;
     if (b.sink >= C.SINK_TIME) {
       b.sink = 0; b.x = b.sx; b.y = b.sy; b.vx = 0; b.vy = 0;
+      b.down = b.sdown.slice(); b.lv = b.down.filter(Boolean).length;
       w.events.push({ type: 'respawn', id: b.id, x: b.x, y: b.y });
     }
   }
@@ -396,7 +470,7 @@
   // Lett kopi av en verden i ro (brukes av løseren).
   function clone(w) {
     const c = Object.assign({}, w);
-    c.bodies = w.bodies.map((b) => Object.assign({}, b, { pushes: b.pushes.slice() }));
+    c.bodies = w.bodies.map((b) => Object.assign({}, b, { pushes: b.pushes.slice(), down: b.down.slice() }));
     c.boats = c.bodies.filter((b) => b.kind === 'boat');
     c.pads = c.bodies.filter((b) => b.kind === 'pad');
     c.docks = w.docks.map((d) => Object.assign({}, d));
@@ -405,7 +479,7 @@
     return c;
   }
 
-  const Engine = { C, createWorld, step, tap, preview, falloff, insidePond, isSettled, clone };
+  const Engine = { C, createWorld, step, tap, preview, falloff, insidePond, isSettled, clone, levelAt, fallSide };
   root.Engine = Engine;
   if (typeof module !== 'undefined' && module.exports) module.exports = Engine;
 })(typeof window !== 'undefined' ? window : globalThis);

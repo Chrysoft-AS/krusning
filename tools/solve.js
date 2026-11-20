@@ -211,7 +211,8 @@ function centerOf(pts) {
   return best;
 }
 
-// Banen som tekst: B båt, H havn, O stein, # stokk, L vannlilje, @ virvel, * vinnende trykk
+// Banen som tekst: B båt, H havn (tall = farget havn), O stein, # stokk, L vannlilje, @ virvel,
+// = foss nedover, V foss ovenfra, * vinnende trykk
 function asciiMap(level, wins) {
   const cw = 9, ch = 15, cols = Math.ceil(C.W / cw), rows = Math.ceil(C.H / ch);
   const g = Array.from({ length: rows }, () => Array(cols).fill(' '));
@@ -223,8 +224,11 @@ function asciiMap(level, wins) {
   for (const r of level.rocks || []) disc(r.x, r.y, r.r, 'O');
   for (const p of level.pads || []) disc(p.x, p.y, p.r, 'L');
   for (const l of level.logs || []) { for (let t = 0; t <= 1; t += 0.02) put(l.x1 + (l.x2 - l.x1) * t, l.y1 + (l.y2 - l.y1) * t, '#'); }
-  for (const d of level.docks || []) disc(d.x, d.y, 12, 'H');
-  for (const b of level.boats || []) disc(b.x, b.y, 9, 'B');
+  for (const f of level.falls || []) { for (let t = -0.2; t <= 1.2; t += 0.01) put(f.x1 + (f.x2 - f.x1) * t, f.y1 + (f.y2 - f.y1) * t, '='); }
+  for (const c of level.cascades || []) disc(c.x, c.y, 12, 'V');
+  for (const d of level.docks || []) disc(d.x, d.y, 12, d.color != null ? String(d.color) : 'H');
+  const colored = (level.docks || []).some((d) => d.color != null);
+  (level.boats || []).forEach((b, i) => disc(b.x, b.y, 9, colored ? String.fromCharCode(97 + (b.color != null ? b.color : i)) : 'B'));
   return g.map((r) => '    |' + r.join('') + '|').join('\n');
 }
 

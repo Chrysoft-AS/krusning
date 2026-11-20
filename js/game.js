@@ -59,8 +59,19 @@
   function starsFor(lv, taps) { const [a, b] = thresholds(lv); return taps <= a ? 3 : taps <= b ? 2 : 1; }
   function totalStars() { let n = 0; for (const k in save.levels) n += save.levels[k].stars || 0; return n; }
   function totalPearls() { let n = 0; for (const k in save.levels) if (save.levels[k].pearl) n++; return n; }
+  // En verden åpnes med nok stjerner, og når finalen i verdenen før er klart.
+  function prevFinale(w) {
+    const i = LV.WORLDS.indexOf(w);
+    for (let k = i - 1; k >= 0; k--) {
+      const lv = LV.WORLDS[k].levels;
+      if (lv && lv.length) return lv[lv.length - 1];
+    }
+    return null;
+  }
   function worldOpen(w) {
     if (w.soon) return false;
+    const fin = prevFinale(w);
+    if (fin && !w.unlockPearls && !rec(fin.id)) return false;
     return totalStars() >= (w.unlockStars || 0) && totalPearls() >= (w.unlockPearls || 0);
   }
   function levelOpen(e) {
@@ -154,6 +165,8 @@
 
   function setBoatFx(w) {
     G.boatFx = {};
+    const colored = w.docks.some((d) => d.color >= 0);
+    for (const b of w.boats) b.mark = colored;
     for (const b of w.boats) G.boatFx[b.id] = { squash: 0, blink: 0, nextBlink: 1 + Math.random() * 3, angle: b.angle, pop: 0, wake: 0 };
   }
 
@@ -249,6 +262,8 @@
         case 'dock': dockFx(ev); S.dock(ev.n); break;
         case 'complete': if (G.screen === 'play' && w === G.world && G.entry) onComplete(); break;
         case 'sink': sinkFx(ev); S.sink(); break;
+        case 'crash': crashFx(ev); S.crash(); break;
+        case 'fall': fallFx(ev); S.fall(); break;
         case 'respawn': respawnFx(ev); S.pop(); break;
       }
     }
@@ -288,6 +303,21 @@
     for (let i = 0; i < 14; i++) {
       addP({ type: 'bubble', layer: 'under', x: ev.x + (Math.random() - 0.5) * 16, y: ev.y + (Math.random() - 0.5) * 16, vx: 0, vy: 0, size: 1.5 + Math.random() * 2.5, life: 0.4 + Math.random() * 0.9 });
     }
+  }
+  function crashFx(ev) {
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * TAU, sp = 40 + Math.random() * 90;
+      addP({ type: 'drop', x: ev.x, y: ev.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, drag: 4, size: 1.2 + Math.random() * 1.6, life: 0.4 + Math.random() * 0.3 });
+    }
+    const f = G.boatFx[ev.id]; if (f) f.squash = 1;
+  }
+  function fallFx(ev) {
+    addP({ type: 'ringfx', x: ev.x + ev.nx * 10, y: ev.y + ev.ny * 10, r0: 6, size: 24, life: 0.5, rgb: '255,255,255' });
+    for (let i = 0; i < 10; i++) {
+      const a = Math.atan2(ev.ny, ev.nx) + (Math.random() - 0.5) * 2.4, sp = 30 + Math.random() * 70;
+      addP({ type: 'drop', x: ev.x, y: ev.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, drag: 4.5, size: 1 + Math.random() * 1.4, life: 0.3 + Math.random() * 0.3 });
+    }
+    const f = G.boatFx[ev.id]; if (f) f.squash = 0.8;
   }
   function respawnFx(ev) {
     addP({ type: 'ringfx', x: ev.x, y: ev.y, r0: 6, size: 30, life: 0.5, rgb: '255,255,255' });
@@ -545,6 +575,7 @@
     }
     const prev = rec(lv.id) ? Object.assign({}, rec(lv.id)) : null;
     const starsBefore = totalStars();
+    G.openBefore = LV.WORLDS.map(worldOpen);
     const r = save.levels[lv.id] || (save.levels[lv.id] = { best: taps, stars: 0, pearl: false, plays: 0 });
     r.best = Math.min(r.best, taps);
     r.stars = Math.max(r.stars, stars);
@@ -605,11 +636,10 @@
     if (res.firstPearl) setTimeout(() => { if (!$('win').hidden) S.pearl(); }, 480 + res.stars * 300);
 
     // åpnet dette en ny verden?
-    const after = totalStars();
-    for (const w of LV.WORLDS) {
-      if (!w.soon && w.unlockStars && res.starsBefore < w.unlockStars && after >= w.unlockStars) {
-        setTimeout(() => toast(t('unlocked', { name: I.pick(w.name) })), 1400);
-      }
+    if (!G.entry.mode && G.openBefore) {
+      LV.WORLDS.forEach((w, i) => {
+        if (!G.openBefore[i] && worldOpen(w)) setTimeout(() => toast(t('unlocked', { name: I.pick(w.name) })), 1400);
+      });
     }
   }
 
@@ -624,7 +654,7 @@
     transition(() => {
       openMap(Math.min(LV.WORLDS.length - 1, e.wi + 1));
       const w = LV.WORLDS[e.wi + 1];
-      if (w && !w.soon && !worldOpen(w)) toast(t('needStars', { n: w.unlockStars - totalStars(), name: I.pick(w.name) }));
+      if (w && !w.soon && !worldOpen(w) && w.unlockStars > totalStars()) toast(t('needStars', { n: w.unlockStars - totalStars(), name: I.pick(w.name) }));
     });
   }
 
@@ -673,7 +703,8 @@
       $('lockBlurb').textContent = I.pick(w.blurb);
       let need = '', frac = 0;
       if (w.unlockPearls) { need = t('unlockPearls', { n: w.unlockPearls }); frac = totalPearls() / w.unlockPearls; }
-      else if (!open && w.unlockStars) { need = t('unlockStars', { n: w.unlockStars }); frac = totalStars() / w.unlockStars; }
+      else if (!open && w.unlockStars && totalStars() < w.unlockStars) { need = t('unlockStars', { n: w.unlockStars }); frac = totalStars() / w.unlockStars; }
+      else if (!open && prevFinale(w)) { need = t('needFinale', { id: prevFinale(w).id }); frac = 0.95; }
       if (w.soon) need = (need ? need + ' · ' : '') + t('soon');
       else if (open) { need = t('demoSoon'); frac = 1; }
       $('lockNeed').textContent = need;
