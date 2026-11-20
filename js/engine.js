@@ -46,6 +46,7 @@
     WHIRL_SWIRL: 170,             // strømvirvel: sirkelbevegelse
     SINK_R: 9,
     SINK_TIME: 1.1,
+    TIMBER_R: 9,                  // tømmerstokk i elva: tykkelse (radius)
 
     FALL_KICK: 70,                // fart nedover når en båt går utfor en foss
     FALL_LIP: 2,                  // båter under fossen kommer ikke opp igjen
@@ -54,10 +55,11 @@
 
     HEAVY_MASS: 2,                // lasteskuter er tunge og flytter seg mindre
 
-    RAIN_EVERY: 2.5,              // regn: sekunder mellom dråpene
-    RAIN_DELAY: 1,                // regn: første dråpe så lenge etter et trykk
-    RAIN_POWER: 0.45,             // regn: dråpen er svakere enn et trykk…
+    RAIN_EVERY: 1.2,              // regn: sekunder mellom dråpene
+    RAIN_DELAY: 0.6,              // regn: første dråpe så lenge etter et trykk
+    RAIN_POWER: 0.6,              // regn: dråpen er svakere enn et trykk…
     RAIN_RANGE: 120,              // …og rekker kortere
+    RAIN_MAX: 6,                  // regn: høyst så mange dråper per sky etter hvert trykk
 
     WALL_R: 7,                    // molo og sluseport: halv tykkelse
     SWITCH_R: 13,                 // bryter: båten må over denne
@@ -82,13 +84,73 @@
 
   /* ---------- oppretting ---------- */
 
+  // Enkel tallgenerator med frø (samme frø gir samme tall hver gang).
+  function seeded(seed) {
+    let a = (seed >>> 0) || 1;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // Lager lista over alle stokkene i ei tømmerrenne (en halvtime med stokker).
+  function makeTimber(t, i) {
+    const dx = t.x2 - t.x1, dy = t.y2 - t.y1, L = Math.hypot(dx, dy) || 1;
+    const speed = t.speed || 60, len = t.len || 60;
+    const gap = t.gap || [1, 3];
+    const jit = t.jitter != null ? t.jitter : 6;
+    const rnd = seeded(t.seed != null ? t.seed : 7 + i * 31);
+    const travel = (L + len * 1.5) / speed; // tid fra stokken kommer inn til den er ute
+    const logs = [];
+    let T = -travel + gap[0] + (gap[1] - gap[0]) * rnd(); // elva er full av stokker fra start
+    while (T < 1800) {
+      const l = len * (0.8 + 0.4 * rnd());
+      logs.push({ t0: T, len: l, off: (rnd() * 2 - 1) * jit, ang: (rnd() * 2 - 1) * 0.16 });
+      T += l / speed + gap[0] + (gap[1] - gap[0]) * rnd();
+    }
+    return { x1: t.x1, y1: t.y1, ux: dx / L, uy: dy / L, L, speed, travel, logs, period: T + travel, r: t.r || C.TIMBER_R, jit };
+  }
+
+  // Stokkene som flyter i renna akkurat nå: kaller fn(x1, y1, x2, y2, r, i)
+  // for hver stokk (i er stokkens nummer, til tegningen).
+  function eachTimber(w, tm, fn) {
+    const t = (w.steps * C.DT) % tm.period;
+    const logs = tm.logs;
+    let lo = 0, hi = logs.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (logs[m].t0 <= t - tm.travel) lo = m + 1; else hi = m; }
+    for (let i = lo; i < logs.length && logs[i].t0 <= t; i++) {
+      const g = logs[i];
+      const c = (t - g.t0) * tm.speed - g.len / 2;
+      const cx = tm.x1 + tm.ux * c - tm.uy * g.off, cy = tm.y1 + tm.uy * c + tm.ux * g.off;
+      const ca = Math.cos(g.ang), sa = Math.sin(g.ang);
+      const ux = tm.ux * ca - tm.uy * sa, uy = tm.uy * ca + tm.ux * sa, h = g.len / 2;
+      fn(cx - ux * h, cy - uy * h, cx + ux * h, cy + uy * h, tm.r, i);
+    }
+  }
+
+  // Har båten blitt liggende fast i elva (presset mot land av strømmen)?
+  // Da tar elva den: den blir knust og starter på nytt.
+  function stuckInTimber(w, b) {
+    if (b.dock >= 0 || b.sink > 0) return false;
+    if (b.vx * b.vx + b.vy * b.vy > 15 * 15) return false;
+    for (const c of w.currents) if (b.x >= c.x && b.x <= c.x + c.w && b.y >= c.y && b.y <= c.y + c.h) return true;
+    for (const tm of w.timber) {
+      const d = Math.abs((b.x - tm.x1) * tm.uy - (b.y - tm.y1) * tm.ux);
+      if (d < tm.jit + tm.r + b.r) return true;
+    }
+    return false;
+  }
+
   function createWorld(level) {
     const w = {
       level,
       t: 0, steps: 0, taps: 0,
       bodies: [], boats: [], pads: [],
       docks: [], rocks: [], logs: [], whirls: [], currents: [], falls: [], cascades: [],
-      rains: [], walls: [], gates: [], switches: [], frogs: [], ice: [], winds: [],
+      rains: [], walls: [], gates: [], switches: [], frogs: [], ice: [], winds: [], timber: [],
       ripples: [], events: [], rippleSeq: 0, tapStep: 0,
       dark: !!level.dark,
       done: false, doneAt: -1,
@@ -141,8 +203,8 @@
     (level.currents || []).forEach((c) => w.currents.push({ x: c.x, y: c.y, w: c.w, h: c.h, vx: c.vx || 0, vy: c.vy || 0 }));
 
     // Regn: en dråpe faller på samme sted i fast takt. Takten starter på nytt
-    // ved hvert trykk, og dråpene faller bare mens noe er i bevegelse. Når alt
-    // er i ro, venter skyen til neste trykk. Da ligger båtene stille mens du
+    // ved hvert trykk, og dråpene faller bare mens noe er i bevegelse (og høyst
+    // RAIN_MAX ganger per trykk). Når alt er i ro, venter skyen til neste trykk. Da ligger båtene stille mens du
     // tenker, og resultatet blir det samme uansett når du trykker.
     (level.rain || []).forEach((d) => w.rains.push({
       x: d.x, y: d.y,
@@ -150,6 +212,10 @@
       ds: Math.max(1, Math.round((d.delay != null ? d.delay : C.RAIN_DELAY) / C.DT)),
       es: Math.max(1, Math.round((d.every || C.RAIN_EVERY) / C.DT)),
     }));
+    // Tømmer i elva: stokker flyter langs en linje i fast fart, med ujevne
+    // mellomrom. Mellomrommene lages fra et frø, så de er like hver gang du
+    // spiller banen. Treffer en stokk båten, blir den knust og starter på nytt.
+    (level.timber || []).forEach((t, i) => w.timber.push(makeTimber(t, i)));
     // Molo: en mur som stopper båter og krusninger (skygge bak).
     (level.walls || []).forEach((l) => w.walls.push({ x1: l.x1, y1: l.y1, x2: l.x2, y2: l.y2, r: C.WALL_R }));
     // Sluseport: som en molo, men åpnes for godt når en båt treffer bryteren.
@@ -284,7 +350,7 @@
     if (w.rains.length && !isSettled(w)) {
       const rel = w.steps - w.tapStep;
       for (const d of w.rains) {
-        if (rel < d.ds || (rel - d.ds) % d.es !== 0) continue;
+        if (rel < d.ds || (rel - d.ds) % d.es !== 0 || (rel - d.ds) / d.es >= C.RAIN_MAX) continue;
         addRipple(w, d.x, d.y, d.p, d.range, true, [], 'rain');
         w.events.push({ type: 'drop', x: d.x, y: d.y });
       }
@@ -468,6 +534,26 @@
       }
     }
 
+    // tømmer i elva: treffer en stokk en båt, blir båten knust og starter på nytt
+    // en båt som blir liggende fast i elva, blir tatt av elva
+    if (w.timber.length) {
+      for (const b of w.bodies) if (stuckInTimber(w, b)) startSink(w, b, { x: b.x, y: b.y }, 'crash');
+    }
+    if (w.timber.length && !w.noTimber) {
+      for (const tm of w.timber) {
+        eachTimber(w, tm, (ax, ay, bx, by, r) => {
+          const abx = bx - ax, aby = by - ay, len2 = abx * abx + aby * aby || 1;
+          for (const b of w.bodies) {
+            if (b.dock >= 0 || b.sink > 0) continue;
+            let u = ((b.x - ax) * abx + (b.y - ay) * aby) / len2;
+            u = u < 0 ? 0 : u > 1 ? 1 : u;
+            const dx = b.x - (ax + abx * u), dy = b.y - (ay + aby * u), rr = b.r + r - 3;
+            if (dx * dx + dy * dy < rr * rr) startSink(w, b, { x: b.x + tm.ux * 40, y: b.y + tm.uy * 40 }, 'crash');
+          }
+        });
+      }
+    }
+
     // 4) inn i havn?
     for (const b of w.boats) {
       if (b.dock >= 0 || b.sink > 0) continue;
@@ -620,7 +706,8 @@
 
   // Alt i ro? (Da faller heller ingen flere regndråper før neste trykk.)
   function isSettled(w) {
-    if (w.ripples.length) return false;
+    for (const rp of w.ripples) if (!rp.amb || rainPending(w, rp)) return false;
+    if (w.timber.length) for (const b of w.bodies) if (stuckInTimber(w, b)) return false;
     for (const fr of w.frogs) if (fr.jt >= 0) return false;
     for (const b of w.bodies) {
       if (b.sink > 0) return false;
@@ -631,10 +718,24 @@
     return true;
   }
 
+  // Kan denne regnkrusningen fortsatt treffe en båt eller frosk? (Regn som
+  // ikke treffer noe, holder ikke dammen i gang.)
+  function rainPending(w, rp) {
+    for (const b of w.bodies) {
+      if (b.dock >= 0 || b.sink > 0 || rp.hit.indexOf(b.id) >= 0) continue;
+      if (Math.hypot(b.x - rp.x, b.y - rp.y) < rp.range) return true;
+    }
+    for (const fr of w.frogs) {
+      if (rp.fhit.indexOf(fr.id) >= 0) continue;
+      if (falloff(Math.hypot(fr.x - rp.x, fr.y - rp.y), rp.range) * rp.p >= C.FROG_WAKE) return true;
+    }
+    return false;
+  }
+
   // Som isSettled, men godtar krusninger som allerede har passert alt
   // (brukes av hint-knappen for å stoppe tidlig).
   function isCalm(w) {
-    if (w.rains.length) return isSettled(w); // regnet kan dytte igjen så lenge noe beveger seg
+    if (w.rains.length || w.timber.length) return isSettled(w); // regn og tømmer kan fortsatt flytte noe
     for (const fr of w.frogs) if (fr.jt >= 0) return false;
     for (const rp of w.ripples) {
       if (rp.r >= rp.range) continue;
@@ -678,6 +779,7 @@
     if (isSettled(w)) return Infinity;
     const rel = w.steps - w.tapStep;
     if (rel < d.ds) return d.ds - rel;
+    if (Math.floor((rel - d.ds) / d.es) + 1 >= C.RAIN_MAX) return Infinity; // skuren er over til neste trykk
     return d.es - ((rel - d.ds) % d.es);
   }
 
@@ -698,7 +800,7 @@
 
   const Engine = {
     C, createWorld, step, tap, canTap, preview, previewFrogs, falloff, insidePond, isSettled, isCalm, clone,
-    levelAt, fallSide, blocked, nextDrop, pathDist,
+    levelAt, eachTimber, fallSide, blocked, nextDrop, pathDist,
   };
   root.Engine = Engine;
   if (typeof module !== 'undefined' && module.exports) module.exports = Engine;

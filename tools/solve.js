@@ -126,6 +126,9 @@ function makeSolver(threads) {
   // løsning er funnet, og stopper ved stopDepth når en løsning finnes.
   async function analyze(level, o) {
     o = Object.assign({ grid: 9, beam: 24, maxDepth: 4, stopDepth: 1 }, o || {});
+    // Tømmer i elva: søket regner uten stokkene (som om du alltid treffer et
+    // godt øyeblikk). timingCheck() sjekker etterpå at øyeblikkene finnes.
+    if (level.timber) level = Object.assign({}, level, { timber: undefined });
     const fine = gridPoints(Math.max(3, o.grid / 2));
     const r1 = await evaluate(level, [], fine);
     const wins1 = r1.filter((r) => r.done);
@@ -185,10 +188,50 @@ async function solveLevel(level) {
     if (level.pearl >= 2 && !found[level.pearl] && min < level.pearl) lines.push('  (perla nås bare med det svært smale ettrykksvinduet)');
   }
 
+  if (level.timber && example) {
+    const tc = timingCheck(level, example);
+    tc.forEach((r, i) => lines.push(`  tømmer, trykk ${i + 1}: ` + (r.best ? `${r.count} gode øyeblikk de neste 10 s, lengste ${r.best.toFixed(2)} s, første etter ${r.first.toFixed(2)} s` : 'ingen gode øyeblikk')));
+    if (tc.some((r) => !r.best)) warn.push('båten kommer ikke forbi stokkene i eksempelløsningen');
+    else if (tc.some((r) => r.best < 0.2)) warn.push('vinduene mellom stokkene er svært korte (under 0,2 s)');
+  }
+
   for (const w of warn) lines.push(`  ⚠ ${w}`);
   lines.push(`  (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   console.log(lines.join('\n'));
   return { id: level.id, min, warn };
+}
+
+// Tømmer: finnes det, for hvert trykk i løsningen, øyeblikk der båten slipper
+// forbi stokkene? Vi venter 0–10 s (hvert 0,05 s) før trykket og ser etter
+// knusing. Neste trykk tar utgangspunkt i det første gode øyeblikket.
+function timingCheck(level, taps) {
+  const out = [];
+  let w = Engine.createWorld(level);
+  for (const [x, y] of taps) {
+    const wait = Engine.clone(w);
+    const ok = [];
+    let next = null;
+    for (let k = 0; k <= 200; k++) {
+      const t = Engine.clone(wait);
+      Engine.tap(t, x, y);
+      let bad = false;
+      for (let i = 0; i < 12 / C.DT; i++) {
+        Engine.step(t);
+        if (t.events.some((e) => e.type === 'crash')) { bad = true; break; }
+        t.events.length = 0;
+        if (t.done || Engine.isSettled(t)) break;
+      }
+      ok.push(!bad);
+      if (!bad && !next) next = t;
+      for (let i = 0; i < 6; i++) { Engine.step(wait); wait.events.length = 0; }
+    }
+    let best = 0, run = 0, count = 0;
+    ok.forEach((g, i) => { run = g ? run + 1 : 0; if (g && (i === 0 || !ok[i - 1])) count++; best = Math.max(best, run); });
+    out.push({ best: best ? best * 0.05 : 0, count, first: ok.indexOf(true) * 0.05 });
+    if (!next) break;
+    w = next;
+  }
+  return out;
 }
 
 function dedupe(list) {
@@ -243,7 +286,7 @@ function asciiMap(level, wins) {
 
 function fmt(taps) { return taps.map(([x, y]) => `(${Math.round(x)}, ${Math.round(y)})`).join(' → '); }
 
-module.exports = { makeSolver, asciiMap };
+module.exports = { makeSolver, asciiMap, timingCheck };
 
 if (require.main === module) {
   const args = process.argv.slice(2);

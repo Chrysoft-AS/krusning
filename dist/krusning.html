@@ -806,6 +806,7 @@ svg { fill: currentColor; }
     WHIRL_SWIRL: 170,             // strømvirvel: sirkelbevegelse
     SINK_R: 9,
     SINK_TIME: 1.1,
+    TIMBER_R: 9,                  // tømmerstokk i elva: tykkelse (radius)
 
     FALL_KICK: 70,                // fart nedover når en båt går utfor en foss
     FALL_LIP: 2,                  // båter under fossen kommer ikke opp igjen
@@ -814,10 +815,11 @@ svg { fill: currentColor; }
 
     HEAVY_MASS: 2,                // lasteskuter er tunge og flytter seg mindre
 
-    RAIN_EVERY: 2.5,              // regn: sekunder mellom dråpene
-    RAIN_DELAY: 1,                // regn: første dråpe så lenge etter et trykk
-    RAIN_POWER: 0.45,             // regn: dråpen er svakere enn et trykk…
+    RAIN_EVERY: 1.2,              // regn: sekunder mellom dråpene
+    RAIN_DELAY: 0.6,              // regn: første dråpe så lenge etter et trykk
+    RAIN_POWER: 0.6,              // regn: dråpen er svakere enn et trykk…
     RAIN_RANGE: 120,              // …og rekker kortere
+    RAIN_MAX: 6,                  // regn: høyst så mange dråper per sky etter hvert trykk
 
     WALL_R: 7,                    // molo og sluseport: halv tykkelse
     SWITCH_R: 13,                 // bryter: båten må over denne
@@ -842,13 +844,73 @@ svg { fill: currentColor; }
 
   /* ---------- oppretting ---------- */
 
+  // Enkel tallgenerator med frø (samme frø gir samme tall hver gang).
+  function seeded(seed) {
+    let a = (seed >>> 0) || 1;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // Lager lista over alle stokkene i ei tømmerrenne (en halvtime med stokker).
+  function makeTimber(t, i) {
+    const dx = t.x2 - t.x1, dy = t.y2 - t.y1, L = Math.hypot(dx, dy) || 1;
+    const speed = t.speed || 60, len = t.len || 60;
+    const gap = t.gap || [1, 3];
+    const jit = t.jitter != null ? t.jitter : 6;
+    const rnd = seeded(t.seed != null ? t.seed : 7 + i * 31);
+    const travel = (L + len * 1.5) / speed; // tid fra stokken kommer inn til den er ute
+    const logs = [];
+    let T = -travel + gap[0] + (gap[1] - gap[0]) * rnd(); // elva er full av stokker fra start
+    while (T < 1800) {
+      const l = len * (0.8 + 0.4 * rnd());
+      logs.push({ t0: T, len: l, off: (rnd() * 2 - 1) * jit, ang: (rnd() * 2 - 1) * 0.16 });
+      T += l / speed + gap[0] + (gap[1] - gap[0]) * rnd();
+    }
+    return { x1: t.x1, y1: t.y1, ux: dx / L, uy: dy / L, L, speed, travel, logs, period: T + travel, r: t.r || C.TIMBER_R, jit };
+  }
+
+  // Stokkene som flyter i renna akkurat nå: kaller fn(x1, y1, x2, y2, r, i)
+  // for hver stokk (i er stokkens nummer, til tegningen).
+  function eachTimber(w, tm, fn) {
+    const t = (w.steps * C.DT) % tm.period;
+    const logs = tm.logs;
+    let lo = 0, hi = logs.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (logs[m].t0 <= t - tm.travel) lo = m + 1; else hi = m; }
+    for (let i = lo; i < logs.length && logs[i].t0 <= t; i++) {
+      const g = logs[i];
+      const c = (t - g.t0) * tm.speed - g.len / 2;
+      const cx = tm.x1 + tm.ux * c - tm.uy * g.off, cy = tm.y1 + tm.uy * c + tm.ux * g.off;
+      const ca = Math.cos(g.ang), sa = Math.sin(g.ang);
+      const ux = tm.ux * ca - tm.uy * sa, uy = tm.uy * ca + tm.ux * sa, h = g.len / 2;
+      fn(cx - ux * h, cy - uy * h, cx + ux * h, cy + uy * h, tm.r, i);
+    }
+  }
+
+  // Har båten blitt liggende fast i elva (presset mot land av strømmen)?
+  // Da tar elva den: den blir knust og starter på nytt.
+  function stuckInTimber(w, b) {
+    if (b.dock >= 0 || b.sink > 0) return false;
+    if (b.vx * b.vx + b.vy * b.vy > 15 * 15) return false;
+    for (const c of w.currents) if (b.x >= c.x && b.x <= c.x + c.w && b.y >= c.y && b.y <= c.y + c.h) return true;
+    for (const tm of w.timber) {
+      const d = Math.abs((b.x - tm.x1) * tm.uy - (b.y - tm.y1) * tm.ux);
+      if (d < tm.jit + tm.r + b.r) return true;
+    }
+    return false;
+  }
+
   function createWorld(level) {
     const w = {
       level,
       t: 0, steps: 0, taps: 0,
       bodies: [], boats: [], pads: [],
       docks: [], rocks: [], logs: [], whirls: [], currents: [], falls: [], cascades: [],
-      rains: [], walls: [], gates: [], switches: [], frogs: [], ice: [], winds: [],
+      rains: [], walls: [], gates: [], switches: [], frogs: [], ice: [], winds: [], timber: [],
       ripples: [], events: [], rippleSeq: 0, tapStep: 0,
       dark: !!level.dark,
       done: false, doneAt: -1,
@@ -901,8 +963,8 @@ svg { fill: currentColor; }
     (level.currents || []).forEach((c) => w.currents.push({ x: c.x, y: c.y, w: c.w, h: c.h, vx: c.vx || 0, vy: c.vy || 0 }));
 
     // Regn: en dråpe faller på samme sted i fast takt. Takten starter på nytt
-    // ved hvert trykk, og dråpene faller bare mens noe er i bevegelse. Når alt
-    // er i ro, venter skyen til neste trykk. Da ligger båtene stille mens du
+    // ved hvert trykk, og dråpene faller bare mens noe er i bevegelse (og høyst
+    // RAIN_MAX ganger per trykk). Når alt er i ro, venter skyen til neste trykk. Da ligger båtene stille mens du
     // tenker, og resultatet blir det samme uansett når du trykker.
     (level.rain || []).forEach((d) => w.rains.push({
       x: d.x, y: d.y,
@@ -910,6 +972,10 @@ svg { fill: currentColor; }
       ds: Math.max(1, Math.round((d.delay != null ? d.delay : C.RAIN_DELAY) / C.DT)),
       es: Math.max(1, Math.round((d.every || C.RAIN_EVERY) / C.DT)),
     }));
+    // Tømmer i elva: stokker flyter langs en linje i fast fart, med ujevne
+    // mellomrom. Mellomrommene lages fra et frø, så de er like hver gang du
+    // spiller banen. Treffer en stokk båten, blir den knust og starter på nytt.
+    (level.timber || []).forEach((t, i) => w.timber.push(makeTimber(t, i)));
     // Molo: en mur som stopper båter og krusninger (skygge bak).
     (level.walls || []).forEach((l) => w.walls.push({ x1: l.x1, y1: l.y1, x2: l.x2, y2: l.y2, r: C.WALL_R }));
     // Sluseport: som en molo, men åpnes for godt når en båt treffer bryteren.
@@ -1044,7 +1110,7 @@ svg { fill: currentColor; }
     if (w.rains.length && !isSettled(w)) {
       const rel = w.steps - w.tapStep;
       for (const d of w.rains) {
-        if (rel < d.ds || (rel - d.ds) % d.es !== 0) continue;
+        if (rel < d.ds || (rel - d.ds) % d.es !== 0 || (rel - d.ds) / d.es >= C.RAIN_MAX) continue;
         addRipple(w, d.x, d.y, d.p, d.range, true, [], 'rain');
         w.events.push({ type: 'drop', x: d.x, y: d.y });
       }
@@ -1228,6 +1294,26 @@ svg { fill: currentColor; }
       }
     }
 
+    // tømmer i elva: treffer en stokk en båt, blir båten knust og starter på nytt
+    // en båt som blir liggende fast i elva, blir tatt av elva
+    if (w.timber.length) {
+      for (const b of w.bodies) if (stuckInTimber(w, b)) startSink(w, b, { x: b.x, y: b.y }, 'crash');
+    }
+    if (w.timber.length && !w.noTimber) {
+      for (const tm of w.timber) {
+        eachTimber(w, tm, (ax, ay, bx, by, r) => {
+          const abx = bx - ax, aby = by - ay, len2 = abx * abx + aby * aby || 1;
+          for (const b of w.bodies) {
+            if (b.dock >= 0 || b.sink > 0) continue;
+            let u = ((b.x - ax) * abx + (b.y - ay) * aby) / len2;
+            u = u < 0 ? 0 : u > 1 ? 1 : u;
+            const dx = b.x - (ax + abx * u), dy = b.y - (ay + aby * u), rr = b.r + r - 3;
+            if (dx * dx + dy * dy < rr * rr) startSink(w, b, { x: b.x + tm.ux * 40, y: b.y + tm.uy * 40 }, 'crash');
+          }
+        });
+      }
+    }
+
     // 4) inn i havn?
     for (const b of w.boats) {
       if (b.dock >= 0 || b.sink > 0) continue;
@@ -1380,7 +1466,8 @@ svg { fill: currentColor; }
 
   // Alt i ro? (Da faller heller ingen flere regndråper før neste trykk.)
   function isSettled(w) {
-    if (w.ripples.length) return false;
+    for (const rp of w.ripples) if (!rp.amb || rainPending(w, rp)) return false;
+    if (w.timber.length) for (const b of w.bodies) if (stuckInTimber(w, b)) return false;
     for (const fr of w.frogs) if (fr.jt >= 0) return false;
     for (const b of w.bodies) {
       if (b.sink > 0) return false;
@@ -1391,10 +1478,24 @@ svg { fill: currentColor; }
     return true;
   }
 
+  // Kan denne regnkrusningen fortsatt treffe en båt eller frosk? (Regn som
+  // ikke treffer noe, holder ikke dammen i gang.)
+  function rainPending(w, rp) {
+    for (const b of w.bodies) {
+      if (b.dock >= 0 || b.sink > 0 || rp.hit.indexOf(b.id) >= 0) continue;
+      if (Math.hypot(b.x - rp.x, b.y - rp.y) < rp.range) return true;
+    }
+    for (const fr of w.frogs) {
+      if (rp.fhit.indexOf(fr.id) >= 0) continue;
+      if (falloff(Math.hypot(fr.x - rp.x, fr.y - rp.y), rp.range) * rp.p >= C.FROG_WAKE) return true;
+    }
+    return false;
+  }
+
   // Som isSettled, men godtar krusninger som allerede har passert alt
   // (brukes av hint-knappen for å stoppe tidlig).
   function isCalm(w) {
-    if (w.rains.length) return isSettled(w); // regnet kan dytte igjen så lenge noe beveger seg
+    if (w.rains.length || w.timber.length) return isSettled(w); // regn og tømmer kan fortsatt flytte noe
     for (const fr of w.frogs) if (fr.jt >= 0) return false;
     for (const rp of w.ripples) {
       if (rp.r >= rp.range) continue;
@@ -1438,6 +1539,7 @@ svg { fill: currentColor; }
     if (isSettled(w)) return Infinity;
     const rel = w.steps - w.tapStep;
     if (rel < d.ds) return d.ds - rel;
+    if (Math.floor((rel - d.ds) / d.es) + 1 >= C.RAIN_MAX) return Infinity; // skuren er over til neste trykk
     return d.es - ((rel - d.ds) % d.es);
   }
 
@@ -1458,7 +1560,7 @@ svg { fill: currentColor; }
 
   const Engine = {
     C, createWorld, step, tap, canTap, preview, previewFrogs, falloff, insidePond, isSettled, isCalm, clone,
-    levelAt, fallSide, blocked, nextDrop, pathDist,
+    levelAt, eachTimber, fallSide, blocked, nextDrop, pathDist,
   };
   root.Engine = Engine;
   if (typeof module !== 'undefined' && module.exports) module.exports = Engine;
@@ -1495,6 +1597,12 @@ svg { fill: currentColor; }
  *   lamps:  lykter           { x, y, r }         (bare lys, ingen fysikk)
  *   ice:    is               { x, y, w, h }      (båtene glir nesten uten å stoppe)
  *   winds:  vind             { x, y, w, h, ax, ay } (jevn vind i et felt, tar tak i båtene)
+ *   timber: tømmer i elva    { x1, y1, x2, y2, speed, len, gap: [min, maks], seed }
+ *                            (stokker flyter fra (x1,y1) mot (x2,y2) med ujevne
+ *                             mellomrom i sekunder; frøet gjør dem like hver gang.
+ *                             Legg alltid en strøm (currents) under. Treffer en
+ *                             stokk båten, eller blir den liggende fast i elva,
+ *                             blir den knust og starter på nytt)
  *   par:    antall krusninger for ★★★
  *   pearl:  beste løsning vi kjenner (gir perle)
  *   hand:   viser en animert hånd (kun i første bane)
@@ -1957,13 +2065,12 @@ svg { fill: currentColor; }
         },
         {
           id: '4-2',
-          name: { no: 'Dråpen bak havna', en: 'The drop behind the dock' },
-          tip: { no: 'Dråpen faller i fast takt. Takten starter på nytt hver gang du trykker', en: 'The drop falls in a steady beat. The beat restarts every time you tap' },
-          par: 2, pearl: 1,
-          boats: [{ x: 120, y: 430, angle: -1.2 }],
-          docks: [{ x: 250, y: 170 }],
-          rocks: [{ x: 70, y: 250, r: 22 }],
-          rain: [{ x: 276, y: 116 }],
+          name: { no: 'Dråpen foran havna', en: 'The drop before the dock' },
+          tip: { no: 'Dråpene faller i fast takt mens vannet er i bevegelse. Takten starter på nytt hver gang du trykker', en: 'The drops fall in a steady beat while the water moves. The beat restarts every time you tap' },
+          par: 3, pearl: 2,
+          boats: [{ x: 180, y: 480 }],
+          docks: [{ x: 180, y: 130 }],
+          rain: [{ x: 180, y: 240, delay: 1 }],
         },
         {
           id: '4-3',
@@ -1986,16 +2093,16 @@ svg { fill: currentColor; }
           par: 3, pearl: 2,
           boats: [{ x: 70, y: 520 }],
           docks: [{ x: 290, y: 90 }],
-          rain: [{ x: 120, y: 300 }, { x: 250, y: 270, delay: 1.8 }],
+          rain: [{ x: 130, y: 280 }, { x: 260, y: 220, delay: 0.9 }],
         },
         {
           id: '4-6',
           name: { no: 'Før dråpen faller', en: 'Before the drop' },
-          par: 2, pearl: 1,
+          par: 3, pearl: 2,
           boats: [{ x: 180, y: 470 }],
           docks: [{ x: 180, y: 150 }],
           rocks: [{ x: 110, y: 300, r: 20 }, { x: 250, y: 300, r: 20 }],
-          rain: [{ x: 180, y: 96, delay: 0.9 }],
+          rain: [{ x: 180, y: 210, delay: 1.1 }],
         },
         {
           id: '4-7',
@@ -2009,17 +2116,17 @@ svg { fill: currentColor; }
           id: '4-8',
           name: { no: 'Fargeregn', en: 'Colour rain' },
           par: 3, pearl: 2,
-          boats: [{ x: 90, y: 470, color: 0 }, { x: 270, y: 470, color: 1 }],
+          boats: [{ x: 90, y: 480, color: 0 }, { x: 270, y: 480, color: 1 }],
           docks: [{ x: 270, y: 140, color: 0 }, { x: 90, y: 140, color: 1 }],
-          rain: [{ x: 180, y: 300 }],
+          rain: [{ x: 90, y: 300, delay: 0.8 }, { x: 270, y: 300, delay: 1.2 }],
         },
         {
           id: '4-9',
           name: { no: 'Biljard i regnet', en: 'Billiards in the rain' },
           par: 3, pearl: 2,
-          boats: [{ x: 110, y: 480 }, { x: 220, y: 300, heavy: true }],
+          boats: [{ x: 110, y: 480 }, { x: 220, y: 330, heavy: true }],
           docks: [{ x: 300, y: 120 }, { x: 60, y: 130 }],
-          rain: [{ x: 70, y: 260 }],
+          rain: [{ x: 60, y: 260 }, { x: 180, y: 170, delay: 1 }],
         },
         {
           id: '4-10',
@@ -2027,8 +2134,8 @@ svg { fill: currentColor; }
           par: 3, pearl: 2,
           boats: [{ x: 80, y: 490 }],
           docks: [{ x: 280, y: 110 }],
-          currents: [{ x: 0, y: 270, w: 360, h: 80, vx: 70, vy: 0 }],
-          rain: [{ x: 250, y: 220 }],
+          currents: [{ x: 0, y: 270, w: 320, h: 80, vx: 70, vy: 0 }],
+          rain: [{ x: 250, y: 220, every: 1 }, { x: 120, y: 160, delay: 1, every: 1 }],
         },
         {
           id: '4-11',
@@ -2038,7 +2145,7 @@ svg { fill: currentColor; }
           docks: [{ x: 180, y: 110 }],
           logs: [{ x1: 140, y1: 205, x2: 220, y2: 205, r: 8 }],
           whirls: [{ x: 180, y: 300, r: 56 }],
-          rain: [{ x: 105, y: 320 }, { x: 255, y: 320, delay: 1.9 }],
+          rain: [{ x: 105, y: 320 }, { x: 255, y: 320, delay: 1.9 }, { x: 180, y: 160, delay: 1 }],
         },
         {
           id: '4-12',
@@ -2047,16 +2154,16 @@ svg { fill: currentColor; }
           boats: [{ x: 100, y: 120 }, { x: 240, y: 110, heavy: true }],
           docks: [{ x: 90, y: 480 }, { x: 270, y: 470 }],
           falls: [{ x1: 0, y1: 300, x2: 360, y2: 300 }],
-          rain: [{ x: 180, y: 220 }],
+          rain: [{ x: 180, y: 250, every: 1.1 }, { x: 60, y: 380, delay: 0.8, every: 1.1 }, { x: 300, y: 380, delay: 1.1, every: 1.1 }],
         },
         {
           id: '4-13',
           name: { no: 'Lasten hjem', en: 'Cargo home' },
-          par: 4, pearl: 3,
+          par: 5, pearl: 4,
           boats: [{ x: 80, y: 500, color: 0 }, { x: 280, y: 470, color: 1, heavy: true }],
           docks: [{ x: 280, y: 110, color: 0 }, { x: 110, y: 300, color: 1 }],
           rocks: [{ x: 200, y: 190, r: 24 }],
-          rain: [{ x: 180, y: 330 }],
+          rain: [{ x: 180, y: 330, every: 1 }, { x: 200, y: 100, delay: 0.8, every: 1 }, { x: 40, y: 250, delay: 1.2, every: 1 }],
         },
         {
           id: '4-14',
@@ -2064,7 +2171,7 @@ svg { fill: currentColor; }
           par: 2, pearl: 1,
           boats: [{ x: 120, y: 470 }],
           docks: [{ x: 240, y: 150 }],
-          rain: [{ x: 160, y: 300 }],
+          rain: [{ x: 90, y: 250, delay: 0.8 }, { x: 290, y: 320, delay: 1 }],
         },
         {
           id: '4-15',
@@ -2073,7 +2180,10 @@ svg { fill: currentColor; }
           boats: [{ x: 70, y: 500 }, { x: 180, y: 440, heavy: true }, { x: 290, y: 500 }],
           docks: [{ x: 70, y: 150 }, { x: 180, y: 170 }, { x: 290, y: 150 }],
           rocks: [{ x: 180, y: 310, r: 22 }],
-          rain: [{ x: 120, y: 300 }, { x: 240, y: 300, delay: 1.7 }],
+          rain: [
+            { x: 120, y: 300, every: 0.9 }, { x: 240, y: 300, delay: 1.7, every: 0.9 }, { x: 180, y: 70, delay: 0.8, every: 0.9 },
+            { x: 25, y: 260, delay: 1.1, every: 0.9 }, { x: 335, y: 260, delay: 1.4, every: 0.9 },
+          ],
         },
       ],
     },
@@ -2523,7 +2633,48 @@ svg { fill: currentColor; }
         },
       ],
     },
-    { id: 8, name: { no: 'Perlebukta', en: 'Pearl Bay' }, blurb: { no: 'Hemmelige baner for perlejegere.', en: 'Secret levels for pearl hunters.' }, soon: true, unlockPearls: 30, levels: [] },
+    {
+      id: 8,
+      name: { no: 'Elva', en: 'The River' },
+      blurb: { no: 'Tømmerstokker flyter forbi. Finn en åpning.', en: 'Logs drift past. Find a gap.' },
+      unlockStars: 189,
+      levels: [
+        {
+          id: '8-1',
+          name: { no: 'Tømmerfløting', en: 'Log drive' },
+          tip: { no: 'Tømmerstokkene flyter med strømmen. Vent på en åpning, og send båten over', en: 'Logs drift with the current. Wait for a gap, then send the boat across' },
+          par: 2, pearl: 1,
+          boats: [{ x: 160, y: 430 }],
+          docks: [{ x: 205, y: 175 }],
+          currents: [{ x: 0, y: 260, w: 360, h: 80, vx: 50, vy: 0 }],
+          timber: [{ x1: -60, y1: 300, x2: 420, y2: 300, speed: 50, len: 58, gap: [0.8, 2.4], seed: 7 }],
+        },
+        {
+          id: '8-2',
+          name: { no: 'Steinen bak elva', en: 'The rock past the river' },
+          par: 3, pearl: 2,
+          boats: [{ x: 180, y: 470 }],
+          docks: [{ x: 300, y: 130 }],
+          rocks: [{ x: 230, y: 200, r: 24 }],
+          currents: [{ x: 0, y: 260, w: 360, h: 80, vx: 50, vy: 0 }],
+          timber: [{ x1: -60, y1: 300, x2: 420, y2: 300, speed: 50, len: 60, gap: [0.8, 2.4], seed: 11 }],
+        },
+        {
+          id: '8-3',
+          name: { no: 'To renner', en: 'Two channels' },
+          tip: { no: 'Mellom rennene er vannet stille. Der kan båten hvile', en: 'The water is calm between the channels. The boat can rest there' },
+          par: 3, pearl: 2,
+          boats: [{ x: 120, y: 520 }],
+          docks: [{ x: 240, y: 110 }],
+          currents: [{ x: 0, y: 190, w: 360, h: 70, vx: 55, vy: 0 }, { x: 0, y: 330, w: 360, h: 70, vx: -60, vy: 0 }],
+          timber: [
+            { x1: -60, y1: 225, x2: 420, y2: 225, speed: 55, len: 60, gap: [0.9, 2.6], seed: 11 },
+            { x1: 420, y1: 365, x2: -60, y2: 365, speed: 60, len: 60, gap: [0.9, 2.6], seed: 18 },
+          ],
+        },
+      ],
+    },
+    { id: 9, name: { no: 'Perlebukta', en: 'Pearl Bay' }, blurb: { no: 'Hemmelige baner for perlejegere.', en: 'Secret levels for pearl hunters.' }, soon: true, unlockPearls: 30, levels: [] },
   ];
 
   // Stemningen (regn, skumring, is) følger verdenen, med mindre banen sier noe annet.
@@ -3305,6 +3456,7 @@ svg { fill: currentColor; }
     }
     if (st.leaves) drawLeaves(ctx, st.leaves);
     if (w) drawRipples(ctx, w);
+    if (w && w.timber.length) drawTimber(ctx, w, t);
     drawParticles(ctx, st.particles, 'under');
     ctx.restore();
 
@@ -3331,7 +3483,7 @@ svg { fill: currentColor; }
     drawParticles(ctx, st.particles, 'over');
     if (w) drawMood(ctx, w, t);
     if (w && w.dark) drawDark(ctx, w, st, t);
-    if (st.hint) drawHint(ctx, st.hint, t);
+    if (st.hint) drawHint(ctx, st.hint, t, w);
     if (st.hint && !st.aim && w) drawArrows(ctx, w, st.hint.x, st.hint.y, 0.55);
     if (st.aim && w) drawAim(ctx, w, st.aim, t);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -3744,6 +3896,22 @@ svg { fill: currentColor; }
     }
   }
 
+  // Tømmer i elva: stokkene flyter med strømmen, med skygge og litt skum
+  // foran. (Klippes til dammen, så de kommer inn under kanten.)
+  function drawTimber(ctx, w, t) {
+    for (const tm of w.timber) {
+      E.eachTimber(w, tm, (x1, y1, x2, y2, r, i) => {
+        const bob = Math.sin(t * 2.1 + i * 1.7) * 0.7;
+        ctx.strokeStyle = PAL.shadow; ctx.lineCap = 'round'; ctx.lineWidth = r * 2;
+        ctx.beginPath(); ctx.moveTo(x1 + 3, y1 + 5); ctx.lineTo(x2 + 3, y2 + 5); ctx.stroke();
+        // skum der stokken skyver vannet foran seg
+        ctx.fillStyle = 'rgba(255,255,255,0.32)';
+        ctx.beginPath(); ctx.ellipse(x2 + tm.ux * 4, y2 + tm.uy * 4, r * 1.1, r * 1.5, Math.atan2(tm.uy, tm.ux), 0, TAU); ctx.fill();
+        drawLog(ctx, { x1, y1: y1 + bob, x2, y2: y2 + bob, r }, i * 7 + 3);
+      });
+    }
+  }
+
   // Molo: en mur av steinblokker.
   function drawWall(ctx, s) {
     const dx = s.x2 - s.x1, dy = s.y2 - s.y1, len = Math.hypot(dx, dy) || 1;
@@ -4048,7 +4216,7 @@ svg { fill: currentColor; }
     ctx.beginPath(); ctx.ellipse(r.x + r.r * 0.3, r.y + r.r * 0.32, r.r * 0.26, r.r * 0.14, 0.4, 0, TAU); ctx.fill();
   }
 
-  function drawLog(ctx, l) {
+  function drawLog(ctx, l, seed) {
     const dx = l.x2 - l.x1, dy = l.y2 - l.y1, len = Math.hypot(dx, dy) || 1;
     const px = -dy / len, py = dx / len;
     ctx.lineCap = 'round';
@@ -4060,7 +4228,7 @@ svg { fill: currentColor; }
     ctx.beginPath(); ctx.moveTo(l.x1 - px * l.r * 0.35, l.y1 - py * l.r * 0.35); ctx.lineTo(l.x2 - px * l.r * 0.35, l.y2 - py * l.r * 0.35); ctx.stroke();
     // barkstreker
     ctx.strokeStyle = 'rgba(70,40,20,0.35)'; ctx.lineWidth = 1;
-    const rnd = rng(Math.round(l.x1 * 3 + l.y1 * 5));
+    const rnd = rng(seed != null ? seed : Math.round(l.x1 * 3 + l.y1 * 5));
     for (let s = 0.12; s < 0.9; s += 0.11) {
       const u = s + rnd() * 0.05, o = (rnd() - 0.5) * l.r;
       const x = l.x1 + dx * u + px * o, y = l.y1 + dy * u + py * o;
@@ -4332,7 +4500,30 @@ svg { fill: currentColor; }
     }
   }
 
-  function drawHint(ctx, h, t) {
+  function drawHint(ctx, h, t, w) {
+    // Med tømmer i elva gjelder hintet et bestemt øyeblikk: en ring krymper
+    // inn mot punktet og lyser grønt når det er tid for å trykke.
+    if (h.at != null && w) {
+      const left = (h.at - h.win - w.steps) * C.DT;
+      const now = left <= 0;
+      if (!now) {
+        const k = Math.min(1, left / 2);
+        ctx.strokeStyle = `rgba(255,255,255,${0.35 + 0.5 * (1 - k)})`;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(h.x, h.y, 11 + 46 * k, 0, TAU); ctx.stroke();
+      } else {
+        const p = (t * 4) % 1;
+        ctx.fillStyle = 'rgba(140,240,150,0.28)';
+        ctx.beginPath(); ctx.arc(h.x, h.y, 16, 0, TAU); ctx.fill();
+        ctx.strokeStyle = `rgba(140,240,150,${0.95 * (1 - p)})`; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(h.x, h.y, 10 + p * 18, 0, TAU); ctx.stroke();
+      }
+      ctx.fillStyle = now ? 'rgba(150,245,160,1)' : 'rgba(255,236,150,0.95)';
+      ctx.beginPath(); ctx.arc(h.x, h.y, now ? 6 : 4.5, 0, TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(40,80,0,0.4)'; ctx.lineWidth = 1;
+      ctx.stroke();
+      return;
+    }
     const pulse = (t * 1.3) % 1;
     ctx.strokeStyle = `rgba(255,236,150,${0.9 * (1 - pulse)})`;
     ctx.lineWidth = 2.5;
@@ -4922,7 +5113,7 @@ svg { fill: currentColor; }
     }
     updateFx(dt);
     if (G.screen === 'title') titleAmbience(dt);
-    if (G.screen === 'play') liveStars();
+    if (G.screen === 'play') { liveStars(); advanceHint(); }
     if (G.winAt > 0 && G.time >= G.winAt) { G.winAt = -1; showWin(); }
     R.draw({
       world: G.world, time: G.time,
@@ -5610,14 +5801,96 @@ svg { fill: currentColor; }
     G.hintBusy = true;
     $('btnHint').classList.add('busy');
     const token = ++G.hintToken;
-    findHint(G.world, token, (pt) => {
+    findHint(G.world, token, (pt, cands) => {
       if (token !== G.hintToken) return;
-      G.hintBusy = false;
-      $('btnHint').classList.remove('busy');
-      if (!pt) { toast(t('hintNone')); return; }
-      G.hint = pt;
-      hideTip();
+      const show = (h) => {
+        G.hintBusy = false;
+        $('btnHint').classList.remove('busy');
+        if (!h) { toast(t('hintNone')); return; }
+        G.hint = h;
+        hideTip();
+      };
+      if (!pt || !G.world.timber.length) { show(pt); return; }
+      // tømmer: ta den første kandidaten som har et godt øyeblikk
+      let i = 0;
+      (function next() {
+        timeHint(G.world, cands[i], token, (h) => {
+          if (h) { show(h); return; }
+          if (++i < cands.length) next();
+          else show(pt);
+        });
+      })();
     });
+  }
+
+  // Tømmer i elva: når kan du trykke uten at båten treffer en stokk? Vi
+  // prøver å vente 0–10 sekunder (hvert 0,05 s) og ser hvilke øyeblikk som
+  // går fint. Hintet viser så et godt øyeblikk litt fram i tid.
+  function timeHint(world, pt, token, cb) {
+    const STEP = 6, K = 200, t0 = world.steps;
+    const wait = E.clone(world);
+    const ok = [];
+    (function chunk() {
+      if (token !== G.hintToken) return;
+      const tt = performance.now();
+      while (ok.length <= K && performance.now() - tt < 11) {
+        const w = E.clone(wait);
+        E.tap(w, pt.x, pt.y);
+        let bad = false;
+        for (let s = 0; s < 1100; s++) {
+          E.step(w);
+          if (w.events.some((e) => e.type === 'crash')) { bad = true; break; }
+          w.events.length = 0;
+          if (w.done) break;
+          if ((s & 7) === 7 && E.isCalm(w)) break;
+        }
+        ok.push(!bad);
+        for (let s = 0; s < STEP; s++) { E.step(wait); wait.events.length = 0; }
+      }
+      if (ok.length <= K) { requestAnimationFrame(chunk); return; }
+      if (ok.every(Boolean)) { cb({ x: pt.x, y: pt.y }); return; } // her spiller timingen ingen rolle
+      if (!ok.some(Boolean)) { cb(null); return; } // aldri et godt øyeblikk for dette trykket
+      const wins = [];
+      for (let i = 0; i < ok.length; i++) {
+        if (!ok[i]) continue;
+        let j = i;
+        while (j + 1 < ok.length && ok[j + 1]) j++;
+        wins.push([t0 + i * STEP, t0 + j * STEP]);
+        i = j;
+      }
+      const h = { x: pt.x, y: pt.y, wins };
+      nextWindow(h);
+      cb(h.at != null ? h : null);
+    })();
+  }
+
+  // Velg neste gode øyeblikk som er langt nok fram i tid til at du rekker å
+  // se ringen. Helst et som gir minst ±0,12 s å gå på.
+  function nextWindow(h) {
+    h.at = null;
+    const lead = G.world.steps + 84;
+    let best = -1, bw = 2;
+    for (let i = 0; i < h.wins.length; i++) {
+      const [a, b] = h.wins[i];
+      const at = Math.max((a + b) >> 1, lead);
+      const win = Math.min(at - a, b - at);
+      if (win >= 15) { best = i; break; }
+      if (win > bw) { bw = win; best = i; }
+    }
+    if (best < 0) { h.wins.length = 0; return; }
+    h.wins.splice(0, best);
+    const [a, b] = h.wins[0];
+    h.at = Math.max((a + b) >> 1, lead);
+    h.win = Math.min(h.at - a, b - h.at);
+  }
+
+  // Gikk øyeblikket forbi uten at du trykket? Da viser vi det neste.
+  function advanceHint() {
+    const h = G.hint;
+    if (!h || !h.wins || G.world.steps <= h.at + h.win) return;
+    h.wins.shift();
+    nextWindow(h);
+    if (h.at == null) G.hint = null;
   }
 
   function hintScore(w) {
@@ -5639,6 +5912,7 @@ svg { fill: currentColor; }
 
   function findHint(world, token, cb) {
     const base = E.clone(world);
+    base.noTimber = true; // stokkene tas med etterpå, når vi finner riktig øyeblikk
     const movers = base.bodies.filter((b) => b.dock < 0);
     const reach = C.RIPPLE_RANGE - 12;
     const maxSteps = base.ice.length || base.winds.length ? 1100 : 760; // på is glir båtene lenge
@@ -5673,20 +5947,73 @@ svg { fill: currentColor; }
         res.push({ x, y, done, score: done ? 1e9 : hintScore(w) });
       }
       if (i < pts.length && wins < 40) { requestAnimationFrame(chunk); return; }
+      // noen gode kandidater, de beste først (med tømmer prøver vi dem etter tur)
+      const pick = (list) => {
+        const out = [];
+        for (const p of list) {
+          if (out.every((q) => Math.hypot(p.x - q.x, p.y - q.y) > 20)) out.push({ x: p.x, y: p.y });
+          if (out.length >= 6) break;
+        }
+        return out;
+      };
       const winList = res.filter((r) => r.done);
       if (winList.length) {
-        let best = null, bn = -1;
         for (const p of winList) {
           let n = 0;
           for (const q of winList) if (Math.abs(p.x - q.x) <= 11 && Math.abs(p.y - q.y) <= 11) n++;
-          if (n > bn) { bn = n; best = p; }
+          p.n = n;
         }
-        cb({ x: best.x, y: best.y });
+        const c = pick(winList.slice().sort((a, b) => b.n - a.n));
+        cb(c[0], c);
         return;
       }
-      let best = null;
-      for (const r of res) if (!best || r.score > best.score) best = r;
-      cb(best && best.score > now + 8 ? { x: best.x, y: best.y } : null);
+      const c = pick(res.filter((r) => r.score > now + 8).sort((a, b) => b.score - a.score));
+      if (c.length) { cb(c[0], c); return; }
+      // Ingen enkelt trykk hjelper. Se to trykk fram: hvilket første trykk
+      // gir det beste andre trykket?
+      deepHint(base, pick(res.slice().sort((a, b) => b.score - a.score)), now, maxSteps, token, (pt) => cb(pt, pt ? [pt] : []));
+    })();
+  }
+
+  function deepHint(base, first, now, maxSteps, token, cb) {
+    const run = (from, x, y) => {
+      const w = E.clone(from);
+      E.tap(w, x, y);
+      for (let s = 0; s < maxSteps; s++) {
+        E.step(w); w.events.length = 0;
+        if (w.done) break;
+        if ((s & 7) === 7 && E.isCalm(w)) break;
+      }
+      return w;
+    };
+    let fi = 0, j = 0, state = null, pts = null, best = null, bestScore = -Infinity;
+    (function chunk() {
+      if (token !== G.hintToken) return;
+      const t0 = performance.now();
+      while (fi < first.length && bestScore < 1e9 && performance.now() - t0 < 11) {
+        if (!state) {
+          state = run(base, first[fi].x, first[fi].y);
+          const movers = state.bodies.filter((b) => b.dock < 0);
+          pts = [];
+          for (let y = 8; y < C.H; y += 15) {
+            for (let x = 8; x < C.W; x += 15) {
+              if (E.insidePond(x, y, 8) && E.canTap(state, x, y) && movers.some((b) => Math.hypot(b.x - x, b.y - y) < C.RIPPLE_RANGE - 12)) pts.push([x, y]);
+            }
+          }
+          j = 0;
+          if (state.done) { best = first[fi]; bestScore = 1e9; break; }
+        }
+        while (j < pts.length && performance.now() - t0 < 11) {
+          const [x, y] = pts[j++];
+          const w = run(state, x, y);
+          const sc = w.done ? 1e9 : hintScore(w);
+          if (sc > bestScore) { bestScore = sc; best = first[fi]; }
+          if (sc >= 1e9) break;
+        }
+        if (j >= pts.length || bestScore >= 1e9) { fi++; state = null; }
+      }
+      if (fi < first.length && bestScore < 1e9) { requestAnimationFrame(chunk); return; }
+      cb(best && bestScore > now + 8 ? { x: best.x, y: best.y } : null);
     })();
   }
 

@@ -27,6 +27,12 @@
  *   lamps:  lykter           { x, y, r }         (bare lys, ingen fysikk)
  *   ice:    is               { x, y, w, h }      (båtene glir nesten uten å stoppe)
  *   winds:  vind             { x, y, w, h, ax, ay } (jevn vind i et felt, tar tak i båtene)
+ *   timber: tømmer i elva    { x1, y1, x2, y2, speed, len, gap: [min, maks], seed }
+ *                            (stokker flyter fra (x1,y1) mot (x2,y2) med ujevne
+ *                             mellomrom i sekunder; frøet gjør dem like hver gang.
+ *                             Legg alltid en strøm (currents) under. Treffer en
+ *                             stokk båten, eller blir den liggende fast i elva,
+ *                             blir den knust og starter på nytt)
  *   par:    antall krusninger for ★★★
  *   pearl:  beste løsning vi kjenner (gir perle)
  *   hand:   viser en animert hånd (kun i første bane)
@@ -489,13 +495,12 @@
         },
         {
           id: '4-2',
-          name: { no: 'Dråpen bak havna', en: 'The drop behind the dock' },
-          tip: { no: 'Dråpen faller i fast takt. Takten starter på nytt hver gang du trykker', en: 'The drop falls in a steady beat. The beat restarts every time you tap' },
-          par: 2, pearl: 1,
-          boats: [{ x: 120, y: 430, angle: -1.2 }],
-          docks: [{ x: 250, y: 170 }],
-          rocks: [{ x: 70, y: 250, r: 22 }],
-          rain: [{ x: 276, y: 116 }],
+          name: { no: 'Dråpen foran havna', en: 'The drop before the dock' },
+          tip: { no: 'Dråpene faller i fast takt mens vannet er i bevegelse. Takten starter på nytt hver gang du trykker', en: 'The drops fall in a steady beat while the water moves. The beat restarts every time you tap' },
+          par: 3, pearl: 2,
+          boats: [{ x: 180, y: 480 }],
+          docks: [{ x: 180, y: 130 }],
+          rain: [{ x: 180, y: 240, delay: 1 }],
         },
         {
           id: '4-3',
@@ -518,16 +523,16 @@
           par: 3, pearl: 2,
           boats: [{ x: 70, y: 520 }],
           docks: [{ x: 290, y: 90 }],
-          rain: [{ x: 120, y: 300 }, { x: 250, y: 270, delay: 1.8 }],
+          rain: [{ x: 130, y: 280 }, { x: 260, y: 220, delay: 0.9 }],
         },
         {
           id: '4-6',
           name: { no: 'Før dråpen faller', en: 'Before the drop' },
-          par: 2, pearl: 1,
+          par: 3, pearl: 2,
           boats: [{ x: 180, y: 470 }],
           docks: [{ x: 180, y: 150 }],
           rocks: [{ x: 110, y: 300, r: 20 }, { x: 250, y: 300, r: 20 }],
-          rain: [{ x: 180, y: 96, delay: 0.9 }],
+          rain: [{ x: 180, y: 210, delay: 1.1 }],
         },
         {
           id: '4-7',
@@ -541,17 +546,17 @@
           id: '4-8',
           name: { no: 'Fargeregn', en: 'Colour rain' },
           par: 3, pearl: 2,
-          boats: [{ x: 90, y: 470, color: 0 }, { x: 270, y: 470, color: 1 }],
+          boats: [{ x: 90, y: 480, color: 0 }, { x: 270, y: 480, color: 1 }],
           docks: [{ x: 270, y: 140, color: 0 }, { x: 90, y: 140, color: 1 }],
-          rain: [{ x: 180, y: 300 }],
+          rain: [{ x: 90, y: 300, delay: 0.8 }, { x: 270, y: 300, delay: 1.2 }],
         },
         {
           id: '4-9',
           name: { no: 'Biljard i regnet', en: 'Billiards in the rain' },
           par: 3, pearl: 2,
-          boats: [{ x: 110, y: 480 }, { x: 220, y: 300, heavy: true }],
+          boats: [{ x: 110, y: 480 }, { x: 220, y: 330, heavy: true }],
           docks: [{ x: 300, y: 120 }, { x: 60, y: 130 }],
-          rain: [{ x: 70, y: 260 }],
+          rain: [{ x: 60, y: 260 }, { x: 180, y: 170, delay: 1 }],
         },
         {
           id: '4-10',
@@ -559,8 +564,8 @@
           par: 3, pearl: 2,
           boats: [{ x: 80, y: 490 }],
           docks: [{ x: 280, y: 110 }],
-          currents: [{ x: 0, y: 270, w: 360, h: 80, vx: 70, vy: 0 }],
-          rain: [{ x: 250, y: 220 }],
+          currents: [{ x: 0, y: 270, w: 320, h: 80, vx: 70, vy: 0 }],
+          rain: [{ x: 250, y: 220, every: 1 }, { x: 120, y: 160, delay: 1, every: 1 }],
         },
         {
           id: '4-11',
@@ -570,7 +575,7 @@
           docks: [{ x: 180, y: 110 }],
           logs: [{ x1: 140, y1: 205, x2: 220, y2: 205, r: 8 }],
           whirls: [{ x: 180, y: 300, r: 56 }],
-          rain: [{ x: 105, y: 320 }, { x: 255, y: 320, delay: 1.9 }],
+          rain: [{ x: 105, y: 320 }, { x: 255, y: 320, delay: 1.9 }, { x: 180, y: 160, delay: 1 }],
         },
         {
           id: '4-12',
@@ -579,16 +584,16 @@
           boats: [{ x: 100, y: 120 }, { x: 240, y: 110, heavy: true }],
           docks: [{ x: 90, y: 480 }, { x: 270, y: 470 }],
           falls: [{ x1: 0, y1: 300, x2: 360, y2: 300 }],
-          rain: [{ x: 180, y: 220 }],
+          rain: [{ x: 180, y: 250, every: 1.1 }, { x: 60, y: 380, delay: 0.8, every: 1.1 }, { x: 300, y: 380, delay: 1.1, every: 1.1 }],
         },
         {
           id: '4-13',
           name: { no: 'Lasten hjem', en: 'Cargo home' },
-          par: 4, pearl: 3,
+          par: 5, pearl: 4,
           boats: [{ x: 80, y: 500, color: 0 }, { x: 280, y: 470, color: 1, heavy: true }],
           docks: [{ x: 280, y: 110, color: 0 }, { x: 110, y: 300, color: 1 }],
           rocks: [{ x: 200, y: 190, r: 24 }],
-          rain: [{ x: 180, y: 330 }],
+          rain: [{ x: 180, y: 330, every: 1 }, { x: 200, y: 100, delay: 0.8, every: 1 }, { x: 40, y: 250, delay: 1.2, every: 1 }],
         },
         {
           id: '4-14',
@@ -596,7 +601,7 @@
           par: 2, pearl: 1,
           boats: [{ x: 120, y: 470 }],
           docks: [{ x: 240, y: 150 }],
-          rain: [{ x: 160, y: 300 }],
+          rain: [{ x: 90, y: 250, delay: 0.8 }, { x: 290, y: 320, delay: 1 }],
         },
         {
           id: '4-15',
@@ -605,7 +610,10 @@
           boats: [{ x: 70, y: 500 }, { x: 180, y: 440, heavy: true }, { x: 290, y: 500 }],
           docks: [{ x: 70, y: 150 }, { x: 180, y: 170 }, { x: 290, y: 150 }],
           rocks: [{ x: 180, y: 310, r: 22 }],
-          rain: [{ x: 120, y: 300 }, { x: 240, y: 300, delay: 1.7 }],
+          rain: [
+            { x: 120, y: 300, every: 0.9 }, { x: 240, y: 300, delay: 1.7, every: 0.9 }, { x: 180, y: 70, delay: 0.8, every: 0.9 },
+            { x: 25, y: 260, delay: 1.1, every: 0.9 }, { x: 335, y: 260, delay: 1.4, every: 0.9 },
+          ],
         },
       ],
     },
@@ -1055,7 +1063,48 @@
         },
       ],
     },
-    { id: 8, name: { no: 'Perlebukta', en: 'Pearl Bay' }, blurb: { no: 'Hemmelige baner for perlejegere.', en: 'Secret levels for pearl hunters.' }, soon: true, unlockPearls: 30, levels: [] },
+    {
+      id: 8,
+      name: { no: 'Elva', en: 'The River' },
+      blurb: { no: 'Tømmerstokker flyter forbi. Finn en åpning.', en: 'Logs drift past. Find a gap.' },
+      unlockStars: 189,
+      levels: [
+        {
+          id: '8-1',
+          name: { no: 'Tømmerfløting', en: 'Log drive' },
+          tip: { no: 'Tømmerstokkene flyter med strømmen. Vent på en åpning, og send båten over', en: 'Logs drift with the current. Wait for a gap, then send the boat across' },
+          par: 2, pearl: 1,
+          boats: [{ x: 160, y: 430 }],
+          docks: [{ x: 205, y: 175 }],
+          currents: [{ x: 0, y: 260, w: 360, h: 80, vx: 50, vy: 0 }],
+          timber: [{ x1: -60, y1: 300, x2: 420, y2: 300, speed: 50, len: 58, gap: [0.8, 2.4], seed: 7 }],
+        },
+        {
+          id: '8-2',
+          name: { no: 'Steinen bak elva', en: 'The rock past the river' },
+          par: 3, pearl: 2,
+          boats: [{ x: 180, y: 470 }],
+          docks: [{ x: 300, y: 130 }],
+          rocks: [{ x: 230, y: 200, r: 24 }],
+          currents: [{ x: 0, y: 260, w: 360, h: 80, vx: 50, vy: 0 }],
+          timber: [{ x1: -60, y1: 300, x2: 420, y2: 300, speed: 50, len: 60, gap: [0.8, 2.4], seed: 11 }],
+        },
+        {
+          id: '8-3',
+          name: { no: 'To renner', en: 'Two channels' },
+          tip: { no: 'Mellom rennene er vannet stille. Der kan båten hvile', en: 'The water is calm between the channels. The boat can rest there' },
+          par: 3, pearl: 2,
+          boats: [{ x: 120, y: 520 }],
+          docks: [{ x: 240, y: 110 }],
+          currents: [{ x: 0, y: 190, w: 360, h: 70, vx: 55, vy: 0 }, { x: 0, y: 330, w: 360, h: 70, vx: -60, vy: 0 }],
+          timber: [
+            { x1: -60, y1: 225, x2: 420, y2: 225, speed: 55, len: 60, gap: [0.9, 2.6], seed: 11 },
+            { x1: 420, y1: 365, x2: -60, y2: 365, speed: 60, len: 60, gap: [0.9, 2.6], seed: 18 },
+          ],
+        },
+      ],
+    },
+    { id: 9, name: { no: 'Perlebukta', en: 'Pearl Bay' }, blurb: { no: 'Hemmelige baner for perlejegere.', en: 'Secret levels for pearl hunters.' }, soon: true, unlockPearls: 30, levels: [] },
   ];
 
   // Stemningen (regn, skumring, is) følger verdenen, med mindre banen sier noe annet.

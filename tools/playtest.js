@@ -58,7 +58,19 @@ const file = 'file://' + path.resolve(__dirname, '..', 'index.html');
       hintMs = Math.max(hintMs, Date.now() - h0);
       const hint = await page.evaluate(() => Krusning.G.hint);
       if (!hint) break;
-      await page.evaluate(([x, y]) => Krusning.playerTap(x, y), [hint.x, hint.y]);
+      if (hint.at != null) {
+        // tømmer i elva: vent til ringen lyser grønt, og trykk midt i vinduet
+        await page.evaluate(() => new Promise((ok) => {
+          (function poll() {
+            const h = Krusning.G.hint;
+            if (!h || h.at == null) { ok(); return; }
+            if (Krusning.G.world.steps >= h.at) { Krusning.playerTap(h.x, h.y); ok(); return; }
+            requestAnimationFrame(poll);
+          })();
+        }));
+      } else {
+        await page.evaluate(([x, y]) => Krusning.playerTap(x, y), [hint.x, hint.y]);
+      }
       steps++;
       await page.waitForTimeout(100);
     }

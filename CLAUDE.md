@@ -38,7 +38,7 @@ tools/build-artifact.js   bygger dist/krusning.html (én fil) for deling
 ## Ny bane
 
 1. Legg et objekt i riktig verden i `js/levels.js`. Dammen er 360 × 600 enheter, med (0,0) øverst til venstre. Båtradius er 13, havneradius 24.
-2. Hold minst ca. 50 enheters avstand mellom en båt og en havn ved start, ellers trekker havna båten inn med en gang. Båter skal heller ikke starte i strøm, i vind eller innenfor rekkevidden til en regndråpe (de flytter seg før spilleren gjør noe).
+2. Hold minst ca. 50 enheters avstand mellom en båt og en havn ved start, ellers trekker havna båten inn med en gang. Båter skal heller ikke starte i strøm, i vind eller innenfor rekkevidden til en regndråpe (de flytter seg før spilleren gjør noe). Med tømmer i elva viser løseren også hvor lange åpningene mellom stokkene er.
 3. `node tools/solve.js <id> --map` viser hvor ett trykk løser banen (`*`). Sett `pearl` til det minste antallet løseren finner, og `par` vanligvis én høyere.
 4. Perla bør ha et vindu på minst ca. 15 trykkpunkter. Under 6 regnes som flaks, og løseren varsler da.
 5. Kjør `node tools/playtest.js <id>`.

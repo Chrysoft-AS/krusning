@@ -234,7 +234,7 @@
     }
     updateFx(dt);
     if (G.screen === 'title') titleAmbience(dt);
-    if (G.screen === 'play') liveStars();
+    if (G.screen === 'play') { liveStars(); advanceHint(); }
     if (G.winAt > 0 && G.time >= G.winAt) { G.winAt = -1; showWin(); }
     R.draw({
       world: G.world, time: G.time,
@@ -922,14 +922,96 @@
     G.hintBusy = true;
     $('btnHint').classList.add('busy');
     const token = ++G.hintToken;
-    findHint(G.world, token, (pt) => {
+    findHint(G.world, token, (pt, cands) => {
       if (token !== G.hintToken) return;
-      G.hintBusy = false;
-      $('btnHint').classList.remove('busy');
-      if (!pt) { toast(t('hintNone')); return; }
-      G.hint = pt;
-      hideTip();
+      const show = (h) => {
+        G.hintBusy = false;
+        $('btnHint').classList.remove('busy');
+        if (!h) { toast(t('hintNone')); return; }
+        G.hint = h;
+        hideTip();
+      };
+      if (!pt || !G.world.timber.length) { show(pt); return; }
+      // tømmer: ta den første kandidaten som har et godt øyeblikk
+      let i = 0;
+      (function next() {
+        timeHint(G.world, cands[i], token, (h) => {
+          if (h) { show(h); return; }
+          if (++i < cands.length) next();
+          else show(pt);
+        });
+      })();
     });
+  }
+
+  // Tømmer i elva: når kan du trykke uten at båten treffer en stokk? Vi
+  // prøver å vente 0–10 sekunder (hvert 0,05 s) og ser hvilke øyeblikk som
+  // går fint. Hintet viser så et godt øyeblikk litt fram i tid.
+  function timeHint(world, pt, token, cb) {
+    const STEP = 6, K = 200, t0 = world.steps;
+    const wait = E.clone(world);
+    const ok = [];
+    (function chunk() {
+      if (token !== G.hintToken) return;
+      const tt = performance.now();
+      while (ok.length <= K && performance.now() - tt < 11) {
+        const w = E.clone(wait);
+        E.tap(w, pt.x, pt.y);
+        let bad = false;
+        for (let s = 0; s < 1100; s++) {
+          E.step(w);
+          if (w.events.some((e) => e.type === 'crash')) { bad = true; break; }
+          w.events.length = 0;
+          if (w.done) break;
+          if ((s & 7) === 7 && E.isCalm(w)) break;
+        }
+        ok.push(!bad);
+        for (let s = 0; s < STEP; s++) { E.step(wait); wait.events.length = 0; }
+      }
+      if (ok.length <= K) { requestAnimationFrame(chunk); return; }
+      if (ok.every(Boolean)) { cb({ x: pt.x, y: pt.y }); return; } // her spiller timingen ingen rolle
+      if (!ok.some(Boolean)) { cb(null); return; } // aldri et godt øyeblikk for dette trykket
+      const wins = [];
+      for (let i = 0; i < ok.length; i++) {
+        if (!ok[i]) continue;
+        let j = i;
+        while (j + 1 < ok.length && ok[j + 1]) j++;
+        wins.push([t0 + i * STEP, t0 + j * STEP]);
+        i = j;
+      }
+      const h = { x: pt.x, y: pt.y, wins };
+      nextWindow(h);
+      cb(h.at != null ? h : null);
+    })();
+  }
+
+  // Velg neste gode øyeblikk som er langt nok fram i tid til at du rekker å
+  // se ringen. Helst et som gir minst ±0,12 s å gå på.
+  function nextWindow(h) {
+    h.at = null;
+    const lead = G.world.steps + 84;
+    let best = -1, bw = 2;
+    for (let i = 0; i < h.wins.length; i++) {
+      const [a, b] = h.wins[i];
+      const at = Math.max((a + b) >> 1, lead);
+      const win = Math.min(at - a, b - at);
+      if (win >= 15) { best = i; break; }
+      if (win > bw) { bw = win; best = i; }
+    }
+    if (best < 0) { h.wins.length = 0; return; }
+    h.wins.splice(0, best);
+    const [a, b] = h.wins[0];
+    h.at = Math.max((a + b) >> 1, lead);
+    h.win = Math.min(h.at - a, b - h.at);
+  }
+
+  // Gikk øyeblikket forbi uten at du trykket? Da viser vi det neste.
+  function advanceHint() {
+    const h = G.hint;
+    if (!h || !h.wins || G.world.steps <= h.at + h.win) return;
+    h.wins.shift();
+    nextWindow(h);
+    if (h.at == null) G.hint = null;
   }
 
   function hintScore(w) {
@@ -951,6 +1033,7 @@
 
   function findHint(world, token, cb) {
     const base = E.clone(world);
+    base.noTimber = true; // stokkene tas med etterpå, når vi finner riktig øyeblikk
     const movers = base.bodies.filter((b) => b.dock < 0);
     const reach = C.RIPPLE_RANGE - 12;
     const maxSteps = base.ice.length || base.winds.length ? 1100 : 760; // på is glir båtene lenge
@@ -985,20 +1068,73 @@
         res.push({ x, y, done, score: done ? 1e9 : hintScore(w) });
       }
       if (i < pts.length && wins < 40) { requestAnimationFrame(chunk); return; }
+      // noen gode kandidater, de beste først (med tømmer prøver vi dem etter tur)
+      const pick = (list) => {
+        const out = [];
+        for (const p of list) {
+          if (out.every((q) => Math.hypot(p.x - q.x, p.y - q.y) > 20)) out.push({ x: p.x, y: p.y });
+          if (out.length >= 6) break;
+        }
+        return out;
+      };
       const winList = res.filter((r) => r.done);
       if (winList.length) {
-        let best = null, bn = -1;
         for (const p of winList) {
           let n = 0;
           for (const q of winList) if (Math.abs(p.x - q.x) <= 11 && Math.abs(p.y - q.y) <= 11) n++;
-          if (n > bn) { bn = n; best = p; }
+          p.n = n;
         }
-        cb({ x: best.x, y: best.y });
+        const c = pick(winList.slice().sort((a, b) => b.n - a.n));
+        cb(c[0], c);
         return;
       }
-      let best = null;
-      for (const r of res) if (!best || r.score > best.score) best = r;
-      cb(best && best.score > now + 8 ? { x: best.x, y: best.y } : null);
+      const c = pick(res.filter((r) => r.score > now + 8).sort((a, b) => b.score - a.score));
+      if (c.length) { cb(c[0], c); return; }
+      // Ingen enkelt trykk hjelper. Se to trykk fram: hvilket første trykk
+      // gir det beste andre trykket?
+      deepHint(base, pick(res.slice().sort((a, b) => b.score - a.score)), now, maxSteps, token, (pt) => cb(pt, pt ? [pt] : []));
+    })();
+  }
+
+  function deepHint(base, first, now, maxSteps, token, cb) {
+    const run = (from, x, y) => {
+      const w = E.clone(from);
+      E.tap(w, x, y);
+      for (let s = 0; s < maxSteps; s++) {
+        E.step(w); w.events.length = 0;
+        if (w.done) break;
+        if ((s & 7) === 7 && E.isCalm(w)) break;
+      }
+      return w;
+    };
+    let fi = 0, j = 0, state = null, pts = null, best = null, bestScore = -Infinity;
+    (function chunk() {
+      if (token !== G.hintToken) return;
+      const t0 = performance.now();
+      while (fi < first.length && bestScore < 1e9 && performance.now() - t0 < 11) {
+        if (!state) {
+          state = run(base, first[fi].x, first[fi].y);
+          const movers = state.bodies.filter((b) => b.dock < 0);
+          pts = [];
+          for (let y = 8; y < C.H; y += 15) {
+            for (let x = 8; x < C.W; x += 15) {
+              if (E.insidePond(x, y, 8) && E.canTap(state, x, y) && movers.some((b) => Math.hypot(b.x - x, b.y - y) < C.RIPPLE_RANGE - 12)) pts.push([x, y]);
+            }
+          }
+          j = 0;
+          if (state.done) { best = first[fi]; bestScore = 1e9; break; }
+        }
+        while (j < pts.length && performance.now() - t0 < 11) {
+          const [x, y] = pts[j++];
+          const w = run(state, x, y);
+          const sc = w.done ? 1e9 : hintScore(w);
+          if (sc > bestScore) { bestScore = sc; best = first[fi]; }
+          if (sc >= 1e9) break;
+        }
+        if (j >= pts.length || bestScore >= 1e9) { fi++; state = null; }
+      }
+      if (fi < first.length && bestScore < 1e9) { requestAnimationFrame(chunk); return; }
+      cb(best && bestScore > now + 8 ? { x: best.x, y: best.y } : null);
     })();
   }
 

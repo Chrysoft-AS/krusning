@@ -82,6 +82,7 @@ Tallene for spilletid er anslag (ca. 1 minutt per bane første gang, med omstart
 | 5 | 108 | 180 |
 | 6 | 135 | 225 |
 | 7 | 162 | 270 |
+| 8 | 189 | 279 |
 | ◉ Perlebukta | 30 perler | 105 |
 
   Hvorfor 60 %: det er nok til at du *må* hente noen ekstra stjerner, men aldri så mye at du sitter fast. Hintet hjelper deg alltid til minst én stjerne.
@@ -154,6 +155,7 @@ Hver verden legger til **én hovedmekanikk** og ofte én liten krydder. Rekkefø
 | 5 · Slusene | **moloer** som stopper båter og krusninger (skygge bak), **brytere** som åpner en **sluseport** når en båt (eller vannlilje) kjører over dem | Rekkefølge: gjør ting i riktig rekkefølge | **15 baner** |
 | 6 · Natten | **frosker** som hopper når krusningen treffer dem og lager en ny krusning der de lander, og **mørke** (du ser bare nær lykter, båter og havner, og krusningene lyser opp vannet) | Kjedereaksjoner og å huske banen | **15 baner** |
 | 7 · Isen | **glatt is** (båtene glir nesten uten å stoppe) og **vind** som blåser jevnt i faste felt | Små trykk og fin kontroll | **15 baner** |
+| 8 · Elva | **tømmerstokker** som flyter med strømmen med ujevne mellomrom. Treffer en stokk båten (eller blir den liggende fast i elva), blir den knust og starter på nytt | Timing: send båten over i en åpning | **3 baner** (prøve) |
 | ◉ Perlebukta | ingen ny regel, alt kombinert | Perfekte løsninger | Ny |
 | Senere: Fjorden | tidevann (steiner kommer og går), bølger | | Idé |
 
@@ -168,9 +170,11 @@ Hver verden legger til **én hovedmekanikk** og ofte én liten krydder. Rekkefø
 
 Alle nye mekanikker må være deterministiske (fast mønster, ingen tilfeldighet), slik at løseren og hintet virker.
 
-**To valg som ble tatt underveis (verden 4–7):**
+**Valg som ble tatt underveis (verden 4–8):**
 - **Regnet går i takt med trykkene dine.** Første dråpe faller litt etter hvert trykk, og så i fast takt, men bare så lenge noe i dammen er i bevegelse. Når alt er i ro, venter skyen til neste trykk. Da ligger båtene stille mens du tenker, resultatet blir det samme uansett hvor lenge du venter før du trykker, og hint-knappen treffer. Det passer også med at spillet ikke skal ha tidspress.
 - **Vinden blåser jevnt i faste felt** (vist med striper), ikke i kast. Kast som kommer av seg selv ville flyttet båtene mens du tenker, og da kan verken løseren eller hintet regne riktig.
+- **Tømmerstokkene ser tilfeldige ut, men er like hver gang** du spiller en bane (de lages fra et frø). Da kan hint-knappen regne ut et godt øyeblikk. Hintet viser en ring som krymper inn og lyser grønt når det er tid for å trykke.
+- **Regnet blir tettere utover i verden 4:** dråpene faller omtrent hvert sekund, og antall skyer øker fra én til fem.
 - Natten har innstillingen «Mer lys om natten».
 
 ---

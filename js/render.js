@@ -295,6 +295,7 @@
     }
     if (st.leaves) drawLeaves(ctx, st.leaves);
     if (w) drawRipples(ctx, w);
+    if (w && w.timber.length) drawTimber(ctx, w, t);
     drawParticles(ctx, st.particles, 'under');
     ctx.restore();
 
@@ -321,7 +322,7 @@
     drawParticles(ctx, st.particles, 'over');
     if (w) drawMood(ctx, w, t);
     if (w && w.dark) drawDark(ctx, w, st, t);
-    if (st.hint) drawHint(ctx, st.hint, t);
+    if (st.hint) drawHint(ctx, st.hint, t, w);
     if (st.hint && !st.aim && w) drawArrows(ctx, w, st.hint.x, st.hint.y, 0.55);
     if (st.aim && w) drawAim(ctx, w, st.aim, t);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -734,6 +735,22 @@
     }
   }
 
+  // Tømmer i elva: stokkene flyter med strømmen, med skygge og litt skum
+  // foran. (Klippes til dammen, så de kommer inn under kanten.)
+  function drawTimber(ctx, w, t) {
+    for (const tm of w.timber) {
+      E.eachTimber(w, tm, (x1, y1, x2, y2, r, i) => {
+        const bob = Math.sin(t * 2.1 + i * 1.7) * 0.7;
+        ctx.strokeStyle = PAL.shadow; ctx.lineCap = 'round'; ctx.lineWidth = r * 2;
+        ctx.beginPath(); ctx.moveTo(x1 + 3, y1 + 5); ctx.lineTo(x2 + 3, y2 + 5); ctx.stroke();
+        // skum der stokken skyver vannet foran seg
+        ctx.fillStyle = 'rgba(255,255,255,0.32)';
+        ctx.beginPath(); ctx.ellipse(x2 + tm.ux * 4, y2 + tm.uy * 4, r * 1.1, r * 1.5, Math.atan2(tm.uy, tm.ux), 0, TAU); ctx.fill();
+        drawLog(ctx, { x1, y1: y1 + bob, x2, y2: y2 + bob, r }, i * 7 + 3);
+      });
+    }
+  }
+
   // Molo: en mur av steinblokker.
   function drawWall(ctx, s) {
     const dx = s.x2 - s.x1, dy = s.y2 - s.y1, len = Math.hypot(dx, dy) || 1;
@@ -1038,7 +1055,7 @@
     ctx.beginPath(); ctx.ellipse(r.x + r.r * 0.3, r.y + r.r * 0.32, r.r * 0.26, r.r * 0.14, 0.4, 0, TAU); ctx.fill();
   }
 
-  function drawLog(ctx, l) {
+  function drawLog(ctx, l, seed) {
     const dx = l.x2 - l.x1, dy = l.y2 - l.y1, len = Math.hypot(dx, dy) || 1;
     const px = -dy / len, py = dx / len;
     ctx.lineCap = 'round';
@@ -1050,7 +1067,7 @@
     ctx.beginPath(); ctx.moveTo(l.x1 - px * l.r * 0.35, l.y1 - py * l.r * 0.35); ctx.lineTo(l.x2 - px * l.r * 0.35, l.y2 - py * l.r * 0.35); ctx.stroke();
     // barkstreker
     ctx.strokeStyle = 'rgba(70,40,20,0.35)'; ctx.lineWidth = 1;
-    const rnd = rng(Math.round(l.x1 * 3 + l.y1 * 5));
+    const rnd = rng(seed != null ? seed : Math.round(l.x1 * 3 + l.y1 * 5));
     for (let s = 0.12; s < 0.9; s += 0.11) {
       const u = s + rnd() * 0.05, o = (rnd() - 0.5) * l.r;
       const x = l.x1 + dx * u + px * o, y = l.y1 + dy * u + py * o;
@@ -1322,7 +1339,30 @@
     }
   }
 
-  function drawHint(ctx, h, t) {
+  function drawHint(ctx, h, t, w) {
+    // Med tømmer i elva gjelder hintet et bestemt øyeblikk: en ring krymper
+    // inn mot punktet og lyser grønt når det er tid for å trykke.
+    if (h.at != null && w) {
+      const left = (h.at - h.win - w.steps) * C.DT;
+      const now = left <= 0;
+      if (!now) {
+        const k = Math.min(1, left / 2);
+        ctx.strokeStyle = `rgba(255,255,255,${0.35 + 0.5 * (1 - k)})`;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(h.x, h.y, 11 + 46 * k, 0, TAU); ctx.stroke();
+      } else {
+        const p = (t * 4) % 1;
+        ctx.fillStyle = 'rgba(140,240,150,0.28)';
+        ctx.beginPath(); ctx.arc(h.x, h.y, 16, 0, TAU); ctx.fill();
+        ctx.strokeStyle = `rgba(140,240,150,${0.95 * (1 - p)})`; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(h.x, h.y, 10 + p * 18, 0, TAU); ctx.stroke();
+      }
+      ctx.fillStyle = now ? 'rgba(150,245,160,1)' : 'rgba(255,236,150,0.95)';
+      ctx.beginPath(); ctx.arc(h.x, h.y, now ? 6 : 4.5, 0, TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(40,80,0,0.4)'; ctx.lineWidth = 1;
+      ctx.stroke();
+      return;
+    }
     const pulse = (t * 1.3) % 1;
     ctx.strokeStyle = `rgba(255,236,150,${0.9 * (1 - pulse)})`;
     ctx.lineWidth = 2.5;
