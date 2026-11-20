@@ -1,0 +1,3207 @@
+<title>Krusning</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#7fb850">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap">
+<style>
+/* =====================================================================
+ * Krusning – utseende på menyer og knapper (selve dammen tegnes i render.js)
+ * Layout: dammen fyller hele skjermen; en slank papir-meny flyter øverst;
+ * kort (resultat, innstillinger) folder seg opp som papir midt på.
+ * ===================================================================== */
+:root {
+  --ink: #12343d;          /* tekst */
+  --ink-soft: #4b6f78;
+  --paper: #fffaf1;        /* papirflater */
+  --paper-shade: #eadcc1;  /* papirets underkant */
+  --teal: #1d7c96;         /* ikoner og sekundærtekst */
+  --coral: #ff7657;        /* hovedknapp */
+  --coral-deep: #d9532f;
+  --sun: #ffc83d;          /* stjerner */
+  --sun-deep: #d99a0b;
+  --star-off: rgba(18, 52, 61, 0.16);
+  --pearl-a: #fbf9ff;
+  --pearl-b: #d7c8ff;
+  --pearl-c: #9f86ea;
+  --grass: #8cc35b;
+  --scrim: rgba(10, 48, 58, 0.42);
+  --toast: rgba(12, 52, 61, 0.88);
+  --fold-gap: #2e7486;     /* "hullet" bak det brettede hjørnet */
+  --font: "Fredoka", ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --r-card: 26px;
+  --r-btn: 18px;
+  color-scheme: light;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+[hidden] { display: none !important; }
+html { box-sizing: border-box; height: 100%; background: var(--grass); }
+*, *::before, *::after { box-sizing: inherit; }
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--grass);
+  color: var(--ink);
+  font-family: var(--font);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+#app { position: relative; width: 100%; height: 100%; overflow: hidden; }
+#game { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+button { font-family: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+button:focus-visible { outline: 3px solid var(--sun); outline-offset: 3px; }
+svg { fill: currentColor; }
+
+/* ---------- knapper ---------- */
+.icon-btn {
+  width: 46px; height: 46px; flex: none;
+  display: grid; place-items: center;
+  border: 0; border-radius: 50%;
+  background: var(--paper);
+  color: var(--teal);
+  box-shadow: 0 3px 0 var(--paper-shade), 0 7px 16px rgba(8, 40, 50, 0.2);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.icon-btn svg { width: 24px; height: 24px; }
+.icon-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--paper-shade), 0 4px 10px rgba(8, 40, 50, 0.2); }
+.icon-btn.small { width: 38px; height: 38px; }
+.icon-btn.small svg { width: 20px; height: 20px; }
+.icon-btn:disabled { opacity: 0.45; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 0; border-radius: var(--r-btn);
+  padding: 13px 20px;
+  font-size: 18px; font-weight: 600; line-height: 1.1;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.btn-icon { width: 20px; height: 20px; flex: none; }
+.btn-primary { background: var(--coral); color: #fff; box-shadow: 0 5px 0 var(--coral-deep), 0 12px 22px rgba(150, 50, 20, 0.28); }
+.btn-primary:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--coral-deep), 0 6px 12px rgba(150, 50, 20, 0.25); }
+.btn-paper { background: var(--paper); color: var(--teal); box-shadow: 0 4px 0 var(--paper-shade), 0 10px 20px rgba(8, 40, 50, 0.16); }
+.btn-paper:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--paper-shade), 0 5px 10px rgba(8, 40, 50, 0.16); }
+.btn-danger { background: #e2553d; color: #fff; box-shadow: 0 4px 0 #b13a25; }
+.btn.small { font-size: 15px; padding: 9px 14px; }
+.btn-big { font-size: 25px; padding: 17px 54px; min-width: 230px; border-radius: 22px; }
+.link-btn { background: none; border: 0; padding: 8px 12px; font-size: 15px; font-weight: 500; color: var(--teal); text-decoration: underline; text-underline-offset: 3px; }
+.link-btn.danger { color: #c4442c; }
+
+/* ---------- stjerner og perler ---------- */
+.star { width: 18px; height: 18px; fill: var(--sun); stroke: var(--sun-deep); stroke-width: 1.3; }
+.star.off { fill: var(--star-off); stroke: transparent; }
+.pearl, .pearl-dot {
+  display: inline-block; border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #fff 0 16%, var(--pearl-a) 26%, var(--pearl-b) 66%, var(--pearl-c) 100%);
+  box-shadow: inset -2px -3px 5px rgba(110, 80, 200, 0.25), 0 1px 3px rgba(60, 40, 120, 0.25);
+}
+.pearl-dot { width: 16px; height: 16px; }
+
+/* ---------- toppmeny ---------- */
+.hud {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 5;
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px max(10px, env(safe-area-inset-right, 0px)) 0 max(10px, env(safe-area-inset-left, 0px));
+  pointer-events: none;
+}
+.hud > * { pointer-events: auto; }
+.hud-right { display: flex; gap: 8px; }
+.hud-center {
+  flex: 1; min-width: 0; max-width: 240px; margin-inline: auto;
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 5px 14px 6px;
+  background: var(--paper);
+  border-radius: 20px;
+  box-shadow: 0 3px 0 var(--paper-shade), 0 7px 16px rgba(8, 40, 50, 0.18);
+}
+.hud-title { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; font-weight: 500; color: var(--ink-soft); }
+.hud-title #hudId { font-weight: 700; color: var(--ink); }
+.hud-row { display: flex; align-items: center; gap: 12px; }
+.hud-taps { display: inline-flex; align-items: baseline; gap: 4px; font-variant-numeric: tabular-nums; }
+.hud-taps b { font-size: 21px; font-weight: 700; line-height: 1; min-width: 0.7em; text-align: center; }
+.hud-taps small { font-size: 13px; color: var(--ink-soft); font-weight: 500; }
+.drop { width: 15px; height: 15px; fill: #3aa9c2; align-self: center; }
+.hud-stars { display: inline-flex; gap: 1px; }
+.hud-stars .star { width: 17px; height: 17px; transition: fill 0.3s ease, transform 0.3s ease; }
+.hud-stars .star.lost { animation: lose 0.6s ease; }
+@keyframes lose { 0% { transform: scale(1.5) rotate(0); } 40% { transform: scale(0.8) rotate(-20deg); } 100% { transform: scale(1) rotate(0); } }
+#btnRestart.nudge { animation: nudge 1.6s ease-in-out infinite; }
+@keyframes nudge { 0%, 70%, 100% { transform: rotate(0); } 78% { transform: rotate(-35deg) scale(1.08); } 88% { transform: rotate(10deg); } }
+#btnHint.busy svg { animation: think 0.8s ease-in-out infinite; color: var(--sun-deep); }
+@keyframes think { 50% { transform: scale(1.18); opacity: 0.6; } }
+
+.banner {
+  position: absolute; left: 50%; top: 22%; z-index: 4;
+  transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center;
+  color: #fff; text-align: center; pointer-events: none;
+  text-shadow: 0 2px 0 rgba(20, 100, 125, 0.7), 0 6px 18px rgba(8, 50, 70, 0.4);
+  animation: banner 1.9s ease forwards;
+}
+.banner b { font-size: 46px; font-weight: 700; line-height: 1; }
+.banner span { font-size: 21px; font-weight: 500; }
+@keyframes banner { 0% { opacity: 0; transform: translate(-50%, 12px); } 15%, 70% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, -10px); } }
+
+.tip {
+  position: absolute; left: 50%; bottom: 16px; z-index: 4;
+  width: max-content; max-width: min(88%, 360px);
+  transform: translateX(-50%);
+  padding: 11px 18px;
+  background: var(--paper); color: var(--ink);
+  border-radius: 18px;
+  font-size: 16px; font-weight: 500; text-align: center; line-height: 1.3; text-wrap: balance;
+  box-shadow: 0 3px 0 var(--paper-shade), 0 10px 22px rgba(8, 40, 50, 0.22);
+  pointer-events: none;
+  animation: tipIn 0.45s cubic-bezier(.2, 1.4, .4, 1) both;
+}
+.tip.out { animation: tipOut 0.35s ease forwards; }
+@keyframes tipIn { from { opacity: 0; transform: translate(-50%, 16px) scale(0.96); } }
+@keyframes tipOut { to { opacity: 0; transform: translate(-50%, 10px); } }
+
+.toast {
+  position: absolute; left: 50%; top: 74px; z-index: 30;
+  width: max-content; max-width: min(90%, 380px);
+  transform: translateX(-50%);
+  padding: 9px 16px;
+  background: var(--toast); color: #fff;
+  border-radius: 14px;
+  font-size: 15px; font-weight: 500; text-align: center;
+  pointer-events: none;
+  animation: toast 2.6s ease forwards;
+}
+@keyframes toast { 0% { opacity: 0; transform: translate(-50%, -8px); } 10%, 82% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; } }
+
+.hand { position: absolute; z-index: 6; width: 54px; height: 54px; margin: -6px 0 0 -18px; pointer-events: none; filter: drop-shadow(0 4px 6px rgba(8, 40, 50, 0.35)); }
+.hand svg { width: 100%; height: 100%; animation: handTap 1.5s ease-in-out infinite; transform-origin: 40% 10%; }
+@keyframes handTap { 0%, 100% { transform: translate(8px, 14px) scale(1); } 45% { transform: translate(0, 0) scale(1); } 55% { transform: translate(0, 0) scale(0.88); } 70% { transform: translate(0, 0) scale(1); } }
+
+/* ---------- skjermer ---------- */
+.screen { position: absolute; inset: 0; z-index: 8; display: flex; flex-direction: column; align-items: center; }
+.title-screen {
+  justify-content: space-between;
+  padding: max(7vh, 40px) max(16px, env(safe-area-inset-right, 0px)) max(4vh, 24px) max(16px, env(safe-area-inset-left, 0px));
+  pointer-events: none;
+}
+.title-screen button { pointer-events: auto; }
+.title-top { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.logo {
+  margin: 0;
+  font-size: clamp(56px, 17vw, 92px); font-weight: 700; line-height: 1; letter-spacing: 0.005em;
+  color: #fff;
+  text-shadow: 0 4px 0 #2a8eaa, 0 10px 24px rgba(8, 55, 75, 0.35);
+}
+.logo span { display: inline-block; animation: bob 3.4s ease-in-out infinite; animation-delay: calc(var(--i) * -0.24s); }
+@keyframes bob { 0%, 100% { transform: translateY(0) rotate(-2.5deg); } 50% { transform: translateY(-7px) rotate(2.5deg); } }
+.tagline { margin: 0; color: #fff; font-size: 18px; font-weight: 500; line-height: 1.35; text-align: center; white-space: pre-line; text-shadow: 0 2px 10px rgba(8, 55, 75, 0.55); }
+.title-bottom { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.title-row { display: flex; align-items: center; gap: 10px; }
+.sound-tip { margin: 2px 0 0; font-size: 13px; color: rgba(255, 255, 255, 0.92); text-shadow: 0 1px 6px rgba(8, 55, 75, 0.6); }
+
+.map-screen {
+  background: var(--scrim);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+  padding: 10px max(14px, env(safe-area-inset-right, 0px)) 14px max(14px, env(safe-area-inset-left, 0px));
+  gap: 6px;
+  overflow-y: auto;
+}
+.map-head { width: 100%; max-width: 440px; display: flex; align-items: center; gap: 10px; }
+.map-title { flex: 1; min-width: 0; color: #fff; text-shadow: 0 2px 8px rgba(8, 40, 50, 0.4); }
+.map-title small { display: block; font-size: 13px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.9; }
+.map-title h2 { margin: 0; font-size: 28px; font-weight: 700; line-height: 1.05; }
+.map-totals { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
+.tot { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px 3px 7px; background: var(--paper); border-radius: 12px; font-size: 15px; font-variant-numeric: tabular-nums; box-shadow: 0 2px 0 var(--paper-shade); }
+.tot .star { width: 16px; height: 16px; }
+.map-blurb { margin: 2px 0 6px; color: #fff; font-size: 15px; text-align: center; text-shadow: 0 1px 6px rgba(8, 40, 50, 0.5); }
+
+.level-grid {
+  width: 100%; max-width: 380px;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 16px 0;
+  margin-block: auto;
+}
+.lvl {
+  position: relative;
+  width: 33.333%; height: 96px; padding: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: none; border: 0;
+}
+.lvl .pad {
+  position: relative; width: 74px; height: 74px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: conic-gradient(from 112deg, transparent 0 20deg, #6dc05b 20deg 340deg, transparent 340deg);
+  filter: drop-shadow(0 4px 0 #3f8a36) drop-shadow(0 8px 10px rgba(8, 40, 50, 0.3));
+  transition: transform 0.1s ease;
+}
+.lvl .pad::after { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: radial-gradient(circle at 38% 32%, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 55%); pointer-events: none; }
+.lvl:active .pad { transform: scale(0.94); }
+.lvl .num { position: relative; z-index: 1; font-size: 26px; font-weight: 700; color: #fff; text-shadow: 0 2px 0 rgba(30, 90, 30, 0.55); }
+.lvl .lvl-stars { display: flex; gap: 1px; }
+.lvl .lvl-stars .star { width: 15px; height: 15px; }
+.lvl .lvl-pearl { position: absolute; top: -3px; right: -3px; z-index: 2; width: 21px; height: 21px; }
+.lvl.locked .pad { background: conic-gradient(from 112deg, transparent 0 20deg, #9db7b9 20deg 340deg, transparent 340deg); filter: drop-shadow(0 4px 0 #6f8c8f) drop-shadow(0 8px 10px rgba(8, 40, 50, 0.25)); }
+.lvl.locked .num { display: none; }
+.lvl.locked .lock { width: 24px; height: 24px; color: rgba(255, 255, 255, 0.9); position: relative; z-index: 1; }
+.lvl.current .pad { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { transform: scale(1.07); } }
+
+.world-lock {
+  width: 100%; max-width: 340px; margin-block: auto;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 26px 22px;
+  background: var(--paper); border-radius: var(--r-card);
+  box-shadow: 0 5px 0 var(--paper-shade), 0 16px 30px rgba(8, 40, 50, 0.3);
+  text-align: center;
+}
+.lock-big { width: 46px; height: 46px; color: var(--teal); }
+.lock-blurb { margin: 0; font-size: 17px; color: var(--ink); text-wrap: balance; }
+.lock-need { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink-soft); }
+.lock-bar { width: 100%; height: 12px; background: rgba(18, 52, 61, 0.1); border-radius: 8px; overflow: hidden; }
+.lock-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--sun), #ffdf7e); border-radius: 8px; transition: width 0.6s ease; }
+
+.world-nav { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
+.world-dots { display: flex; gap: 8px; }
+.world-dots i { width: 9px; height: 9px; border-radius: 50%; background: rgba(255, 255, 255, 0.45); }
+.world-dots i.on { background: #fff; transform: scale(1.25); }
+
+/* ---------- kort ---------- */
+.modal {
+  position: absolute; inset: 0; z-index: 20;
+  display: grid; place-items: center;
+  padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px));
+  background: var(--scrim);
+  animation: fadeIn 0.25s ease both;
+}
+@keyframes fadeIn { from { opacity: 0; } }
+.card {
+  position: relative; width: 100%; max-width: 360px;
+  padding: 24px 22px 16px;
+  background: var(--paper); border-radius: var(--r-card);
+  box-shadow: 0 6px 0 var(--paper-shade), 0 22px 44px rgba(8, 40, 50, 0.35);
+  animation: cardIn 0.5s cubic-bezier(.2, 1.3, .4, 1) both;
+}
+/* brettet hjørne – kortet er et papirark */
+.card::before {
+  content: ""; position: absolute; top: 0; right: 0; width: 34px; height: 34px;
+  border-top-right-radius: var(--r-card);
+  background: linear-gradient(225deg, var(--fold-gap) 0 50%, var(--paper-shade) 50% 100%);
+  box-shadow: -2px 2px 3px rgba(8, 40, 50, 0.12);
+  border-bottom-left-radius: 6px;
+}
+@keyframes cardIn { from { opacity: 0; transform: translateY(40px) scale(0.92) rotate(-1.5deg); } }
+
+.win-card { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.win-title { margin: 0; font-size: 34px; font-weight: 700; line-height: 1; color: var(--ink); text-wrap: balance; }
+.win-stars { display: flex; align-items: flex-end; gap: 4px; margin: 4px 0 0; }
+.win-stars .star { width: 54px; height: 54px; fill: var(--star-off); stroke: transparent; transform: scale(0.85); }
+.win-stars .star.big { width: 66px; height: 66px; margin-bottom: 8px; }
+.win-stars .star.on { fill: var(--sun); stroke: var(--sun-deep); stroke-width: 1; animation: starPop 0.5s cubic-bezier(.2, 1.8, .4, 1) both; }
+@keyframes starPop { 0% { transform: scale(0.2) rotate(-40deg); } 100% { transform: scale(1) rotate(0); } }
+.win-stats { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 500; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.badge { padding: 3px 9px; border-radius: 10px; background: #e7f7ef; color: #23845a; font-size: 13px; font-weight: 600; }
+.pearl-box {
+  width: 100%; display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; margin-top: 2px;
+  background: linear-gradient(135deg, #f6f2ff, #ece4ff);
+  border-radius: 16px; text-align: left;
+}
+.pearl-box .pearl { width: 34px; height: 34px; flex: none; }
+.pearl-box.missing .pearl { filter: grayscale(1) opacity(0.35); }
+.pearl-box.found .pearl { animation: pearlShine 1.2s ease 0.2s both; }
+@keyframes pearlShine { 0% { transform: scale(0) rotate(-90deg); } 60% { transform: scale(1.35) rotate(10deg); box-shadow: 0 0 0 10px rgba(200, 180, 255, 0.35); } 100% { transform: scale(1); } }
+.pearl-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pearl-text b { font-size: 16px; font-weight: 600; color: #4a3a8a; }
+.pearl-text span { font-size: 14px; color: #6a5aa8; line-height: 1.25; }
+.win-actions { width: 100%; display: grid; grid-template-columns: 1fr 1.25fr; gap: 10px; margin-top: 6px; }
+.win-actions .btn { padding: 14px 10px; font-size: 17px; }
+
+.settings-card { display: flex; flex-direction: column; gap: 4px; }
+.card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; padding-right: 26px; }
+.card-head h2 { margin: 0; font-size: 26px; font-weight: 700; }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid rgba(18, 52, 61, 0.08); font-size: 17px; }
+.toggle { position: relative; width: 54px; height: 32px; padding: 0; border: 0; border-radius: 20px; background: rgba(18, 52, 61, 0.18); transition: background 0.2s ease; }
+.toggle i { position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); transition: transform 0.2s ease; }
+.toggle[aria-checked="true"] { background: #39b37f; }
+.toggle[aria-checked="true"] i { transform: translateX(22px); }
+.seg { display: inline-flex; padding: 3px; background: rgba(18, 52, 61, 0.09); border-radius: 12px; }
+.seg button { border: 0; background: none; padding: 6px 11px; border-radius: 9px; font-size: 15px; font-weight: 500; color: var(--ink-soft); }
+.seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.set-reset { display: flex; flex-direction: column; align-items: flex-start; padding-top: 8px; }
+.confirm { display: flex; flex-direction: column; gap: 8px; padding: 6px 12px 4px; font-size: 15px; }
+.confirm-btns { display: flex; gap: 8px; }
+.credits { margin: 10px 0 2px; font-size: 13px; line-height: 1.4; color: var(--ink-soft); }
+
+.fade { position: absolute; inset: 0; z-index: 40; background: #c9f1f2; opacity: 0; pointer-events: none; transition: opacity 0.22s ease; }
+.fade.on { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .logo span, .lvl.current .pad, #btnRestart.nudge, .hand svg { animation: none; }
+  .card, .tip, .banner { animation-duration: 0.01s; }
+}
+@media (max-height: 640px) {
+  .level-grid { gap: 8px 0; }
+  .lvl { height: 88px; }
+  .lvl .pad { width: 64px; height: 64px; }
+  .btn-big { padding: 14px 44px; }
+}
+
+</style>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2.8l2.85 5.8 6.4.93-4.63 4.5 1.1 6.37L12 17.4l-5.72 3 1.1-6.37-4.63-4.5 6.4-.93z" stroke-linejoin="round"/></symbol>
+    <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 2.6C9.2 6.9 6.2 10.1 6.2 14a5.8 5.8 0 0 0 11.6 0c0-3.9-3-7.1-5.8-11.4z"/></symbol>
+    <symbol id="i-restart" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M4 3.8v4.6h4.6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9.2 18.2h5.6M10.2 21h3.6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.2h5c0-.9.4-1.7 1.1-2.2A6 6 0 0 0 12 3z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><g fill="currentColor"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></g></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M4 7.5h9M18 7.5h2M4 16.5h3M11 16.5h9"/><circle cx="15.5" cy="7.5" r="2.4"/><circle cx="8.5" cy="16.5" r="2.4"/></g></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M14.5 5.5L8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="M9.5 5.5L16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="3" fill="currentColor"/><path d="M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5" fill="none" stroke="currentColor" stroke-width="2.4"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
+  </defs>
+</svg>
+
+<div id="app">
+  <canvas id="game" aria-label="Dammen"></canvas>
+
+  <!-- toppmeny under spilling -->
+  <div id="hud" class="hud" hidden>
+    <button id="btnLevels2" class="icon-btn" aria-label="Baner"><svg><use href="#i-grid"/></svg></button>
+    <div class="hud-center">
+      <div class="hud-title"><span id="hudId">1-1</span> · <span id="hudName">Første krusning</span></div>
+      <div class="hud-row">
+        <span class="hud-taps"><svg class="drop"><use href="#i-drop"/></svg><b id="hudTaps">0</b><small id="hudPar">par 1</small></span>
+        <span class="hud-stars" id="hudStars">
+          <svg class="star"><use href="#i-star"/></svg><svg class="star"><use href="#i-star"/></svg><svg class="star"><use href="#i-star"/></svg>
+        </span>
+      </div>
+    </div>
+    <div class="hud-right">
+      <button id="btnHint" class="icon-btn" aria-label="Hint"><svg><use href="#i-bulb"/></svg></button>
+      <button id="btnRestart" class="icon-btn" aria-label="Start på nytt"><svg><use href="#i-restart"/></svg></button>
+    </div>
+  </div>
+
+  <div id="banner" class="banner" hidden><b id="bannerId">1-1</b><span id="bannerName"></span></div>
+  <div id="tip" class="tip" hidden><span id="tipText"></span></div>
+  <div id="toast" class="toast" hidden></div>
+
+  <div id="hand" class="hand" hidden aria-hidden="true">
+    <svg viewBox="0 0 64 64"><path d="M26 9c-2.8 0-4.8 2.2-4.8 5v22.5l-3.6-3.4c-2-1.9-5.1-1.9-7 .1-1.8 1.9-1.7 4.8.1 6.6l13 13.2C27 56.3 30.6 58 34.6 58H40c8 0 14.5-6.5 14.5-14.5V31c0-2.6-2.1-4.6-4.6-4.6-1 0-1.9.3-2.6.8-.5-2.1-2.4-3.6-4.6-3.6-1.1 0-2.1.4-2.9 1-.7-1.8-2.4-3.1-4.5-3.1-.9 0-1.8.3-2.5.7V14c0-2.8-2-5-4.8-5z" fill="#fff" stroke="#12343d" stroke-width="3" stroke-linejoin="round"/></svg>
+  </div>
+
+  <!-- tittelskjerm -->
+  <section id="title" class="screen title-screen">
+    <div class="title-top">
+      <h1 class="logo" id="logo" aria-label="Krusning">Krusning</h1>
+      <p class="tagline" id="tagline"></p>
+    </div>
+    <div class="title-bottom">
+      <button id="btnPlay" class="btn btn-primary btn-big">Spill</button>
+      <div class="title-row">
+        <button id="btnLevels" class="btn btn-paper"><svg class="btn-icon"><use href="#i-grid"/></svg><span id="btnLevelsTxt">Baner</span></button>
+        <button id="btnSettings" class="icon-btn" aria-label="Innstillinger"><svg><use href="#i-sliders"/></svg></button>
+      </div>
+      <p class="sound-tip" id="soundTip"></p>
+    </div>
+  </section>
+
+  <!-- banekart -->
+  <section id="map" class="screen map-screen" hidden>
+    <header class="map-head">
+      <button id="mapBack" class="icon-btn" aria-label="Tilbake"><svg><use href="#i-back"/></svg></button>
+      <div class="map-title">
+        <small id="mapWorldNo">Verden 1</small>
+        <h2 id="mapWorldName">Dammen</h2>
+      </div>
+      <div class="map-totals">
+        <span class="tot"><svg class="star"><use href="#i-star"/></svg><b id="mapStars">0</b></span>
+        <span class="tot"><i class="pearl-dot"></i><b id="mapPearls">0</b></span>
+      </div>
+    </header>
+    <p class="map-blurb" id="mapBlurb"></p>
+    <div class="level-grid" id="levelGrid"></div>
+    <div class="world-lock" id="worldLock" hidden>
+      <svg class="lock-big"><use href="#i-lock"/></svg>
+      <p class="lock-blurb" id="lockBlurb"></p>
+      <p class="lock-need" id="lockNeed"></p>
+      <div class="lock-bar"><i id="lockBarFill"></i></div>
+    </div>
+    <nav class="world-nav">
+      <button id="worldPrev" class="icon-btn" aria-label="Forrige verden"><svg><use href="#i-back"/></svg></button>
+      <div class="world-dots" id="worldDots"></div>
+      <button id="worldNext" class="icon-btn" aria-label="Neste verden"><svg><use href="#i-next"/></svg></button>
+    </nav>
+  </section>
+
+  <!-- resultat -->
+  <div id="win" class="modal" hidden>
+    <div class="card win-card">
+      <h2 class="win-title" id="winTitle">Strålende!</h2>
+      <div class="win-stars" id="winStars">
+        <svg class="star"><use href="#i-star"/></svg><svg class="star big"><use href="#i-star"/></svg><svg class="star"><use href="#i-star"/></svg>
+      </div>
+      <p class="win-stats"><span id="winStats"></span><span class="badge" id="winBest" hidden></span></p>
+      <div class="pearl-box" id="pearlBox">
+        <i class="pearl"></i>
+        <div class="pearl-text"><b id="pearlTitle"></b><span id="pearlSub"></span></div>
+      </div>
+      <div class="win-actions">
+        <button id="btnRetry" class="btn btn-paper"><svg class="btn-icon"><use href="#i-restart"/></svg><span id="btnRetryTxt">Prøv igjen</span></button>
+        <button id="btnNext" class="btn btn-primary"><span id="btnNextTxt">Neste</span><svg class="btn-icon"><use href="#i-next"/></svg></button>
+      </div>
+      <button id="btnWinMap" class="link-btn">Baner</button>
+    </div>
+  </div>
+
+  <!-- innstillinger -->
+  <div id="settings" class="modal" hidden>
+    <div class="card settings-card">
+      <div class="card-head">
+        <h2 id="setTitle">Innstillinger</h2>
+        <button id="setClose" class="icon-btn small" aria-label="Lukk"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="set-row"><span id="setSfxLbl">Lydeffekter</span><button id="setSfx" class="toggle" role="switch" aria-checked="true"><i></i></button></div>
+      <div class="set-row"><span id="setMusicLbl">Musikk</span><button id="setMusic" class="toggle" role="switch" aria-checked="true"><i></i></button></div>
+      <div class="set-row"><span id="setLangLbl">Språk</span>
+        <div class="seg" id="setLang"><button data-lang="no">Norsk</button><button data-lang="en">English</button></div>
+      </div>
+      <div class="set-reset">
+        <button id="setReset" class="link-btn danger">Nullstill fremgang</button>
+        <div class="confirm" id="resetConfirm" hidden>
+          <span id="resetAsk">Slette all fremgang?</span>
+          <div class="confirm-btns"><button id="resetNo" class="btn btn-paper small">Avbryt</button><button id="resetYes" class="btn btn-danger small">Ja, slett</button></div>
+        </div>
+      </div>
+      <p class="credits" id="credits"></p>
+    </div>
+  </div>
+
+  <div id="fade" class="fade"></div>
+</div>
+
+<script>
+/* =====================================================================
+ * Krusning – tekster (norsk og engelsk)
+ * ---------------------------------------------------------------------
+ * Legg til et nytt språk ved å kopiere "en"-blokken og oversette.
+ * {n}, {par} osv. byttes ut med tall når teksten vises.
+ * ===================================================================== */
+(function (root) {
+  'use strict';
+  const STRINGS = {
+    no: {
+      tagline: 'Hjelp papirbåtene hjem.\nÉn krusning om gangen.',
+      play: 'Spill',
+      continueAt: 'Fortsett · {id}',
+      levels: 'Baner',
+      settings: 'Innstillinger',
+      soundTip: 'Slå av lydløs-modus for lyd',
+      ripple1: 'krusning', rippleN: 'krusninger',
+      par: 'par',
+      world: 'Verden {n}',
+      next: 'Neste',
+      retry: 'Prøv igjen',
+      retryFor3: 'Prøv igjen for ★★★',
+      toMap: 'Til banene',
+      win1: 'I havn!', win2: 'Godt jobba!', win3: 'Strålende!', winPearl: 'Perfekt!',
+      usedOfPar: '{used} · par {par}',
+      newBest: 'Ny rekord',
+      pearlFound: 'Du fant perla!',
+      pearlFoundSub: 'Ingen kjent løsning er bedre enn din.',
+      pearlHave: 'Perla er funnet',
+      pearlHaveSub: 'Beste løsning: {used}.',
+      pearlGoal: 'Perle: klar det med {used}',
+      pearlTease: 'Det går an. Klarer du å finne måten?',
+      pearlHintUsed: 'Perla må finnes uten hint.',
+      locked: 'Låst',
+      unlockStars: 'Samle {n} ★ for å åpne',
+      unlockPearls: 'Samle {n} perler for å åpne',
+      soon: 'Kommer snart',
+      demoSoon: 'Kommer i neste versjon av demoen',
+      stars: 'stjerner', pearls: 'perler',
+      sound: 'Lydeffekter', music: 'Musikk', language: 'Språk',
+      on: 'På', off: 'Av',
+      reset: 'Nullstill fremgang',
+      resetAsk: 'Slette all fremgang?',
+      resetYes: 'Ja, slett',
+      cancel: 'Avbryt',
+      close: 'Lukk',
+      hint: 'Hint',
+      hintThinking: 'Tenker …',
+      hintWait: 'Vent til vannet er rolig',
+      hintUsed: 'Hint brukt – perla må finnes uten hjelp',
+      hintNone: 'Fant ikke noe godt trykk. Prøv å starte på nytt.',
+      restart: 'Start på nytt',
+      back: 'Tilbake',
+      unlocked: '{name} er åpnet!',
+      needStars: 'Samle {n} ★ til for å åpne {name}',
+      credits: 'Laget med Claude Code. Alt kjører lokalt på enheten – ingen konto, ingen server.',
+      tapToStart: 'Trykk på vannet',
+    },
+    en: {
+      tagline: 'Guide the paper boats home.\nOne ripple at a time.',
+      play: 'Play',
+      continueAt: 'Continue · {id}',
+      levels: 'Levels',
+      settings: 'Settings',
+      soundTip: 'Turn off silent mode for sound',
+      ripple1: 'ripple', rippleN: 'ripples',
+      par: 'par',
+      world: 'World {n}',
+      next: 'Next',
+      retry: 'Try again',
+      retryFor3: 'Try again for ★★★',
+      toMap: 'Levels',
+      win1: 'Home!', win2: 'Nice!', win3: 'Brilliant!', winPearl: 'Perfect!',
+      usedOfPar: '{used} · par {par}',
+      newBest: 'New best',
+      pearlFound: 'You found the pearl!',
+      pearlFoundSub: 'No known solution beats yours.',
+      pearlHave: 'Pearl found',
+      pearlHaveSub: 'Best solution: {used}.',
+      pearlGoal: 'Pearl: solve it in {used}',
+      pearlTease: 'It can be done. Can you find how?',
+      pearlHintUsed: 'Pearls must be found without hints.',
+      locked: 'Locked',
+      unlockStars: 'Collect {n} ★ to unlock',
+      unlockPearls: 'Collect {n} pearls to unlock',
+      soon: 'Coming soon',
+      demoSoon: 'Coming in the next demo version',
+      stars: 'stars', pearls: 'pearls',
+      sound: 'Sound effects', music: 'Music', language: 'Language',
+      on: 'On', off: 'Off',
+      reset: 'Reset progress',
+      resetAsk: 'Delete all progress?',
+      resetYes: 'Yes, delete',
+      cancel: 'Cancel',
+      close: 'Close',
+      hint: 'Hint',
+      hintThinking: 'Thinking …',
+      hintWait: 'Wait until the water is calm',
+      hintUsed: 'Hint used – pearls must be found unaided',
+      hintNone: 'No good move found. Try restarting.',
+      restart: 'Restart',
+      back: 'Back',
+      unlocked: '{name} is open!',
+      needStars: 'Collect {n} more ★ to open {name}',
+      credits: 'Made with Claude Code. Everything runs on your device – no account, no server.',
+      tapToStart: 'Tap the water',
+    },
+  };
+
+  const I18N = { lang: 'no', STRINGS };
+  I18N.t = function (key, vars) {
+    const table = STRINGS[I18N.lang] || STRINGS.no;
+    let s = table[key] != null ? table[key] : (STRINGS.no[key] != null ? STRINGS.no[key] : key);
+    if (vars) for (const k in vars) s = s.split('{' + k + '}').join(vars[k]);
+    return s;
+  };
+  // "3 krusninger", "1 krusning"
+  I18N.ripples = function (n) { return n + ' ' + I18N.t(n === 1 ? 'ripple1' : 'rippleN'); };
+  // tekst fra banefila: { no: '…', en: '…' } eller vanlig tekst
+  I18N.pick = function (v) {
+    if (v == null) return '';
+    if (typeof v === 'string') return v;
+    return v[I18N.lang] || v.no || v.en || '';
+  };
+
+  root.I18N = I18N;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* =====================================================================
+ * Krusning – fysikkmotor
+ * ---------------------------------------------------------------------
+ * Ren simulering: ingen tegning, ingen lyd, ingen tilfeldighet.
+ * Samme trykk gir alltid samme resultat (deterministisk), slik at
+ * spillet er rettferdig og at verktøyet tools/solve.js kan teste
+ * og løse banene automatisk.
+ *
+ * Koordinater: dammen er alltid C.W × C.H enheter (360 × 600),
+ * origo øverst til venstre. Skjermen skaleres for å passe.
+ * ===================================================================== */
+(function (root) {
+  'use strict';
+
+  // Alle "følelses-tall" samlet på ett sted. Endre forsiktig: banene
+  // er testet med disse verdiene (kjør `node tools/solve.js` etterpå).
+  const C = {
+    W: 360, H: 600, CORNER: 34,   // dammens størrelse og hjørneradius
+    DT: 1 / 120,                  // fast tidssteg (sekunder)
+
+    RIPPLE_SPEED: 250,            // hvor fort krusningen sprer seg
+    RIPPLE_RANGE: 300,            // hvor langt den rekker
+    FALLOFF_POW: 1.25,            // hvor raskt kraften avtar med avstand
+    PUSH: 580,                    // maks fartsøkning fra én krusning
+    PUSH_STEPS: 8,                // dyttet fordeles over N steg (mykere)
+
+    DRAG: 1.3,                    // vannmotstand (eksponentiell)
+    FRICTION: 15,                 // ekstra brems så ting faktisk stopper
+
+    BOAT_R: 13,
+    DOCK_R: 24,                   // tegnet størrelse på havna
+    CAPTURE_R: 19,                // båtens sentrum må innenfor dette
+    ATTRACT_R: 44,                // havna "trekker" i båter innenfor dette
+    ATTRACT: 700,
+
+    REST_WALL: 0.55,              // sprett mot bredden
+    REST_STATIC: 0.6,             // sprett mot stein og stokker
+    REST_BODY: 0.85,              // sprett båt mot båt
+
+    PAD_MASS: 3,                  // vannliljer er tunge…
+    PAD_DRAG: 2.4,                // …og bremser fort
+
+    CURRENT_GRIP: 1.6,            // hvor fort båter tar opp farten til strømmen
+
+    WHIRL_PULL: 330,              // strømvirvel: sug inn mot midten
+    WHIRL_SWIRL: 170,             // strømvirvel: sirkelbevegelse
+    SINK_R: 9,
+    SINK_TIME: 1.1,
+
+    SETTLE_V: 3,
+    MAX_RIPPLES: 16,
+  };
+
+  const DRAG_MUL_BOAT = Math.exp(-C.DRAG * C.DT);
+  const DRAG_MUL_PAD = Math.exp(-C.PAD_DRAG * C.DT);
+  const GRIP_MUL = Math.exp(-C.CURRENT_GRIP * C.DT);
+
+  /* ---------- oppretting ---------- */
+
+  function createWorld(level) {
+    const w = {
+      level,
+      t: 0, steps: 0, taps: 0,
+      bodies: [], boats: [], pads: [],
+      docks: [], rocks: [], logs: [], whirls: [], currents: [],
+      ripples: [], events: [], rippleSeq: 0,
+      done: false, doneAt: -1,
+    };
+
+    (level.boats || []).forEach((b, i) => {
+      const body = {
+        kind: 'boat', id: w.bodies.length, idx: i,
+        x: b.x, y: b.y, vx: 0, vy: 0,
+        r: C.BOAT_R, mass: 1, drag: DRAG_MUL_BOAT,
+        color: b.color != null ? b.color : i,
+        angle: b.angle != null ? b.angle : -Math.PI / 2,
+        dock: -1, dockT: 0, sink: 0, sinkX: 0, sinkY: 0,
+        sx: b.x, sy: b.y, pushes: [],
+      };
+      w.bodies.push(body); w.boats.push(body);
+    });
+
+    (level.pads || []).forEach((p) => {
+      const r = p.r || 20;
+      const body = {
+        kind: 'pad', id: w.bodies.length,
+        x: p.x, y: p.y, vx: 0, vy: 0,
+        r, mass: C.PAD_MASS * (r / 20) * (r / 20), drag: DRAG_MUL_PAD,
+        angle: p.angle || 0, flower: !!p.flower,
+        dock: -1, sink: 0, pushes: [],
+      };
+      w.bodies.push(body); w.pads.push(body);
+    });
+
+    (level.docks || []).forEach((d) => w.docks.push({
+      x: d.x, y: d.y, r: C.DOCK_R,
+      color: d.color != null ? d.color : -1,
+      boat: -1, angle: d.angle != null ? d.angle : -Math.PI / 2,
+    }));
+    (level.rocks || []).forEach((r, i) => w.rocks.push({ x: r.x, y: r.y, r: r.r || 20, seed: i * 7 + 3 }));
+    (level.logs || []).forEach((l) => w.logs.push({ x1: l.x1, y1: l.y1, x2: l.x2, y2: l.y2, r: l.r || 8 }));
+    (level.whirls || []).forEach((v) => w.whirls.push({ x: v.x, y: v.y, r: v.r || 60, power: v.power || 1, dir: v.dir || 1 }));
+    (level.currents || []).forEach((c) => w.currents.push({ x: c.x, y: c.y, w: c.w, h: c.h, vx: c.vx || 0, vy: c.vy || 0 }));
+    return w;
+  }
+
+  /* ---------- krusninger ---------- */
+
+  function falloff(d) {
+    if (d >= C.RIPPLE_RANGE) return 0;
+    return Math.pow(1 - d / C.RIPPLE_RANGE, C.FALLOFF_POW);
+  }
+
+  function insidePond(x, y, margin) {
+    const m = margin || 0, R = C.CORNER;
+    if (x < m || y < m || x > C.W - m || y > C.H - m) return false;
+    const cx = x < R ? R : x > C.W - R ? C.W - R : x;
+    const cy = y < R ? R : y > C.H - R ? C.H - R : y;
+    const dx = x - cx, dy = y - cy;
+    return dx * dx + dy * dy <= (R - m) * (R - m);
+  }
+
+  function tap(w, x, y) {
+    if (!insidePond(x, y, 2)) return false;
+    if (w.ripples.length >= C.MAX_RIPPLES) w.ripples.shift();
+    w.ripples.push({ id: ++w.rippleSeq, x, y, r: 0, hit: [] });
+    w.taps++;
+    w.events.push({ type: 'tap', x, y });
+    return true;
+  }
+
+  // Brukes til siktehjelpen: hvilke ting vil bli dyttet, hvor og hvor mye.
+  function preview(w, x, y) {
+    const out = [];
+    for (const b of w.bodies) {
+      if (b.dock >= 0 || b.sink > 0) continue;
+      const dx = b.x - x, dy = b.y - y;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      const f = falloff(d);
+      if (f <= 0.02) continue;
+      out.push({
+        body: b,
+        nx: d > 1e-6 ? dx / d : 0,
+        ny: d > 1e-6 ? dy / d : -1,
+        f, v: (C.PUSH * f) / b.mass,
+      });
+    }
+    return out;
+  }
+
+  /* ---------- simulering ---------- */
+
+  function step(w) {
+    const dt = C.DT;
+    w.t += dt; w.steps++;
+
+    // 1) krusningene vokser og treffer ting
+    for (let i = w.ripples.length - 1; i >= 0; i--) {
+      const rp = w.ripples[i];
+      rp.r += C.RIPPLE_SPEED * dt;
+      for (const b of w.bodies) {
+        if (b.dock >= 0 || b.sink > 0) continue;
+        if (rp.hit.indexOf(b.id) >= 0) continue;
+        const dx = b.x - rp.x, dy = b.y - rp.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (rp.r < d - b.r) continue;
+        rp.hit.push(b.id);
+        const f = falloff(d);
+        if (f <= 0) continue;
+        let nx = 0, ny = -1;
+        if (d > 1e-6) { nx = dx / d; ny = dy / d; }
+        const j = (C.PUSH * f) / b.mass / C.PUSH_STEPS;
+        b.pushes.push(nx * j, ny * j, C.PUSH_STEPS);
+        w.events.push({ type: 'hit', id: b.id, f, x: b.x, y: b.y });
+      }
+      if (rp.r > C.RIPPLE_RANGE + 24) w.ripples.splice(i, 1);
+    }
+
+    // 2) krefter og bevegelse
+    for (const b of w.bodies) {
+      if (b.dock >= 0) { dockedUpdate(w, b); continue; }
+      if (b.sink > 0) { sinkUpdate(w, b, dt); continue; }
+
+      if (b.pushes.length) {
+        let out = 0;
+        for (let k = 0; k < b.pushes.length; k += 3) {
+          b.vx += b.pushes[k]; b.vy += b.pushes[k + 1];
+          const left = b.pushes[k + 2] - 1;
+          if (left > 0) {
+            b.pushes[out] = b.pushes[k]; b.pushes[out + 1] = b.pushes[k + 1];
+            b.pushes[out + 2] = left; out += 3;
+          }
+        }
+        b.pushes.length = out;
+      }
+
+      // strøm i vannet (bekker)
+      let fx = 0, fy = 0, inCurrent = false;
+      for (const c of w.currents) {
+        if (b.x >= c.x && b.x <= c.x + c.w && b.y >= c.y && b.y <= c.y + c.h) { fx += c.vx; fy += c.vy; inCurrent = true; }
+      }
+
+      // strømvirvler
+      for (const v of w.whirls) {
+        const dx = v.x - b.x, dy = v.y - b.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < v.r && d > 1e-6) {
+          const s = 1 - d / v.r;
+          const pull = C.WHIRL_PULL * v.power * s;
+          const swirl = C.WHIRL_SWIRL * v.power * s * v.dir;
+          const ux = dx / d, uy = dy / d;
+          b.vx += (ux * pull - uy * swirl) * dt;
+          b.vy += (uy * pull + ux * swirl) * dt;
+          if (b.kind === 'boat' && d < C.SINK_R) { startSink(w, b, v); break; }
+        }
+      }
+      if (b.sink > 0) continue;
+
+      // havna trekker forsiktig i båter som kommer nær
+      if (b.kind === 'boat') {
+        for (const dk of w.docks) {
+          if (dk.boat >= 0 || (dk.color >= 0 && dk.color !== b.color)) continue;
+          const dx = dk.x - b.x, dy = dk.y - b.y;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d < C.ATTRACT_R && d > 1e-6) {
+            const s = 1 - d / C.ATTRACT_R;
+            b.vx += (dx / d) * C.ATTRACT * s * dt;
+            b.vy += (dy / d) * C.ATTRACT * s * dt;
+            const damp = 1 - 3 * s * dt;
+            b.vx *= damp; b.vy *= damp;
+          }
+        }
+      }
+
+      // vannmotstand (relativt til strømmen; i strøm griper vannet hardere)
+      const dm = inCurrent ? b.drag * GRIP_MUL : b.drag;
+      let rvx = (b.vx - fx) * dm, rvy = (b.vy - fy) * dm;
+      const sp = Math.sqrt(rvx * rvx + rvy * rvy);
+      if (sp > 0) {
+        const ns = sp - C.FRICTION * dt;
+        const k = ns > 0 ? ns / sp : 0;
+        rvx *= k; rvy *= k;
+      }
+      b.vx = fx + rvx; b.vy = fy + rvy;
+      b.x += b.vx * dt; b.y += b.vy * dt;
+    }
+
+    // 3) kollisjoner
+    const n = w.bodies.length;
+    for (let iter = 0; iter < 2; iter++) {
+      const report = iter === 0;
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) collideBodies(w, w.bodies[i], w.bodies[j], report);
+      }
+      for (const b of w.bodies) {
+        if (b.sink > 0 || b.dock >= 0) continue;
+        for (const r of w.rocks) collideStatic(w, b, r.x, r.y, r.r, C.REST_STATIC, report, 'rock');
+        for (const l of w.logs) {
+          const abx = l.x2 - l.x1, aby = l.y2 - l.y1;
+          const len2 = abx * abx + aby * aby || 1;
+          let t = ((b.x - l.x1) * abx + (b.y - l.y1) * aby) / len2;
+          t = t < 0 ? 0 : t > 1 ? 1 : t;
+          collideStatic(w, b, l.x1 + abx * t, l.y1 + aby * t, l.r, C.REST_STATIC, report, 'log');
+        }
+        collideBounds(w, b, report);
+      }
+    }
+
+    // 4) inn i havn?
+    for (const b of w.boats) {
+      if (b.dock >= 0 || b.sink > 0) continue;
+      for (let di = 0; di < w.docks.length; di++) {
+        const dk = w.docks[di];
+        if (dk.boat >= 0 || (dk.color >= 0 && dk.color !== b.color)) continue;
+        const dx = dk.x - b.x, dy = dk.y - b.y;
+        if (dx * dx + dy * dy < C.CAPTURE_R * C.CAPTURE_R) {
+          b.dock = di; dk.boat = b.id;
+          b.vx = 0; b.vy = 0; b.pushes.length = 0; b.dockT = 0;
+          const count = w.boats.filter((o) => o.dock >= 0).length;
+          w.events.push({ type: 'dock', id: b.id, dock: di, x: dk.x, y: dk.y, n: count, of: w.boats.length });
+          break;
+        }
+      }
+    }
+
+    if (!w.done && w.boats.length && w.boats.every((b) => b.dock >= 0)) {
+      w.done = true; w.doneAt = w.t;
+      w.events.push({ type: 'complete', taps: w.taps });
+    }
+  }
+
+  function dockedUpdate(w, b) {
+    const dk = w.docks[b.dock];
+    b.x += (dk.x - b.x) * 0.14;
+    b.y += (dk.y - b.y) * 0.14;
+    b.dockT += C.DT;
+  }
+
+  function startSink(w, b, v) {
+    b.sink = 1e-6; b.sinkX = v.x; b.sinkY = v.y;
+    b.vx = 0; b.vy = 0; b.pushes.length = 0;
+    w.events.push({ type: 'sink', id: b.id, x: v.x, y: v.y });
+  }
+
+  function sinkUpdate(w, b, dt) {
+    b.sink += dt;
+    b.x += (b.sinkX - b.x) * 0.12;
+    b.y += (b.sinkY - b.y) * 0.12;
+    if (b.sink >= C.SINK_TIME) {
+      b.sink = 0; b.x = b.sx; b.y = b.sy; b.vx = 0; b.vy = 0;
+      w.events.push({ type: 'respawn', id: b.id, x: b.x, y: b.y });
+    }
+  }
+
+  function bump(w, report, x, y, v, what) {
+    if (report && v > 30) w.events.push({ type: 'bump', x, y, v, what });
+  }
+
+  function collideStatic(w, b, x, y, r, e, report, what) {
+    const dx = b.x - x, dy = b.y - y;
+    const rr = b.r + r;
+    const d2 = dx * dx + dy * dy;
+    if (d2 >= rr * rr) return;
+    const d = Math.sqrt(d2) || 1e-6;
+    const nx = dx / d, ny = dy / d;
+    b.x = x + nx * rr; b.y = y + ny * rr;
+    const vn = b.vx * nx + b.vy * ny;
+    if (vn < 0) {
+      b.vx -= (1 + e) * vn * nx; b.vy -= (1 + e) * vn * ny;
+      bump(w, report, x + nx * r, y + ny * r, -vn, what);
+    }
+  }
+
+  function collideBounds(w, b, report) {
+    const r = b.r, R = C.CORNER, W = C.W, H = C.H, e = C.REST_WALL;
+    let cx = -1, cy = -1;
+    if (b.x < R) cx = R; else if (b.x > W - R) cx = W - R;
+    if (b.y < R) cy = R; else if (b.y > H - R) cy = H - R;
+    if (cx >= 0 && cy >= 0) {
+      const dx = b.x - cx, dy = b.y - cy;
+      const d = Math.sqrt(dx * dx + dy * dy) || 1e-6;
+      const lim = R - r;
+      if (d > lim) {
+        const nx = dx / d, ny = dy / d;
+        b.x = cx + nx * lim; b.y = cy + ny * lim;
+        const vo = b.vx * nx + b.vy * ny;
+        if (vo > 0) {
+          b.vx -= (1 + e) * vo * nx; b.vy -= (1 + e) * vo * ny;
+          bump(w, report, cx + nx * R, cy + ny * R, vo, 'shore');
+        }
+      }
+      return;
+    }
+    if (b.x < r) { b.x = r; if (b.vx < 0) { bump(w, report, 0, b.y, -b.vx, 'shore'); b.vx = -b.vx * e; } }
+    else if (b.x > W - r) { b.x = W - r; if (b.vx > 0) { bump(w, report, W, b.y, b.vx, 'shore'); b.vx = -b.vx * e; } }
+    if (b.y < r) { b.y = r; if (b.vy < 0) { bump(w, report, b.x, 0, -b.vy, 'shore'); b.vy = -b.vy * e; } }
+    else if (b.y > H - r) { b.y = H - r; if (b.vy > 0) { bump(w, report, b.x, H, b.vy, 'shore'); b.vy = -b.vy * e; } }
+  }
+
+  function collideBodies(w, a, b, report) {
+    if (a.sink > 0 || b.sink > 0) return;
+    const aS = a.dock >= 0, bS = b.dock >= 0;
+    if (aS && bS) return;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const rr = a.r + b.r;
+    const d2 = dx * dx + dy * dy;
+    if (d2 >= rr * rr) return;
+    const d = Math.sqrt(d2) || 1e-6;
+    const nx = dx / d, ny = dy / d;
+    const ia = aS ? 0 : 1 / a.mass, ib = bS ? 0 : 1 / b.mass, it = ia + ib;
+    const pen = rr - d;
+    a.x -= (nx * pen * ia) / it; a.y -= (ny * pen * ia) / it;
+    b.x += (nx * pen * ib) / it; b.y += (ny * pen * ib) / it;
+    const vn = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+    if (vn < 0) {
+      const jj = (-(1 + C.REST_BODY) * vn) / it;
+      a.vx -= jj * nx * ia; a.vy -= jj * ny * ia;
+      b.vx += jj * nx * ib; b.vy += jj * ny * ib;
+      bump(w, report, a.x + nx * a.r, a.y + ny * a.r, -vn, a.kind === 'pad' || b.kind === 'pad' ? 'pad' : 'boat');
+    }
+  }
+
+  /* ---------- tilstand ---------- */
+
+  function isSettled(w) {
+    if (w.ripples.length) return false;
+    for (const b of w.bodies) {
+      if (b.sink > 0) return false;
+      if (b.dock >= 0) continue;
+      if (b.pushes.length) return false;
+      if (b.vx * b.vx + b.vy * b.vy > C.SETTLE_V * C.SETTLE_V) return false;
+    }
+    return true;
+  }
+
+  // Lett kopi av en verden i ro (brukes av løseren).
+  function clone(w) {
+    const c = Object.assign({}, w);
+    c.bodies = w.bodies.map((b) => Object.assign({}, b, { pushes: b.pushes.slice() }));
+    c.boats = c.bodies.filter((b) => b.kind === 'boat');
+    c.pads = c.bodies.filter((b) => b.kind === 'pad');
+    c.docks = w.docks.map((d) => Object.assign({}, d));
+    c.ripples = w.ripples.map((r) => Object.assign({}, r, { hit: r.hit.slice() }));
+    c.events = [];
+    return c;
+  }
+
+  const Engine = { C, createWorld, step, tap, preview, falloff, insidePond, isSettled, clone };
+  root.Engine = Engine;
+  if (typeof module !== 'undefined' && module.exports) module.exports = Engine;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* =====================================================================
+ * Krusning – baner
+ * ---------------------------------------------------------------------
+ * Dette er fila du (eller AI) oftest endrer. Hver bane er bare data.
+ *
+ * Dammen er 360 bred og 600 høy. (0,0) er øverst til venstre.
+ *   boats:  båter            { x, y }            (color: valgfri farge-indeks)
+ *   docks:  havner           { x, y }            (color: kun båt med samme farge)
+ *   rocks:  steiner          { x, y, r }
+ *   logs:   tømmerstokker    { x1, y1, x2, y2, r }
+ *   pads:   vannliljer       { x, y, r }         (flytbare, tunge)
+ *   whirls: strømvirvler     { x, y, r, power }  (suger båter ned)
+ *   currents: strøm          { x, y, w, h, vx, vy }
+ *   par:    antall krusninger for ★★★
+ *   pearl:  beste løsning vi kjenner (gir perle)
+ *   hand:   viser en animert hånd (kun i første bane)
+ *
+ * Etter endringer: kjør `node tools/solve.js <bane-id>` for å sjekke
+ * at banen kan løses og at par/perle/hint stemmer.
+ * ===================================================================== */
+(function (root) {
+  'use strict';
+
+  const WORLDS = [
+    {
+      id: 1,
+      name: { no: 'Dammen', en: 'The Pond' },
+      blurb: { no: 'Rolig vann. Lær deg krusningene.', en: 'Calm water. Learn the ripples.' },
+      unlockStars: 0,
+      levels: [
+        {
+          id: '1-1',
+          name: { no: 'Første krusning', en: 'First ripple' },
+          tip: { no: 'Trykk på vannet like bak båten', en: 'Tap the water just behind the boat' },
+          par: 1, pearl: 1,
+          boats: [{ x: 180, y: 430 }],
+          docks: [{ x: 180, y: 220 }],
+          hand: { x: 180, y: 480 },
+        },
+        {
+          id: '1-2',
+          name: { no: 'Bort fra ringen', en: 'Away from the ring' },
+          tip: { no: 'Krusningen dytter båten bort fra der du trykker', en: 'Ripples push boats away from where you tap' },
+          par: 1, pearl: 1,
+          boats: [{ x: 110, y: 330, angle: 0 }],
+          docks: [{ x: 270, y: 330 }],
+        },
+        {
+          id: '1-3',
+          name: { no: 'Sikt og slipp', en: 'Aim and release' },
+          tip: { no: 'Hold fingeren på vannet for å sikte. Slipp for å lage krusning', en: 'Hold your finger on the water to aim. Release to make a ripple' },
+          par: 2, pearl: 1,
+          boats: [{ x: 90, y: 470 }],
+          docks: [{ x: 262, y: 185 }],
+        },
+        {
+          id: '1-4',
+          name: { no: 'To båter', en: 'Two boats' },
+          tip: { no: 'Én krusning dytter alle båtene den når', en: 'One ripple pushes every boat it reaches' },
+          par: 2, pearl: 1,
+          boats: [{ x: 125, y: 320, angle: Math.PI }, { x: 235, y: 320, angle: 0 }],
+          docks: [{ x: 42, y: 320 }, { x: 318, y: 320 }],
+        },
+        {
+          id: '1-5',
+          name: { no: 'Steinen', en: 'The rock' },
+          tip: { no: 'Båter spretter av stein og bredd', en: 'Boats bounce off rocks and the shore' },
+          par: 2, pearl: 1,
+          boats: [{ x: 100, y: 480 }],
+          rocks: [{ x: 132, y: 378, r: 32 }],
+          docks: [{ x: 100, y: 255 }],
+        },
+        {
+          id: '1-6',
+          name: { no: 'Tre små båter', en: 'Three little boats' },
+          par: 2, pearl: 1,
+          boats: [{ x: 180, y: 268 }, { x: 135, y: 346 }, { x: 225, y: 346 }],
+          docks: [{ x: 180, y: 135 }, { x: 46, y: 398 }, { x: 314, y: 398 }],
+        },
+        {
+          id: '1-7',
+          name: { no: 'Kanalen', en: 'The canal' },
+          par: 2, pearl: 1,
+          boats: [{ x: 150, y: 495 }],
+          logs: [
+            { x1: 140, y1: 220, x2: 140, y2: 410, r: 9 },
+            { x1: 220, y1: 220, x2: 220, y2: 410, r: 9 },
+          ],
+          docks: [{ x: 180, y: 170 }],
+        },
+        {
+          id: '1-8',
+          name: { no: 'Biljard', en: 'Billiards' },
+          tip: { no: 'Båter kan dytte hverandre', en: 'Boats can push each other' },
+          par: 3, pearl: 2,
+          boats: [{ x: 180, y: 520 }, { x: 180, y: 380 }],
+          rocks: [{ x: 90, y: 300, r: 26 }, { x: 270, y: 300, r: 26 }],
+          docks: [{ x: 180, y: 110 }, { x: 70, y: 470 }],
+        },
+        {
+          id: '1-9',
+          name: { no: 'Vannliljene', en: 'Lily pads' },
+          tip: { no: 'Vannliljer er tunge, men de kan flyttes', en: 'Lily pads are heavy, but they can be moved' },
+          par: 3, pearl: 2,
+          boats: [{ x: 180, y: 500 }],
+          pads: [
+            { x: 180, y: 300, r: 28, flower: true },
+            { x: 118, y: 285, r: 24 },
+            { x: 242, y: 285, r: 24 },
+          ],
+          docks: [{ x: 180, y: 120 }],
+        },
+        {
+          id: '1-10',
+          name: { no: 'Virvelen', en: 'The whirlpool' },
+          tip: { no: 'Unngå virvelen – den drar båter ned', en: 'Avoid the whirlpool – it pulls boats under' },
+          par: 2, pearl: 1,
+          boats: [{ x: 110, y: 430 }],
+          whirls: [{ x: 180, y: 300, r: 65, power: 1 }],
+          docks: [{ x: 260, y: 190 }],
+        },
+        {
+          id: '1-11',
+          name: { no: 'Fire hjørner', en: 'Four corners' },
+          par: 3, pearl: 1,
+          boats: [{ x: 147, y: 267 }, { x: 213, y: 267 }, { x: 147, y: 333 }, { x: 213, y: 333 }],
+          rocks: [{ x: 180, y: 120, r: 22 }, { x: 180, y: 480, r: 22 }],
+          docks: [{ x: 70, y: 190 }, { x: 290, y: 190 }, { x: 70, y: 410 }, { x: 290, y: 410 }],
+        },
+        {
+          id: '1-12',
+          name: { no: 'Storfangst', en: 'Big catch' },
+          par: 3, pearl: 2,
+          boats: [{ x: 130, y: 470 }, { x: 230, y: 470 }, { x: 180, y: 330 }],
+          pads: [{ x: 110, y: 200, r: 22, flower: true }, { x: 250, y: 200, r: 22 }],
+          whirls: [{ x: 180, y: 195, r: 55, power: 1 }],
+          docks: [{ x: 40, y: 470 }, { x: 320, y: 470 }, { x: 180, y: 90 }],
+        },
+      ],
+    },
+    {
+      id: 2,
+      name: { no: 'Bekken', en: 'The Brook' },
+      blurb: { no: 'Strømmen tar båtene med seg.', en: 'The current carries the boats.' },
+      unlockStars: 24,
+      levels: [
+        {
+          id: '2-1',
+          name: { no: 'Strømmen', en: 'The current' },
+          tip: { no: 'Strømmen tar båten med seg. Få den uti!', en: 'The current carries the boat. Get it in!' },
+          par: 1, pearl: 1,
+          boats: [{ x: 295, y: 440, angle: Math.PI }],
+          currents: [{ x: 140, y: 150, w: 80, h: 420, vx: 0, vy: -85 }],
+          logs: [
+            { x1: 124, y1: 212, x2: 156, y2: 150, r: 7 },
+            { x1: 236, y1: 212, x2: 204, y2: 150, r: 7 },
+          ],
+          docks: [{ x: 180, y: 100 }],
+        },
+        {
+          id: '2-2',
+          name: { no: 'Over bekken', en: 'Across the brook' },
+          tip: { no: 'Sikt litt mot strømmen når du skal krysse', en: 'Aim a little upstream to cross' },
+          par: 2, pearl: 1,
+          boats: [{ x: 90, y: 405 }],
+          currents: [{ x: 0, y: 255, w: 360, h: 95, vx: 100, vy: 0 }],
+          docks: [{ x: 110, y: 195 }],
+        },
+        {
+          id: '2-3',
+          name: { no: 'Virvelfella', en: 'Whirlpool trap' },
+          par: 2, pearl: 1,
+          boats: [{ x: 80, y: 140, angle: 0 }],
+          currents: [{ x: 140, y: 60, w: 80, h: 390, vx: 0, vy: 90 }],
+          whirls: [{ x: 180, y: 505, r: 62, power: 1.1 }],
+          docks: [{ x: 280, y: 150 }],
+        },
+        {
+          id: '2-4',
+          name: { no: 'Veiskillet', en: 'The fork' },
+          par: 2, pearl: 1,
+          tip: { no: 'Velg riktig side av steinen', en: 'Pick the right side of the rock' },
+          boats: [{ x: 298, y: 95, angle: Math.PI }],
+          rocks: [{ x: 180, y: 310, r: 38 }],
+          currents: [
+            { x: 120, y: 40, w: 120, h: 220, vx: 0, vy: 85 },
+            { x: 95, y: 260, w: 85, h: 80, vx: -65, vy: 65 },
+            { x: 180, y: 260, w: 85, h: 80, vx: 65, vy: 65 },
+            { x: 40, y: 340, w: 95, h: 230, vx: 0, vy: 80 },
+            { x: 225, y: 340, w: 95, h: 230, vx: 0, vy: 80 },
+          ],
+          whirls: [{ x: 272, y: 515, r: 50, power: 1.2 }],
+          docks: [{ x: 88, y: 520 }],
+        },
+        {
+          id: '2-5',
+          name: { no: 'Deltaet', en: 'The delta' },
+          par: 4, pearl: 3,
+          boats: [{ x: 85, y: 115 }, { x: 180, y: 95 }, { x: 275, y: 115 }],
+          currents: [
+            { x: 150, y: 140, w: 60, h: 300, vx: 0, vy: 90 },
+            { x: 30, y: 300, w: 120, h: 60, vx: -70, vy: 0 },
+            { x: 210, y: 300, w: 120, h: 60, vx: 70, vy: 0 },
+          ],
+          rocks: [{ x: 180, y: 470, r: 26 }],
+          docks: [{ x: 52, y: 470 }, { x: 180, y: 545 }, { x: 308, y: 470 }],
+        },
+      ],
+    },
+    { id: 3, name: { no: 'Regnværet', en: 'The Rain' }, blurb: { no: 'Regndråper lager egne krusninger.', en: 'Raindrops make ripples of their own.' }, soon: true, levels: [] },
+    { id: 4, name: { no: 'Natten', en: 'The Night' }, blurb: { no: 'Lykter i mørket.', en: 'Lanterns in the dark.' }, soon: true, levels: [] },
+    { id: 5, name: { no: 'Perlebukta', en: 'Pearl Bay' }, blurb: { no: 'Hemmelige baner for perlejegere.', en: 'Secret levels for pearl hunters.' }, soon: true, unlockPearls: 10, levels: [] },
+  ];
+
+  const api = { WORLDS };
+  root.Levels = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* =====================================================================
+ * Krusning – tegning (Canvas 2D)
+ * ---------------------------------------------------------------------
+ * Alt som tegnes på skjermen, i lag nedenfra og opp:
+ *   bakgrunn (gress, sand, vann)  →  lysmønster i vannet  →  fisk
+ *   → strøm og virvler → havner → skygger → krusninger → kjølvann
+ *   → steiner, stokker, vannliljer → båter → partikler → siktehjelp
+ *
+ * Alle mål er i "dam-enheter" (360 × 600). Fargene står i PAL.
+ * ===================================================================== */
+(function (root) {
+  'use strict';
+  const E = root.Engine;
+  const C = E.C;
+  const TAU = Math.PI * 2;
+
+  const PAL = {
+    grassA: '#a9d672', grassB: '#7fb850',
+    blade: ['rgba(70,120,40,0.35)', 'rgba(190,230,130,0.45)', 'rgba(95,150,55,0.4)'],
+    sand: '#f1dca6', sandEdge: '#dcc285',
+    waterTop: '#5cc6d0', waterMid: '#3aa9c2', waterBot: '#2b8bb0',
+    deep: 'rgba(16,70,110,0.20)',
+    shallow: 'rgba(205,250,240,1)',
+    foam: 'rgba(255,255,255,0.55)',
+    shadow: 'rgba(10,50,75,0.22)',
+    rock: '#9ba5ae', rockLight: '#d2d8dd', rockDark: '#6f7984',
+    log: '#946541', logLight: '#c38e5e', logEnd: '#e7c796', logRing: '#a8774a',
+    pad: '#6dc05b', padDark: '#4f9e44', padLight: '#9adf84',
+    flower: '#ff9fc8', flowerLight: '#ffd3e6', flowerC: '#ffe27a',
+    dock: '#ffe08a', dockDeep: '#f4b73f',
+    eye: '#1b2a33',
+    boats: [
+      ['#ff8f7e', '#e86d5d', '#ffd0c7'],
+      ['#ffd166', '#e7b23f', '#fff0c2'],
+      ['#7fe0b5', '#56c293', '#d3f7e7'],
+      ['#7cc4ff', '#559fe0', '#d5ecff'],
+      ['#c4a1ff', '#a17ce8', '#ece0ff'],
+      ['#ffb38a', '#ec8f62', '#ffe2d1'],
+    ],
+  };
+
+  // Forutsigbar "tilfeldighet" så pynten ser lik ut hver gang.
+  function rng(seed) {
+    let s = seed >>> 0 || 1;
+    return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return ((s >>> 0) % 100000) / 100000; };
+  }
+
+  const R = {
+    PAL,
+    canvas: null, ctx: null,
+    cssW: 0, cssH: 0, dpr: 1,
+    s: 1, ox: 0, oy: 0,
+    bg: null, caustic: null, causticPat: null,
+    rockShapes: new Map(),
+  };
+
+  R.init = function (canvas) {
+    R.canvas = canvas;
+    R.ctx = canvas.getContext('2d');
+    R.caustic = makeCaustics(96, 10, 7);
+  };
+
+  // Plasser dammen midt i det ledige området (mellom toppmeny og bunn).
+  R.resize = function (cssW, cssH, dpr, top, bottom) {
+    R.cssW = cssW; R.cssH = cssH; R.dpr = dpr;
+    R.canvas.width = Math.round(cssW * dpr);
+    R.canvas.height = Math.round(cssH * dpr);
+    const margin = 14;
+    const availH = cssH - top - bottom;
+    R.s = Math.min(cssW / (C.W + margin * 2), availH / (C.H + margin * 2));
+    R.ox = (cssW - C.W * R.s) / 2;
+    R.oy = top + (availH - C.H * R.s) / 2;
+    R.causticPat = R.ctx.createPattern(R.caustic, 'repeat');
+    R.bg = renderBackground();
+  };
+
+  R.toWorld = function (cx, cy) { return { x: (cx - R.ox) / R.s, y: (cy - R.oy) / R.s }; };
+  R.toScreen = function (x, y) { return { x: R.ox + x * R.s, y: R.oy + y * R.s }; };
+
+  function worldTransform(ctx) {
+    const k = R.dpr * R.s;
+    ctx.setTransform(k, 0, 0, k, R.dpr * R.ox, R.dpr * R.oy);
+  }
+
+  function pondPath(ctx, inset) {
+    const i = inset || 0;
+    const r = Math.max(2, C.CORNER - i);
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(i, i, C.W - i * 2, C.H - i * 2, r);
+    else {
+      const x = i, y = i, w = C.W - i * 2, h = C.H - i * 2;
+      ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+    }
+  }
+
+  /* ---------- bakgrunn (tegnes én gang per skjermstørrelse) ---------- */
+
+  function renderBackground() {
+    const cv = document.createElement('canvas');
+    cv.width = R.canvas.width; cv.height = R.canvas.height;
+    const ctx = cv.getContext('2d');
+    const k = R.dpr * R.s;
+    // synlig område i dam-enheter
+    const vx0 = -R.ox / R.s, vy0 = -R.oy / R.s;
+    const vx1 = (R.cssW - R.ox) / R.s, vy1 = (R.cssH - R.oy) / R.s;
+    worldTransform(ctx);
+
+    // gress
+    const g = ctx.createLinearGradient(0, vy0, 0, vy1);
+    g.addColorStop(0, PAL.grassA); g.addColorStop(1, PAL.grassB);
+    ctx.fillStyle = g;
+    ctx.fillRect(vx0 - 2, vy0 - 2, vx1 - vx0 + 4, vy1 - vy0 + 4);
+    const rnd = rng(7);
+    const area = (vx1 - vx0) * (vy1 - vy0);
+    const blades = Math.min(2600, Math.round(area / 55));
+    ctx.lineCap = 'round';
+    for (let i = 0; i < blades; i++) {
+      const x = vx0 + rnd() * (vx1 - vx0), y = vy0 + rnd() * (vy1 - vy0);
+      if (E.insidePond(x, y, -12)) continue;
+      ctx.strokeStyle = PAL.blade[i % 3];
+      ctx.lineWidth = 1.1;
+      const h = 3 + rnd() * 4, lean = (rnd() - 0.5) * 3;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + lean, y - h); ctx.stroke();
+    }
+    // små blomster i gresset
+    for (let i = 0; i < 60; i++) {
+      const x = vx0 + rnd() * (vx1 - vx0), y = vy0 + rnd() * (vy1 - vy0);
+      if (E.insidePond(x, y, -22)) continue;
+      const col = i % 3 === 0 ? '#fff6e0' : i % 3 === 1 ? '#ffd1e3' : '#fff2a6';
+      for (let p = 0; p < 5; p++) {
+        const a = (p / 5) * TAU;
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(x + Math.cos(a) * 1.7, y + Math.sin(a) * 1.7, 1.25, 0, TAU); ctx.fill();
+      }
+      ctx.fillStyle = '#f5b83d'; ctx.beginPath(); ctx.arc(x, y, 0.9, 0, TAU); ctx.fill();
+    }
+
+    // sandkant (litt ujevn ytterkant)
+    ctx.fillStyle = PAL.sandEdge;
+    wobblyRim(ctx, 11, 2.2, 3);
+    ctx.fill();
+    ctx.fillStyle = PAL.sand;
+    wobblyRim(ctx, 8.5, 1.6, 5);
+    ctx.fill();
+    // småstein i sanden
+    for (let i = 0; i < 90; i++) {
+      const t = rnd();
+      const p = rimPoint(t, 4 + rnd() * 4);
+      ctx.fillStyle = i % 2 ? 'rgba(150,130,90,0.35)' : 'rgba(255,255,255,0.4)';
+      ctx.beginPath(); ctx.arc(p.x, p.y, 0.6 + rnd() * 1.1, 0, TAU); ctx.fill();
+    }
+
+    // vann
+    const wg = ctx.createLinearGradient(0, 0, 0, C.H);
+    wg.addColorStop(0, PAL.waterTop); wg.addColorStop(0.5, PAL.waterMid); wg.addColorStop(1, PAL.waterBot);
+    pondPath(ctx, 0);
+    ctx.fillStyle = wg; ctx.fill();
+    ctx.save();
+    pondPath(ctx, 0); ctx.clip();
+    const rg = ctx.createRadialGradient(C.W / 2, C.H * 0.55, 30, C.W / 2, C.H * 0.55, C.H * 0.6);
+    rg.addColorStop(0, PAL.deep); rg.addColorStop(1, 'rgba(16,70,110,0)');
+    ctx.fillStyle = rg; ctx.fillRect(0, 0, C.W, C.H);
+    // grunt vann langs kanten (myk overgang)
+    for (let i = 7; i >= 0; i--) {
+      ctx.globalAlpha = 0.07;
+      ctx.strokeStyle = PAL.shallow;
+      ctx.lineWidth = 4 + i * 5;
+      pondPath(ctx, 0); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    // skumlinje
+    ctx.strokeStyle = PAL.foam; ctx.lineWidth = 1.6;
+    pondPath(ctx, 0.8); ctx.stroke();
+
+    // siv og steiner rundt dammen
+    const reeds = rng(11);
+    for (let i = 0; i < 16; i++) {
+      const p = rimPoint(reeds(), 13 + reeds() * 5);
+      if (p.x < vx0 || p.x > vx1 || p.y < vy0 || p.y > vy1) continue;
+      drawReeds(ctx, p.x, p.y, reeds);
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    void k;
+    return cv;
+  }
+
+  function rimPoint(t, out) {
+    // punkt langs dammens kant (t: 0..1), forskjøvet "out" utover
+    const W = C.W, H = C.H, Rr = C.CORNER;
+    const straightW = W - 2 * Rr, straightH = H - 2 * Rr, arc = (Math.PI / 2) * Rr;
+    const total = 2 * straightW + 2 * straightH + 4 * arc;
+    let d = t * total;
+    const segs = [
+      [straightW, (u) => ({ x: Rr + u, y: 0, nx: 0, ny: -1 })],
+      [arc, (u) => { const a = -Math.PI / 2 + u / Rr; return { x: W - Rr + Math.cos(a) * Rr, y: Rr + Math.sin(a) * Rr, nx: Math.cos(a), ny: Math.sin(a) }; }],
+      [straightH, (u) => ({ x: W, y: Rr + u, nx: 1, ny: 0 })],
+      [arc, (u) => { const a = u / Rr; return { x: W - Rr + Math.cos(a) * Rr, y: H - Rr + Math.sin(a) * Rr, nx: Math.cos(a), ny: Math.sin(a) }; }],
+      [straightW, (u) => ({ x: W - Rr - u, y: H, nx: 0, ny: 1 })],
+      [arc, (u) => { const a = Math.PI / 2 + u / Rr; return { x: Rr + Math.cos(a) * Rr, y: H - Rr + Math.sin(a) * Rr, nx: Math.cos(a), ny: Math.sin(a) }; }],
+      [straightH, (u) => ({ x: 0, y: H - Rr - u, nx: -1, ny: 0 })],
+      [arc, (u) => { const a = Math.PI + u / Rr; return { x: Rr + Math.cos(a) * Rr, y: Rr + Math.sin(a) * Rr, nx: Math.cos(a), ny: Math.sin(a) }; }],
+    ];
+    for (const [len, f] of segs) {
+      if (d <= len) { const p = f(d); return { x: p.x + p.nx * out, y: p.y + p.ny * out, nx: p.nx, ny: p.ny }; }
+      d -= len;
+    }
+    return { x: 0, y: 0, nx: 0, ny: -1 };
+  }
+
+  function wobblyRim(ctx, out, amp, seed) {
+    const n = 140;
+    ctx.beginPath();
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const wob = amp * (Math.sin(t * TAU * 9 + seed) * 0.6 + Math.sin(t * TAU * 23 + seed * 2) * 0.4);
+      const p = rimPoint(t, out + wob);
+      if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    }
+    ctx.closePath();
+  }
+
+  function drawReeds(ctx, x, y, rnd) {
+    const n = 3 + Math.floor(rnd() * 3);
+    for (let i = 0; i < n; i++) {
+      const bx = x + (rnd() - 0.5) * 8, by = y + (rnd() - 0.5) * 4;
+      const h = 12 + rnd() * 10, lean = (rnd() - 0.5) * 6;
+      ctx.strokeStyle = i % 2 ? '#5f9a3c' : '#4f8a33';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(bx, by); ctx.quadraticCurveTo(bx + lean * 0.3, by - h * 0.6, bx + lean, by - h); ctx.stroke();
+      if (i % 2 === 0) {
+        ctx.fillStyle = '#8a5a35';
+        ctx.beginPath(); ctx.ellipse(bx + lean * 0.9, by - h + 1, 1.6, 4, lean * 0.05, 0, TAU); ctx.fill();
+      }
+    }
+  }
+
+  // Lysmønster (som sol gjennom vann): Worley-støy som fliser sømløst.
+  function makeCaustics(size, points, seed) {
+    const cv = document.createElement('canvas');
+    cv.width = size; cv.height = size;
+    const ctx = cv.getContext('2d');
+    const img = ctx.createImageData(size, size);
+    const rnd = rng(seed);
+    const pts = [];
+    for (let i = 0; i < points; i++) pts.push([rnd() * size, rnd() * size]);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        let f1 = 1e9, f2 = 1e9;
+        for (const [px, py] of pts) {
+          for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+            const dx = x - (px + ox * size), dy = y - (py + oy * size);
+            const d = dx * dx + dy * dy;
+            if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) f2 = d;
+          }
+        }
+        const edge = Math.sqrt(f2) - Math.sqrt(f1);
+        const v = Math.max(0, 1 - edge / 6.5);
+        const a = Math.pow(v, 1.7);
+        const i = (y * size + x) * 4;
+        img.data[i] = 255; img.data[i + 1] = 255; img.data[i + 2] = 255;
+        img.data[i + 3] = Math.round(a * 255);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return cv;
+  }
+
+  /* ---------- hovedtegning ---------- */
+
+  R.draw = function (st) {
+    const ctx = R.ctx;
+    const t = st.time;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(R.bg, 0, 0);
+    worldTransform(ctx);
+    const w = st.world;
+
+    // alt "i vannet" klippes til dammen
+    ctx.save();
+    pondPath(ctx, 0); ctx.clip();
+    drawCaustics(ctx, t);
+    if (st.fish) drawFish(ctx, st.fish, t);
+    if (w) {
+      drawCurrents(ctx, w, t);
+      for (const v of w.whirls) drawWhirl(ctx, v, t);
+      for (const d of w.docks) drawDockWater(ctx, d, t);
+      drawShadows(ctx, w);
+    }
+    if (st.leaves) drawLeaves(ctx, st.leaves);
+    if (w) drawRipples(ctx, w.ripples);
+    drawParticles(ctx, st.particles, 'under');
+    ctx.restore();
+
+    if (w) {
+      for (const r of w.rocks) drawRock(ctx, r, t);
+      for (const l of w.logs) drawLog(ctx, l);
+      for (const p of w.pads) drawPad(ctx, p, t);
+      for (let i = 0; i < w.docks.length; i++) drawDock(ctx, w.docks[i], t, st.dockFx && st.dockFx[i]);
+      for (const b of w.boats) drawBoat(ctx, b, t, st.boatFx && st.boatFx[b.id], st.look);
+    }
+    drawParticles(ctx, st.particles, 'over');
+    if (st.hint) drawHint(ctx, st.hint, t);
+    if (st.hint && !st.aim && w) drawArrows(ctx, w, st.hint.x, st.hint.y, 0.55);
+    if (st.aim && w) drawAim(ctx, w, st.aim, t);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  };
+
+  function drawCaustics(ctx, t) {
+    if (!R.causticPat) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.085;
+    ctx.fillStyle = R.causticPat;
+    ctx.scale(2.1, 2.1);
+    ctx.translate((t * 2.6) % 96, (t * 1.5) % 96);
+    ctx.fillRect(-100, -100, C.W / 2.1 + 200, C.H / 2.1 + 200);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    worldTransform(ctx);
+    ctx.globalAlpha = 0.05;
+    ctx.scale(3.1, 3.1);
+    ctx.translate(-(t * 1.4) % 96, (t * 2.1) % 96);
+    ctx.fillRect(-100, -100, C.W / 3.1 + 200, C.H / 3.1 + 200);
+    ctx.restore();
+  }
+
+  function drawFish(ctx, fish, t) {
+    for (const f of fish) {
+      ctx.save();
+      ctx.translate(f.x, f.y);
+      ctx.rotate(f.angle);
+      ctx.globalAlpha = 0.22 * (f.alpha == null ? 1 : f.alpha);
+      ctx.fillStyle = '#0e4560';
+      const L = f.size, wig = Math.sin(t * (6 + f.speed * 0.08) + f.phase) * 0.35;
+      ctx.beginPath(); ctx.ellipse(0, 0, L, L * 0.36, 0, 0, TAU); ctx.fill();
+      ctx.save(); ctx.translate(-L * 0.9, 0); ctx.rotate(wig);
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-L * 0.7, -L * 0.35); ctx.lineTo(-L * 0.7, L * 0.35); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      ctx.beginPath(); ctx.ellipse(-L * 0.1, 0, L * 0.25, L * 0.62, 0.3, 0, TAU); ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawLeaves(ctx, leaves) {
+    for (const l of leaves) {
+      ctx.save();
+      ctx.translate(l.x, l.y); ctx.rotate(l.angle);
+      ctx.fillStyle = 'rgba(10,50,75,0.15)';
+      leafPath(ctx, l.size, 1.5, 2); ctx.fill();
+      ctx.fillStyle = l.color;
+      leafPath(ctx, l.size, 0, 0); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 0.6;
+      ctx.beginPath(); ctx.moveTo(-l.size, 0); ctx.lineTo(l.size, 0); ctx.stroke();
+      ctx.restore();
+    }
+  }
+  function leafPath(ctx, s, ox, oy) {
+    ctx.beginPath();
+    ctx.moveTo(-s + ox, oy);
+    ctx.quadraticCurveTo(ox, -s * 0.75 + oy, s + ox, oy);
+    ctx.quadraticCurveTo(ox, s * 0.75 + oy, -s + ox, oy);
+  }
+
+  // Strøm: myk lysere flate + små piler (›) som glir i strømretningen.
+  function drawCurrents(ctx, w, t) {
+    for (const c of w.currents) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(c.x, c.y, c.w, c.h); ctx.clip();
+      ctx.fillStyle = 'rgba(215,250,255,0.055)';
+      for (let k = 0; k < 3; k++) ctx.fillRect(c.x + k * 6, c.y + k * 6, c.w - k * 12, c.h - k * 12);
+      const sp = Math.hypot(c.vx, c.vy) || 1;
+      const ux = c.vx / sp, uy = c.vy / sp;
+      // rutenett som går opp i flaten, så mønsteret kan "rulle" uten skjøter
+      const nx = Math.max(1, Math.round(c.w / 28)), ny = Math.max(1, Math.round(c.h / 28));
+      const gx = c.w / nx, gy = c.h / ny, d = t * sp * 0.85, s = 5.5;
+      const stagger = ny % 2 === 0;
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = 2.1;
+      for (let j = 0; j < ny; j++) {
+        for (let i = 0; i < nx; i++) {
+          let x = c.x + (i + 0.5 + (stagger && j % 2 ? 0.5 : 0)) * gx + ux * d;
+          let y = c.y + (j + 0.5) * gy + uy * d;
+          x = c.x + ((((x - c.x) % c.w) + c.w) % c.w);
+          y = c.y + ((((y - c.y) % c.h) + c.h) % c.h);
+          const edge = Math.min(x - c.x, c.x + c.w - x, y - c.y, c.y + c.h - y);
+          const a = Math.max(0, Math.min(1, (edge - 3) / 14)) * 0.5;
+          if (a <= 0.02) continue;
+          ctx.strokeStyle = `rgba(255,255,255,${a})`;
+          ctx.beginPath();
+          ctx.moveTo(x - ux * s - uy * s, y - uy * s + ux * s);
+          ctx.lineTo(x, y);
+          ctx.lineTo(x - ux * s + uy * s, y - uy * s - ux * s);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+  }
+
+  function drawWhirl(ctx, v, t) {
+    const g = ctx.createRadialGradient(v.x, v.y, 2, v.x, v.y, v.r);
+    g.addColorStop(0, 'rgba(8,40,70,0.55)');
+    g.addColorStop(0.35, 'rgba(12,60,95,0.28)');
+    g.addColorStop(1, 'rgba(20,80,120,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(v.x, v.y, v.r, 0, TAU); ctx.fill();
+    ctx.save();
+    ctx.translate(v.x, v.y);
+    ctx.rotate(t * 1.6 * v.power * v.dir);
+    ctx.lineCap = 'round';
+    for (let arm = 0; arm < 4; arm++) {
+      ctx.rotate(TAU / 4);
+      ctx.beginPath();
+      for (let i = 0; i <= 28; i++) {
+        const u = i / 28;
+        const rr = v.r * (0.95 - u * 0.85);
+        const a = u * 3.2 * v.dir;
+        const x = Math.cos(a) * rr, y = Math.sin(a) * rr;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = 'rgba(255,255,255,0.32)';
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawDockWater(ctx, d, t) {
+    const pulse = 0.5 + 0.5 * Math.sin(t * 2.4);
+    const g = ctx.createRadialGradient(d.x, d.y, 2, d.x, d.y, d.r + 14);
+    const a = d.boat >= 0 ? 0.55 : 0.28 + pulse * 0.12;
+    g.addColorStop(0, `rgba(255,236,170,${a})`);
+    g.addColorStop(0.6, `rgba(255,226,140,${a * 0.5})`);
+    g.addColorStop(1, 'rgba(255,226,140,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(d.x, d.y, d.r + 14, 0, TAU); ctx.fill();
+  }
+
+  function drawShadows(ctx, w) {
+    ctx.fillStyle = PAL.shadow;
+    for (const r of w.rocks) { ctx.save(); ctx.translate(3, 5); rockPath(ctx, r); ctx.fill(); ctx.restore(); }
+    for (const l of w.logs) {
+      ctx.strokeStyle = PAL.shadow; ctx.lineCap = 'round'; ctx.lineWidth = l.r * 2;
+      ctx.beginPath(); ctx.moveTo(l.x1 + 3, l.y1 + 5); ctx.lineTo(l.x2 + 3, l.y2 + 5); ctx.stroke();
+    }
+    for (const p of w.pads) { ctx.beginPath(); ctx.arc(p.x + 2, p.y + 3, p.r, 0, TAU); ctx.fill(); }
+    for (const b of w.boats) {
+      if (b.sink > 0) continue;
+      ctx.save(); ctx.translate(b.x + 3, b.y + 5); ctx.rotate(b.angle);
+      hullPath(ctx); ctx.fill(); ctx.restore();
+    }
+  }
+
+  function drawRipples(ctx, ripples) {
+    ctx.lineCap = 'round';
+    for (const rp of ripples) {
+      const r = rp.r;
+      if (r < 1) continue;
+      const life = 1 - r / (C.RIPPLE_RANGE + 24);
+      const a = Math.max(0, E.falloff(r * 0.92)) * Math.min(1, life * 3);
+      if (a <= 0.01) continue;
+      // mørk kant utenfor (gir dybde)
+      ctx.strokeStyle = `rgba(10,60,90,${0.16 * a})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(rp.x, rp.y, r + 2.5, 0, TAU); ctx.stroke();
+      // hovedringen
+      ctx.strokeStyle = `rgba(255,255,255,${0.75 * a})`;
+      ctx.lineWidth = 2.6;
+      ctx.beginPath(); ctx.arc(rp.x, rp.y, r, 0, TAU); ctx.stroke();
+      // ringene bak
+      for (let k = 1; k <= 2; k++) {
+        const rr = r - k * 11;
+        if (rr <= 2) break;
+        ctx.strokeStyle = `rgba(255,255,255,${(0.38 / k) * a})`;
+        ctx.lineWidth = 2 - k * 0.4;
+        ctx.beginPath(); ctx.arc(rp.x, rp.y, rr, 0, TAU); ctx.stroke();
+      }
+    }
+  }
+
+  /* ---------- faste ting ---------- */
+
+  function rockShape(r) {
+    const key = r.seed + ':' + r.r;
+    let pts = R.rockShapes.get(key);
+    if (!pts) {
+      const rnd = rng(r.seed * 31 + 5);
+      pts = [];
+      const n = 9;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * TAU + rnd() * 0.3;
+        const rr = r.r * (0.9 + rnd() * 0.16);
+        pts.push([Math.cos(a) * rr, Math.sin(a) * rr]);
+      }
+      R.rockShapes.set(key, pts);
+    }
+    return pts;
+  }
+  function rockPath(ctx, r, scale, ox, oy) {
+    const pts = rockShape(r);
+    const s = scale || 1;
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const p0 = pts[i], p1 = pts[(i + 1) % pts.length];
+      const mx = (p0[0] + p1[0]) / 2, my = (p0[1] + p1[1]) / 2;
+      if (i === 0) ctx.moveTo(r.x + (ox || 0) + ((pts[pts.length - 1][0] + p0[0]) / 2) * s, r.y + (oy || 0) + ((pts[pts.length - 1][1] + p0[1]) / 2) * s);
+      ctx.quadraticCurveTo(r.x + (ox || 0) + p0[0] * s, r.y + (oy || 0) + p0[1] * s, r.x + (ox || 0) + mx * s, r.y + (oy || 0) + my * s);
+    }
+    ctx.closePath();
+  }
+  function drawRock(ctx, r, t) {
+    // skum rundt steinen
+    ctx.strokeStyle = `rgba(255,255,255,${0.28 + 0.08 * Math.sin(t * 1.7 + r.seed)})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(r.x, r.y, r.r + 3.5, 0, TAU); ctx.stroke();
+    ctx.fillStyle = PAL.rockDark; rockPath(ctx, r, 1.02, 0, 1.5); ctx.fill();
+    ctx.fillStyle = PAL.rock; rockPath(ctx, r); ctx.fill();
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = PAL.rockLight; rockPath(ctx, r, 0.62, -r.r * 0.16, -r.r * 0.2); ctx.fill();
+    ctx.globalAlpha = 1;
+    // mose-flekk
+    ctx.fillStyle = 'rgba(120,170,80,0.45)';
+    ctx.beginPath(); ctx.ellipse(r.x + r.r * 0.3, r.y + r.r * 0.32, r.r * 0.26, r.r * 0.14, 0.4, 0, TAU); ctx.fill();
+  }
+
+  function drawLog(ctx, l) {
+    const dx = l.x2 - l.x1, dy = l.y2 - l.y1, len = Math.hypot(dx, dy) || 1;
+    const px = -dy / len, py = dx / len;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = l.r * 2 + 4;
+    ctx.beginPath(); ctx.moveTo(l.x1, l.y1); ctx.lineTo(l.x2, l.y2); ctx.stroke();
+    ctx.strokeStyle = PAL.log; ctx.lineWidth = l.r * 2;
+    ctx.beginPath(); ctx.moveTo(l.x1, l.y1); ctx.lineTo(l.x2, l.y2); ctx.stroke();
+    ctx.strokeStyle = PAL.logLight; ctx.lineWidth = l.r * 0.7;
+    ctx.beginPath(); ctx.moveTo(l.x1 - px * l.r * 0.35, l.y1 - py * l.r * 0.35); ctx.lineTo(l.x2 - px * l.r * 0.35, l.y2 - py * l.r * 0.35); ctx.stroke();
+    // barkstreker
+    ctx.strokeStyle = 'rgba(70,40,20,0.35)'; ctx.lineWidth = 1;
+    const rnd = rng(Math.round(l.x1 * 3 + l.y1 * 5));
+    for (let s = 0.12; s < 0.9; s += 0.11) {
+      const u = s + rnd() * 0.05, o = (rnd() - 0.5) * l.r;
+      const x = l.x1 + dx * u + px * o, y = l.y1 + dy * u + py * o;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (dx / len) * 7, y + (dy / len) * 7); ctx.stroke();
+    }
+    // endeved med årringer
+    for (const [x, y] of [[l.x1, l.y1], [l.x2, l.y2]]) {
+      ctx.fillStyle = PAL.logEnd;
+      ctx.beginPath(); ctx.arc(x, y, l.r * 0.82, 0, TAU); ctx.fill();
+      ctx.strokeStyle = PAL.logRing; ctx.lineWidth = 0.9;
+      ctx.beginPath(); ctx.arc(x, y, l.r * 0.5, 0, TAU); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, l.r * 0.22, 0, TAU); ctx.stroke();
+    }
+  }
+
+  function drawPad(ctx, p, t) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.angle + Math.sin(t * 0.7 + p.id) * 0.05);
+    const notch = 0.32;
+    ctx.fillStyle = PAL.padDark;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, p.r, notch, TAU - notch); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = PAL.pad;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, p.r - 1.6, notch + 0.04, TAU - notch - 0.04); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(40,110,40,0.45)'; ctx.lineWidth = 1;
+    for (let i = 0; i < 7; i++) {
+      const a = notch + 0.35 + (i / 6) * (TAU - 2 * notch - 0.7);
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * p.r * 0.85, Math.sin(a) * p.r * 0.85); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.beginPath(); ctx.ellipse(-p.r * 0.3, -p.r * 0.35, p.r * 0.35, p.r * 0.18, -0.5, 0, TAU); ctx.fill();
+    if (p.flower) {
+      ctx.rotate(-p.angle);
+      for (let i = 0; i < 8; i++) {
+        ctx.rotate(TAU / 8);
+        ctx.fillStyle = i % 2 ? PAL.flower : PAL.flowerLight;
+        ctx.beginPath(); ctx.ellipse(p.r * 0.28, 0, p.r * 0.26, p.r * 0.12, 0, 0, TAU); ctx.fill();
+      }
+      ctx.fillStyle = PAL.flowerC;
+      ctx.beginPath(); ctx.arc(0, 0, p.r * 0.14, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawDock(ctx, d, t, fx) {
+    const occ = d.boat >= 0;
+    const flash = fx && fx.flash > 0 ? fx.flash : 0;
+    const col = d.color >= 0 ? PAL.boats[d.color % PAL.boats.length][0] : PAL.dock;
+    ctx.save();
+    ctx.translate(d.x, d.y);
+    // flytende bøyer i en ring
+    const n = 8;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU + t * (occ ? 0.15 : 0.35);
+      const bob = Math.sin(t * 2.2 + i) * 0.6;
+      const x = Math.cos(a) * (d.r + bob), y = Math.sin(a) * (d.r + bob);
+      ctx.fillStyle = 'rgba(10,50,75,0.2)';
+      ctx.beginPath(); ctx.arc(x + 1, y + 1.6, 3.1, 0, TAU); ctx.fill();
+      ctx.fillStyle = i % 2 ? '#ffffff' : col;
+      ctx.beginPath(); ctx.arc(x, y, 3.1, 0, TAU); ctx.fill();
+    }
+    // tau mellom bøyene
+    ctx.strokeStyle = occ ? 'rgba(255,240,190,0.95)' : 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = occ ? 1.8 : 1.1;
+    ctx.setLineDash(occ ? [] : [3, 4]);
+    ctx.beginPath(); ctx.arc(0, 0, d.r, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    if (flash > 0) {
+      ctx.strokeStyle = `rgba(255,240,180,${flash})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(0, 0, d.r + (1 - flash) * 22, 0, TAU); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /* ---------- båter ---------- */
+
+  function hullPath(ctx) {
+    ctx.beginPath();
+    ctx.moveTo(-17, 0);
+    ctx.lineTo(-11, -9.5);
+    ctx.lineTo(11, -9.5);
+    ctx.lineTo(17.5, 0);
+    ctx.lineTo(11, 9.5);
+    ctx.lineTo(-11, 9.5);
+    ctx.closePath();
+  }
+
+  function drawBoat(ctx, b, t, fx, look) {
+    const pal = PAL.boats[b.color % PAL.boats.length];
+    let scale = 1.12 + Math.sin(t * 2.1 + b.id * 1.7) * 0.02;
+    let alpha = 1, spin = 0;
+    if (fx && fx.squash > 0) scale += Math.sin(fx.squash * Math.PI) * 0.16;
+    if (b.sink > 0) {
+      const u = Math.min(1, b.sink / C.SINK_TIME);
+      scale *= 1 - u * 0.85; alpha = 1 - u * 0.9; spin = u * 9;
+    }
+    if (fx && fx.pop > 0) scale *= 1 + Math.sin(fx.pop * Math.PI) * 0.25;
+    const ang = (fx ? fx.angle : b.angle) + spin;
+    const rock = Math.sin(t * 1.9 + b.id) * 0.05;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(b.x, b.y);
+    ctx.save();
+    ctx.rotate(ang + rock);
+    ctx.scale(scale, scale);
+    // skrog
+    ctx.fillStyle = pal[1];
+    hullPath(ctx); ctx.fill();
+    ctx.fillStyle = pal[0];
+    ctx.beginPath();
+    ctx.moveTo(-16, -0.5); ctx.lineTo(-10.4, -8.6); ctx.lineTo(10.4, -8.6); ctx.lineTo(16.4, -0.5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = pal[2];
+    ctx.globalAlpha = alpha * 0.55;
+    ctx.beginPath(); ctx.moveTo(-10.4, -8.6); ctx.lineTo(10.4, -8.6); ctx.lineTo(8, -6.4); ctx.lineTo(-8, -6.4); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = alpha;
+    // seilet (brettet midtparti)
+    ctx.fillStyle = pal[2];
+    ctx.beginPath(); ctx.moveTo(-11, 0); ctx.lineTo(0, -5.2); ctx.lineTo(11, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = pal[1];
+    ctx.beginPath(); ctx.moveTo(-11, 0); ctx.lineTo(0, 5.2); ctx.lineTo(11, 0); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(60,30,30,0.18)'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(-11, 0); ctx.lineTo(11, 0); ctx.stroke();
+    hullPath(ctx); ctx.stroke();
+    ctx.restore();
+
+    // ansikt (alltid oppreist – ser søtere ut)
+    drawFace(ctx, b, t, fx, look, scale);
+    ctx.restore();
+  }
+
+  function drawFace(ctx, b, t, fx, look, scale) {
+    const happy = b.dock >= 0;
+    const s = scale;
+    const ex = 4.6 * s, ey = -1.5 * s;
+    const blink = fx && fx.blink > 0;
+    const speed = Math.hypot(b.vx, b.vy);
+    let lx = 0, ly = 0;
+    if (look && !happy) {
+      const dx = look.x - b.x, dy = look.y - b.y, d = Math.hypot(dx, dy) || 1;
+      lx = (dx / d) * 1.2; ly = (dy / d) * 1.2;
+    } else if (speed > 15) { lx = (b.vx / speed) * 1.2; ly = (b.vy / speed) * 1.2; }
+    for (const side of [-1, 1]) {
+      const x = side * ex, y = ey;
+      if (happy) {
+        ctx.strokeStyle = PAL.eye; ctx.lineWidth = 1.5 * s; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(x, y + 1 * s, 2.2 * s, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+        continue;
+      }
+      if (b.sink > 0) {
+        ctx.strokeStyle = PAL.eye; ctx.lineWidth = 1.2 * s;
+        ctx.beginPath(); ctx.moveTo(x - 1.6 * s, y - 1.6 * s); ctx.lineTo(x + 1.6 * s, y + 1.6 * s);
+        ctx.moveTo(x + 1.6 * s, y - 1.6 * s); ctx.lineTo(x - 1.6 * s, y + 1.6 * s); ctx.stroke();
+        continue;
+      }
+      const squint = speed > 160 ? 0.55 : 1;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.ellipse(x, y, 2.9 * s, (blink ? 0.4 : 3.3 * squint) * s, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(27,42,51,0.35)'; ctx.lineWidth = 0.6 * s; ctx.stroke();
+      if (!blink) {
+        ctx.fillStyle = PAL.eye;
+        ctx.beginPath(); ctx.arc(x + lx * s, y + ly * s, 1.75 * s * (squint < 1 ? 0.8 : 1), 0, TAU); ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(x + lx * s - 0.6 * s, y + ly * s - 0.7 * s, 0.6 * s, 0, TAU); ctx.fill();
+      }
+    }
+    if (happy) {
+      ctx.fillStyle = 'rgba(255,120,120,0.45)';
+      ctx.beginPath(); ctx.ellipse(-7.4 * s, 2.2 * s, 2 * s, 1.2 * s, 0, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(7.4 * s, 2.2 * s, 2 * s, 1.2 * s, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = PAL.eye; ctx.lineWidth = 1.2 * s;
+      ctx.beginPath(); ctx.arc(0, 1.6 * s, 2 * s, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+    }
+  }
+
+  /* ---------- effekter ---------- */
+
+  function drawParticles(ctx, parts, layer) {
+    if (!parts) return;
+    for (const p of parts) {
+      if ((p.layer || 'over') !== layer) continue;
+      const u = p.t / p.life;
+      const a = Math.max(0, 1 - u);
+      switch (p.type) {
+        case 'drop':
+          ctx.fillStyle = `rgba(235,252,255,${a * 0.9})`;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (1 - u * 0.5), 0, TAU); ctx.fill();
+          break;
+        case 'flash':
+          ctx.strokeStyle = `rgba(255,255,255,${a * 0.8})`;
+          ctx.lineWidth = 2.5 * a + 0.5;
+          ctx.beginPath(); ctx.arc(p.x, p.y, 3 + u * p.size, 0, TAU); ctx.stroke();
+          break;
+        case 'wake':
+          ctx.strokeStyle = `rgba(255,255,255,${a * 0.42})`;
+          ctx.lineWidth = 1.6 * (1 - u * 0.5);
+          ctx.lineCap = 'round';
+          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.angle || 0);
+          ctx.beginPath(); ctx.arc(0, 0, p.size * (1 + u * 2.4), Math.PI * 0.62, Math.PI * 1.38); ctx.stroke();
+          ctx.restore();
+          break;
+        case 'spark': {
+          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.angle + u * 3);
+          const s = p.size * (1 - u * 0.6);
+          ctx.fillStyle = p.color || `rgba(255,226,120,${a})`;
+          ctx.globalAlpha = a;
+          ctx.beginPath();
+          for (let i = 0; i < 4; i++) {
+            const an = (i / 4) * TAU;
+            ctx.lineTo(Math.cos(an) * s, Math.sin(an) * s);
+            ctx.lineTo(Math.cos(an + TAU / 8) * s * 0.35, Math.sin(an + TAU / 8) * s * 0.35);
+          }
+          ctx.closePath(); ctx.fill();
+          ctx.restore(); ctx.globalAlpha = 1;
+          break;
+        }
+        case 'paper': {
+          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.angle + p.t * p.spin);
+          ctx.globalAlpha = Math.min(1, a * 2);
+          ctx.fillStyle = p.color;
+          const sq = Math.abs(Math.cos(p.t * p.flip));
+          ctx.fillRect(-p.size, -p.size * 0.6 * sq, p.size * 2, p.size * 1.2 * sq);
+          ctx.restore(); ctx.globalAlpha = 1;
+          break;
+        }
+        case 'bubble':
+          ctx.strokeStyle = `rgba(255,255,255,${a * 0.8})`; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (0.6 + u), 0, TAU); ctx.stroke();
+          break;
+        case 'ringfx':
+          ctx.strokeStyle = `rgba(${p.rgb || '255,240,180'},${a * 0.9})`;
+          ctx.lineWidth = 3 * a + 0.5;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.r0 + u * p.size, 0, TAU); ctx.stroke();
+          break;
+      }
+    }
+  }
+
+  function drawHint(ctx, h, t) {
+    const pulse = (t * 1.3) % 1;
+    ctx.strokeStyle = `rgba(255,236,150,${0.9 * (1 - pulse)})`;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(h.x, h.y, 6 + pulse * 26, 0, TAU); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,236,150,0.95)';
+    ctx.beginPath(); ctx.arc(h.x, h.y, 4.5, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(120,80,0,0.4)'; ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  function drawAim(ctx, w, aim, t) {
+    const ok = !aim.cancel;
+    // rekkevidde
+    ctx.save();
+    ctx.setLineDash([4, 7]);
+    ctx.lineDashOffset = -t * 20;
+    ctx.strokeStyle = ok ? 'rgba(255,255,255,0.28)' : 'rgba(255,160,160,0.3)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(aim.x, aim.y, C.RIPPLE_RANGE * 0.98, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+    // dråpen som skal slippes
+    const bob = Math.sin(t * 8) * 1.2;
+    ctx.fillStyle = 'rgba(10,50,75,0.25)';
+    ctx.beginPath(); ctx.ellipse(aim.x, aim.y + 2, 5, 2.5, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = ok ? 'rgba(255,255,255,0.9)' : 'rgba(255,170,170,0.9)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(aim.x, aim.y, 9 + bob, 0, TAU); ctx.stroke();
+    if (!ok) {
+      ctx.beginPath(); ctx.moveTo(aim.x - 5, aim.y - 5); ctx.lineTo(aim.x + 5, aim.y + 5);
+      ctx.moveTo(aim.x + 5, aim.y - 5); ctx.lineTo(aim.x - 5, aim.y + 5); ctx.stroke();
+      return;
+    }
+    drawArrows(ctx, w, aim.x, aim.y, 1);
+  }
+
+  // piler på det som vil bli dyttet (styrke = lengde og tykkelse)
+  function drawArrows(ctx, w, x, y, alpha) {
+    for (const p of E.preview(w, x, y)) {
+      const b = p.body;
+      const len = 10 + 46 * p.f;
+      const sx = b.x + p.nx * (b.r + 5), sy = b.y + p.ny * (b.r + 5);
+      const ex = sx + p.nx * len, ey = sy + p.ny * len;
+      const a = (0.35 + 0.6 * p.f) * alpha;
+      ctx.strokeStyle = `rgba(255,255,255,${a})`;
+      ctx.fillStyle = `rgba(255,255,255,${a})`;
+      ctx.lineWidth = 2 + 2.5 * p.f;
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex - p.nx * 4, ey - p.ny * 4); ctx.stroke();
+      const hx = -p.ny, hy = p.nx, hs = 4 + 3 * p.f;
+      ctx.beginPath();
+      ctx.moveTo(ex + p.nx * 3, ey + p.ny * 3);
+      ctx.lineTo(ex - p.nx * hs + hx * hs, ey - p.ny * hs + hy * hs);
+      ctx.lineTo(ex - p.nx * hs - hx * hs, ey - p.ny * hs - hy * hs);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+
+  root.Render = R;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* =====================================================================
+ * Krusning – lyd
+ * ---------------------------------------------------------------------
+ * All lyd lages i sanntid med Web Audio (ingen lydfiler å holde styr på).
+ * Toner hentes fra en pentatonisk skala, så alt låter pent sammen.
+ * Merk: på iPhone er lyden av når lydløs-bryteren er på.
+ * ===================================================================== */
+(function (root) {
+  'use strict';
+
+  const PENTA = [0, 2, 4, 7, 9];
+  const midi = (n) => 440 * Math.pow(2, (n - 69) / 12);
+  const note = (i, base) => { // i-te tone i skalaen fra grunntonen
+    const o = Math.floor(i / 5), d = ((i % 5) + 5) % 5;
+    return midi((base || 72) + o * 12 + PENTA[d]);
+  };
+
+  const S = {
+    ctx: null, master: null, sfxBus: null, musicBus: null, verb: null,
+    sfxOn: true, musicOn: true,
+    musicTimer: null, nextChordAt: 0, nextNoteAt: 0, chordIdx: 0,
+  };
+
+  S.unlock = function () {
+    if (!S.ctx) {
+      const AC = root.AudioContext || root.webkitAudioContext;
+      if (!AC) return;
+      try { S.ctx = new AC(); } catch (e) { return; }
+      const ctx = S.ctx;
+      S.master = ctx.createGain(); S.master.gain.value = 0.9;
+      const comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -14; comp.ratio.value = 4;
+      S.master.connect(comp); comp.connect(ctx.destination);
+      S.verb = ctx.createConvolver();
+      S.verb.buffer = impulse(ctx, 2.4, 2.8);
+      const wet = ctx.createGain(); wet.gain.value = 0.32;
+      S.verb.connect(wet); wet.connect(S.master);
+      S.sfxBus = ctx.createGain(); S.sfxBus.gain.value = S.sfxOn ? 1 : 0;
+      S.sfxBus.connect(S.master);
+      S.musicBus = ctx.createGain(); S.musicBus.gain.value = S.musicOn ? 0.55 : 0;
+      S.musicBus.connect(S.master);
+      // en stille lyd "låser opp" lyden på iOS
+      const b = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource(); src.buffer = b; src.connect(ctx.destination); src.start(0);
+    }
+    if (S.ctx.state === 'suspended') S.ctx.resume();
+    if (S.musicOn) S.startMusic();
+  };
+
+  function impulse(ctx, seconds, decay) {
+    const rate = ctx.sampleRate, len = Math.floor(rate * seconds);
+    const buf = ctx.createBuffer(2, len, rate);
+    for (let c = 0; c < 2; c++) {
+      const d = buf.getChannelData(c);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+    }
+    return buf;
+  }
+
+  S.setSfx = function (on) {
+    S.sfxOn = on;
+    if (S.sfxBus) S.sfxBus.gain.setTargetAtTime(on ? 1 : 0, S.ctx.currentTime, 0.05);
+  };
+  S.setMusic = function (on) {
+    S.musicOn = on;
+    if (S.musicBus) S.musicBus.gain.setTargetAtTime(on ? 0.55 : 0, S.ctx.currentTime, 0.3);
+    if (on && S.ctx) S.startMusic();
+  };
+
+  const ready = () => S.ctx && S.ctx.state === 'running';
+
+  // En enkel tone med konvolutt. send = andel til romklang.
+  function tone(o) {
+    const ctx = S.ctx, t = o.t || ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(o.f, t);
+    if (o.f2) osc.frequency.exponentialRampToValueAtTime(o.f2, t + (o.glide || o.dur));
+    const g = ctx.createGain();
+    const a = o.attack || 0.004;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(o.vol || 0.2, t + a);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + a + o.dur);
+    osc.connect(g);
+    g.connect(o.bus || S.sfxBus);
+    if (o.send) { const s = ctx.createGain(); s.gain.value = o.send; g.connect(s); s.connect(S.verb); }
+    osc.start(t); osc.stop(t + a + o.dur + 0.05);
+  }
+
+  function noise(o) {
+    const ctx = S.ctx, t = o.t || ctx.currentTime;
+    const len = Math.floor(ctx.sampleRate * (o.dur + 0.02));
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const f = ctx.createBiquadFilter(); f.type = o.filter || 'bandpass';
+    f.frequency.value = o.freq || 2000; f.Q.value = o.q || 1;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(o.vol || 0.1, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + o.dur);
+    src.connect(f); f.connect(g); g.connect(S.sfxBus);
+    if (o.send) { const s = ctx.createGain(); s.gain.value = o.send; g.connect(s); s.connect(S.verb); }
+    src.start(t); src.stop(t + o.dur + 0.02);
+  }
+
+  /* ---------- lydeffekter ---------- */
+
+  // Vanndråpe. x (0..1) velger tone: venstre dypt, høyre lyst.
+  S.plip = function (x) {
+    if (!ready()) return;
+    const i = Math.max(0, Math.min(9, Math.round(x * 9)));
+    const f = note(i, 67);
+    tone({ f: f * 0.7, f2: f * 1.5, glide: 0.07, dur: 0.16, vol: 0.28, send: 0.45 });
+    tone({ f: f * 2, dur: 0.06, vol: 0.05, type: 'triangle', send: 0.3 });
+    noise({ dur: 0.07, freq: 3200, q: 0.8, vol: 0.05, filter: 'highpass' });
+  };
+
+  S.hit = function (f) {
+    if (!ready() || f < 0.25) return;
+    tone({ f: 180 + f * 120, f2: 320 + f * 200, glide: 0.08, dur: 0.12, vol: 0.05 * f, send: 0.3 });
+  };
+
+  S.bump = function (v, what) {
+    if (!ready()) return;
+    const k = Math.min(1, v / 320);
+    if (k < 0.08) return;
+    if (what === 'rock' || what === 'shore') {
+      tone({ f: 150, f2: 90, dur: 0.09, vol: 0.22 * k, type: 'triangle' });
+      noise({ dur: 0.05, freq: 900, q: 1.2, vol: 0.12 * k });
+    } else if (what === 'log') {
+      tone({ f: 210, f2: 160, dur: 0.1, vol: 0.22 * k, type: 'triangle' });
+      tone({ f: 420, dur: 0.05, vol: 0.06 * k });
+    } else if (what === 'pad') {
+      tone({ f: 120, f2: 80, dur: 0.12, vol: 0.18 * k });
+    } else { // båt mot båt: papir mot papir
+      tone({ f: 330, f2: 250, dur: 0.07, vol: 0.14 * k, type: 'triangle' });
+      noise({ dur: 0.05, freq: 2500, q: 0.7, vol: 0.06 * k });
+    }
+  };
+
+  // Klokkespill når en båt kommer i havn. Stiger for hver båt.
+  S.dock = function (n) {
+    if (!ready()) return;
+    const f = note(4 + n * 2, 72);
+    const t = S.ctx.currentTime;
+    tone({ f, dur: 0.9, vol: 0.2, send: 0.6, t });
+    tone({ f: f * 2.76, dur: 0.25, vol: 0.05, send: 0.5, t });
+    tone({ f: f * 1.5, dur: 0.6, vol: 0.07, send: 0.6, t: t + 0.07 });
+  };
+
+  S.win = function () {
+    if (!ready()) return;
+    const t = S.ctx.currentTime;
+    [0, 2, 4, 5, 7].forEach((d, i) => {
+      const f = note(d, 72);
+      tone({ f, dur: 0.55, vol: 0.16, send: 0.55, t: t + i * 0.09 });
+      tone({ f: f * 4, dur: 0.12, vol: 0.03, send: 0.4, t: t + i * 0.09 });
+    });
+    tone({ f: note(0, 48), dur: 1.6, vol: 0.08, attack: 0.08, type: 'triangle', send: 0.5, t });
+  };
+
+  S.star = function (i) {
+    if (!ready()) return;
+    const f = note(5 + i * 2, 72);
+    tone({ f, dur: 0.5, vol: 0.18, send: 0.5 });
+    tone({ f: f * 2, dur: 0.18, vol: 0.05, send: 0.5 });
+  };
+
+  S.pearl = function () {
+    if (!ready()) return;
+    const t = S.ctx.currentTime;
+    for (let i = 0; i < 7; i++) {
+      const f = note(8 + i, 72);
+      tone({ f, dur: 0.6, vol: 0.09, send: 0.8, t: t + i * 0.055 });
+    }
+  };
+
+  S.sink = function () {
+    if (!ready()) return;
+    const t = S.ctx.currentTime;
+    tone({ f: 520, f2: 110, glide: 0.9, dur: 0.95, vol: 0.14, send: 0.4, t });
+    for (let i = 0; i < 4; i++) tone({ f: 300 + Math.random() * 300, f2: 700, glide: 0.05, dur: 0.06, vol: 0.06, t: t + 0.15 + i * 0.16 });
+  };
+
+  S.pop = function () {
+    if (!ready()) return;
+    tone({ f: 300, f2: 900, glide: 0.08, dur: 0.12, vol: 0.14, send: 0.4 });
+  };
+
+  S.click = function () {
+    if (!ready()) return;
+    tone({ f: 1100, f2: 1500, glide: 0.03, dur: 0.05, vol: 0.06 });
+  };
+
+  S.lose = function () { // stjerne mistet (diskret)
+    if (!ready()) return;
+    tone({ f: 520, f2: 390, glide: 0.15, dur: 0.18, vol: 0.06, type: 'triangle' });
+  };
+
+  /* ---------- rolig bakgrunnsmusikk (generert) ---------- */
+
+  const CHORDS = [
+    [48, 55, 64, 71], // Cmaj7
+    [45, 52, 60, 67], // Am7
+    [41, 48, 57, 64], // Fmaj7
+    [43, 50, 59, 64], // G6
+  ];
+
+  S.startMusic = function () {
+    if (!S.ctx || S.musicTimer) return;
+    S.nextChordAt = S.ctx.currentTime + 0.3;
+    S.nextNoteAt = S.ctx.currentTime + 1.2;
+    S.musicTimer = setInterval(scheduleMusic, 200);
+  };
+  S.stopMusic = function () { clearInterval(S.musicTimer); S.musicTimer = null; };
+
+  function scheduleMusic() {
+    if (!S.ctx || S.ctx.state !== 'running') return;
+    const now = S.ctx.currentTime, ahead = now + 0.5;
+    while (S.nextChordAt < ahead) {
+      const ch = CHORDS[S.chordIdx % CHORDS.length];
+      S.chordIdx++;
+      ch.forEach((n, i) => {
+        tone({ f: midi(n), dur: 5.2, vol: i === 0 ? 0.045 : 0.03, attack: 1.4, type: i === 0 ? 'sine' : 'triangle', bus: S.musicBus, send: 0.7, t: S.nextChordAt });
+      });
+      S.nextChordAt += 6;
+    }
+    while (S.nextNoteAt < ahead) {
+      const ch = CHORDS[(S.chordIdx + CHORDS.length - 1) % CHORDS.length];
+      const n = ch[1 + Math.floor(Math.random() * 3)] + 24;
+      tone({ f: midi(n), dur: 1.1, vol: 0.035, bus: S.musicBus, send: 0.85, t: S.nextNoteAt });
+      tone({ f: midi(n) * 3, dur: 0.15, vol: 0.006, bus: S.musicBus, send: 0.6, t: S.nextNoteAt });
+      S.nextNoteAt += 0.6 + Math.random() * 1.6;
+    }
+  }
+
+  root.Sound = S;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* =====================================================================
+ * Krusning – spillets hovedfil
+ * ---------------------------------------------------------------------
+ * Binder sammen fysikk (engine.js), tegning (render.js), lyd (audio.js),
+ * baner (levels.js) og tekster (strings.js). Her ligger:
+ *   • skjermene: tittel, banekart, spill, resultat, innstillinger
+ *   • trykk: hold for å sikte, slipp for å lage krusning
+ *   • stjerner, perler, rekorder og lagring (kun på enheten)
+ *   • effekter: sprut, kjølvann, gnister, fisk og blader
+ *   • hint som regnes ut direkte fra situasjonen
+ * ===================================================================== */
+(function () {
+  'use strict';
+  const E = window.Engine, R = window.Render, S = window.Sound, I = window.I18N, LV = window.Levels;
+  const C = E.C;
+  const TAU = Math.PI * 2;
+  const $ = (id) => document.getElementById(id);
+  const t = (k, v) => I.t(k, v);
+
+  /* ---------- lagring (localStorage – bare på denne enheten) ---------- */
+  const SAVE_KEY = 'krusning.save.v1';
+  function defaults() { return { v: 1, lang: 'no', sfx: true, music: true, levels: {}, last: null }; }
+  function load() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (raw) { const s = JSON.parse(raw); if (s && s.v === 1) return Object.assign(defaults(), s); }
+    } catch (e) { /* privat modus e.l. – spill uten lagring */ }
+    return defaults();
+  }
+  let save = load();
+  function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* ignorer */ } }
+
+  /* ---------- baner og fremgang ---------- */
+  const ALL = [];
+  LV.WORLDS.forEach((w, wi) => (w.levels || []).forEach((lv, li) => ALL.push({ lv, w, wi, li, idx: ALL.length })));
+  const byId = (id) => ALL.find((e) => e.lv.id === id);
+  const rec = (id) => save.levels[id];
+
+  function thresholds(lv) { return [lv.par, lv.par + Math.max(1, Math.round(lv.par * 0.5))]; }
+  function starsFor(lv, taps) { const [a, b] = thresholds(lv); return taps <= a ? 3 : taps <= b ? 2 : 1; }
+  function totalStars() { let n = 0; for (const k in save.levels) n += save.levels[k].stars || 0; return n; }
+  function totalPearls() { let n = 0; for (const k in save.levels) if (save.levels[k].pearl) n++; return n; }
+  function worldOpen(w) {
+    if (w.soon) return false;
+    return totalStars() >= (w.unlockStars || 0) && totalPearls() >= (w.unlockPearls || 0);
+  }
+  function levelOpen(e) {
+    if (rec(e.lv.id)) return true;
+    if (!worldOpen(e.w)) return false;
+    if (e.li === 0) return true;
+    return !!rec(e.w.levels[e.li - 1].id);
+  }
+  function nextToPlay() {
+    for (const e of ALL) if (levelOpen(e) && !rec(e.lv.id)) return e;
+    return (save.last && byId(save.last)) || ALL[0];
+  }
+  const anyProgress = () => Object.keys(save.levels).length > 0;
+
+  /* ---------- tilstand ---------- */
+  const G = {
+    screen: 'title',
+    entry: null, world: null, titleWorld: null,
+    acc: 0, time: 0, last: 0,
+    aim: null, rect: null,
+    particles: [], fish: [], leaves: [],
+    boatFx: {}, dockFx: {}, look: null,
+    completed: false, winAt: -1, result: null,
+    hint: null, hintToken: 0, hintBusy: false, hintUsed: false,
+    shownStars: 3, handOn: false, tipOn: false,
+    mapWorld: 0, nextAmbient: 3,
+  };
+
+  // Dammen bak tittelskjermen: noen båter å leke med.
+  const TITLE_LEVEL = {
+    id: 'title',
+    boats: [{ x: 92, y: 300, angle: -0.5 }, { x: 262, y: 262, angle: 3.5 }, { x: 178, y: 392, angle: -1.9, color: 2 }],
+    pads: [{ x: 66, y: 450, r: 22, flower: true }, { x: 300, y: 405, r: 18 }],
+    rocks: [{ x: 296, y: 136, r: 19 }],
+    docks: [],
+  };
+
+  /* ---------- skjermer ---------- */
+  const canvas = $('game');
+
+  function setScreen(name) {
+    G.screen = name;
+    $('title').hidden = name !== 'title';
+    $('map').hidden = name !== 'map';
+    $('hud').hidden = name !== 'play';
+    $('win').hidden = true;
+    if (name !== 'play') { hideTip(true); hideHand(); $('banner').hidden = true; G.aim = null; G.hint = null; }
+  }
+
+  function transition(fn) {
+    const f = $('fade');
+    f.classList.add('on');
+    setTimeout(() => { fn(); requestAnimationFrame(() => f.classList.remove('on')); }, 220);
+  }
+
+  function toTitle() {
+    G.world = G.titleWorld;
+    G.entry = null;
+    spawnDecor('title');
+    setBoatFx(G.world);
+    setScreen('title');
+    applyTexts();
+  }
+
+  /* ---------- bane ---------- */
+  function startLevel(entry, quick) {
+    G.entry = entry;
+    save.last = entry.lv.id; persist();
+    G.world = E.createWorld(entry.lv);
+    G.acc = 0; G.particles = []; G.dockFx = {}; G.look = null;
+    G.completed = false; G.winAt = -1; G.result = null;
+    G.hint = null; G.hintToken++; G.hintUsed = false; G.hintBusy = false;
+    $('btnHint').classList.remove('busy');
+    G.shownStars = 3;
+    setBoatFx(G.world);
+    spawnDecor(entry.lv.id);
+    setScreen('play');
+    updateHud(true);
+    if (!quick) showBanner(entry.lv);
+    showTip(entry.lv, quick ? 150 : 900);
+    G.handOn = !!entry.lv.hand && !rec(entry.lv.id);
+    $('hand').hidden = !G.handOn;
+  }
+
+  function restart() {
+    if (!G.entry) return;
+    S.click();
+    startLevel(G.entry, true);
+    for (const b of G.world.boats) { const f = G.boatFx[b.id]; if (f) f.pop = 1; }
+  }
+
+  function setBoatFx(w) {
+    G.boatFx = {};
+    for (const b of w.boats) G.boatFx[b.id] = { squash: 0, blink: 0, nextBlink: 1 + Math.random() * 3, angle: b.angle, pop: 0, wake: 0 };
+  }
+
+  /* ---------- trykk ---------- */
+  function toWorld(e) {
+    const r = G.rect || canvas.getBoundingClientRect();
+    return R.toWorld(e.clientX - r.left, e.clientY - r.top);
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    S.unlock();
+    const p = toWorld(e);
+    if (G.screen === 'title') {
+      if (E.insidePond(p.x, p.y, 2)) E.tap(G.world, p.x, p.y);
+      return;
+    }
+    if (G.screen !== 'play' || G.completed || !E.insidePond(p.x, p.y, 2)) return;
+    G.aim = { x: p.x, y: p.y, cancel: false, id: e.pointerId };
+    hideHand();
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ok */ }
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!G.aim || e.pointerId !== G.aim.id) return;
+    const p = toWorld(e);
+    G.aim.x = p.x; G.aim.y = p.y;
+    G.aim.cancel = !E.insidePond(p.x, p.y, 2);
+  });
+  canvas.addEventListener('pointerup', (e) => {
+    if (!G.aim || e.pointerId !== G.aim.id) return;
+    const a = G.aim; G.aim = null;
+    if (!a.cancel) playerTap(a.x, a.y);
+  });
+  canvas.addEventListener('pointercancel', () => { G.aim = null; });
+  // hindre zoom/rulling på iOS
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
+  document.addEventListener('touchmove', (e) => { if (e.target === canvas) e.preventDefault(); }, { passive: false });
+
+  function playerTap(x, y) {
+    if (!G.world || G.completed) return;
+    if (!E.tap(G.world, x, y)) return;
+    G.hintToken++;
+    if (G.hintBusy) { G.hintBusy = false; $('btnHint').classList.remove('busy'); }
+    G.hint = null;
+    hideHand();
+    hideTip();
+  }
+
+  /* ---------- hovedløkke ---------- */
+  function frame(now) {
+    const dt = Math.min(0.05, Math.max(0, (now - G.last) / 1000));
+    G.last = now; G.time += dt;
+    if (G.world) {
+      G.acc += dt;
+      let n = 0;
+      while (G.acc >= C.DT && n < 10) {
+        E.step(G.world);
+        G.acc -= C.DT; n++;
+        if (G.world.events.length) handleEvents();
+      }
+      if (n >= 10) G.acc = 0;
+    }
+    updateFx(dt);
+    if (G.screen === 'title') titleAmbience(dt);
+    if (G.screen === 'play') liveStars();
+    if (G.winAt > 0 && G.time >= G.winAt) { G.winAt = -1; showWin(); }
+    R.draw({
+      world: G.world, time: G.time,
+      particles: G.particles, fish: G.fish, leaves: G.leaves,
+      boatFx: G.boatFx, dockFx: G.dockFx,
+      look: G.look, aim: G.aim, hint: G.hint,
+    });
+    if (G.handOn) positionHand();
+    requestAnimationFrame(frame);
+  }
+
+  function handleEvents() {
+    const w = G.world;
+    for (const ev of w.events) {
+      switch (ev.type) {
+        case 'tap':
+          splash(ev.x, ev.y);
+          S.plip(ev.x / C.W);
+          G.look = { x: ev.x, y: ev.y, until: G.time + 2.5 };
+          break;
+        case 'hit': {
+          const f = G.boatFx[ev.id];
+          if (f) f.squash = 1;
+          S.hit(ev.f);
+          break;
+        }
+        case 'bump': bumpFx(ev); S.bump(ev.v, ev.what); break;
+        case 'dock': dockFx(ev); S.dock(ev.n); break;
+        case 'complete': if (G.screen === 'play' && w === G.world && G.entry) onComplete(); break;
+        case 'sink': sinkFx(ev); S.sink(); break;
+        case 'respawn': respawnFx(ev); S.pop(); break;
+      }
+    }
+    w.events.length = 0;
+  }
+
+  /* ---------- effekter ---------- */
+  function addP(p) { p.t = 0; G.particles.push(p); if (G.particles.length > 420) G.particles.shift(); }
+
+  function splash(x, y) {
+    addP({ type: 'flash', x, y, size: 24, life: 0.42 });
+    for (let i = 0; i < 11; i++) {
+      const a = Math.random() * TAU, sp = 40 + Math.random() * 95;
+      addP({ type: 'drop', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, drag: 4.5, size: 1.1 + Math.random() * 1.5, life: 0.32 + Math.random() * 0.28 });
+    }
+  }
+  function bumpFx(ev) {
+    const k = Math.min(1, ev.v / 300);
+    for (let i = 0; i < 2 + k * 7; i++) {
+      const a = Math.random() * TAU, sp = 20 + Math.random() * 60 * k;
+      addP({ type: 'drop', x: ev.x, y: ev.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, drag: 5, size: 1 + Math.random(), life: 0.3 + Math.random() * 0.2 });
+    }
+    for (const b of G.world.boats) {
+      if (Math.hypot(b.x - ev.x, b.y - ev.y) < b.r + 6) { const f = G.boatFx[b.id]; if (f) f.squash = Math.max(f.squash, 0.6 * k); }
+    }
+  }
+  function dockFx(ev) {
+    G.dockFx[ev.dock] = { flash: 1 };
+    const f = G.boatFx[ev.id]; if (f) f.pop = 1;
+    addP({ type: 'ringfx', x: ev.x, y: ev.y, r0: 20, size: 34, life: 0.7 });
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * TAU + Math.random() * 0.3, sp = 50 + Math.random() * 70;
+      addP({ type: 'spark', x: ev.x, y: ev.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, drag: 3, size: 2.5 + Math.random() * 2.5, angle: Math.random() * 3, life: 0.6 + Math.random() * 0.4 });
+    }
+  }
+  function sinkFx(ev) {
+    for (let i = 0; i < 14; i++) {
+      addP({ type: 'bubble', layer: 'under', x: ev.x + (Math.random() - 0.5) * 16, y: ev.y + (Math.random() - 0.5) * 16, vx: 0, vy: 0, size: 1.5 + Math.random() * 2.5, life: 0.4 + Math.random() * 0.9 });
+    }
+  }
+  function respawnFx(ev) {
+    addP({ type: 'ringfx', x: ev.x, y: ev.y, r0: 6, size: 30, life: 0.5, rgb: '255,255,255' });
+    const f = G.boatFx[ev.id]; if (f) f.pop = 1;
+  }
+  function confetti() {
+    const cols = R.PAL.boats.map((p) => p[0]).concat(['#ffffff', '#ffe08a']);
+    for (let i = 0; i < 60; i++) {
+      addP({
+        type: 'paper', x: Math.random() * C.W, y: -20 - Math.random() * 140,
+        vx: (Math.random() - 0.5) * 40, vy: 60 + Math.random() * 60, grav: 30, drag: 0.4,
+        size: 3 + Math.random() * 3, color: cols[i % cols.length], angle: Math.random() * TAU,
+        spin: (Math.random() - 0.5) * 6, flip: 4 + Math.random() * 6, life: 3 + Math.random() * 1.5,
+      });
+    }
+  }
+
+  function updateFx(dt) {
+    const ps = G.particles;
+    for (let i = ps.length - 1; i >= 0; i--) {
+      const p = ps[i];
+      p.t += dt;
+      if (p.t >= p.life) { ps.splice(i, 1); continue; }
+      if (p.vx != null) {
+        const k = Math.exp(-(p.drag || 0) * dt);
+        p.vx *= k; p.vy *= k;
+        if (p.grav) p.vy += p.grav * dt;
+        if (p.type === 'paper') p.vx += Math.sin(p.t * 3 + p.angle) * 20 * dt;
+        p.x += p.vx * dt; p.y += p.vy * dt;
+      }
+    }
+    const w = G.world;
+    if (w) {
+      for (const b of w.boats) {
+        const f = G.boatFx[b.id];
+        if (!f) continue;
+        f.squash = Math.max(0, f.squash - dt * 3.2);
+        f.pop = Math.max(0, f.pop - dt * 2.6);
+        f.nextBlink -= dt;
+        if (f.nextBlink <= 0) { f.blink = 0.13; f.nextBlink = 2 + Math.random() * 4; }
+        f.blink = Math.max(0, f.blink - dt);
+        const sp = Math.hypot(b.vx, b.vy);
+        let target = null;
+        if (b.dock >= 0) target = w.docks[b.dock].angle;
+        else if (sp > 25) target = Math.atan2(b.vy, b.vx);
+        if (target != null) {
+          let d = target - f.angle;
+          d = Math.atan2(Math.sin(d), Math.cos(d));
+          f.angle += d * Math.min(1, dt * (b.dock >= 0 ? 5 : 7));
+        }
+        if (sp > 55 && b.dock < 0 && b.sink <= 0) {
+          f.wake += dt;
+          if (f.wake > 0.035) {
+            f.wake = 0;
+            addP({ type: 'wake', layer: 'under', x: b.x - Math.cos(f.angle) * 12, y: b.y - Math.sin(f.angle) * 12, size: 5 + sp / 90, angle: f.angle, life: 0.8 });
+          }
+        }
+      }
+      for (const k in G.dockFx) G.dockFx[k].flash = Math.max(0, G.dockFx[k].flash - dt * 1.6);
+      updateFish(dt, w);
+      updateLeaves(dt, w);
+    }
+    if (G.look && G.time > G.look.until) G.look = null;
+  }
+
+  /* ---------- liv i dammen: fisk og blader ---------- */
+  function seeded(str) {
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; return ((h >>> 0) % 100000) / 100000; };
+  }
+  function spawnDecor(id) {
+    const rnd = seeded(String(id));
+    G.fish = [];
+    for (let i = 0; i < 4; i++) {
+      G.fish.push({ x: 40 + rnd() * 280, y: 60 + rnd() * 480, angle: rnd() * TAU, speed: 13 + rnd() * 9, size: 6.5 + rnd() * 4, phase: rnd() * 10, dart: 0, hit: {}, wander: rnd() * 10 });
+    }
+    G.leaves = [];
+    const w = G.world;
+    const cols = ['#e9a23b', '#d9663a', '#a6cf5f', '#f2c14e'];
+    for (let i = 0; i < 3; i++) {
+      let x = 0, y = 0;
+      for (let tries = 0; tries < 30; tries++) {
+        x = 30 + rnd() * 300; y = 40 + rnd() * 520;
+        let ok = true;
+        for (const b of w.bodies) if (Math.hypot(b.x - x, b.y - y) < b.r + 24) ok = false;
+        for (const d of w.docks) if (Math.hypot(d.x - x, d.y - y) < d.r + 20) ok = false;
+        for (const r of w.rocks) if (Math.hypot(r.x - x, r.y - y) < r.r + 16) ok = false;
+        if (ok) break;
+      }
+      G.leaves.push({ x, y, vx: 0, vy: 0, angle: rnd() * TAU, spin: 0, size: 5.5 + rnd() * 2.5, color: cols[i % cols.length], hit: {} });
+    }
+  }
+
+  function updateFish(dt, w) {
+    for (const f of G.fish) {
+      f.wander += dt;
+      f.angle += Math.sin(f.wander * 0.7 + f.phase) * 0.9 * dt;
+      // hold deg unna kanten
+      const m = 40;
+      if (f.x < m || f.x > C.W - m || f.y < m || f.y > C.H - m) {
+        const a = Math.atan2(C.H / 2 - f.y, C.W / 2 - f.x);
+        let d = a - f.angle; d = Math.atan2(Math.sin(d), Math.cos(d));
+        f.angle += d * Math.min(1, dt * 2.5);
+      }
+      // skvett unna krusninger
+      for (const rp of w.ripples) {
+        if (f.hit[rp.id]) continue;
+        const d = Math.hypot(f.x - rp.x, f.y - rp.y);
+        if (rp.r >= d - 10) {
+          f.hit[rp.id] = true;
+          if (E.falloff(d) > 0.06) { f.dart = 1; f.angle = Math.atan2(f.y - rp.y, f.x - rp.x) + (Math.random() - 0.5) * 0.6; }
+        }
+      }
+      f.dart = Math.max(0, f.dart - dt * 1.4);
+      const sp = f.speed + f.dart * f.dart * 170;
+      f.x += Math.cos(f.angle) * sp * dt;
+      f.y += Math.sin(f.angle) * sp * dt;
+      f.x = Math.max(8, Math.min(C.W - 8, f.x)); f.y = Math.max(8, Math.min(C.H - 8, f.y));
+    }
+  }
+
+  function updateLeaves(dt, w) {
+    for (const l of G.leaves) {
+      for (const rp of w.ripples) {
+        if (l.hit[rp.id]) continue;
+        const d = Math.hypot(l.x - rp.x, l.y - rp.y);
+        if (rp.r >= d - 4) {
+          l.hit[rp.id] = true;
+          const f = E.falloff(d);
+          if (f > 0 && d > 0.01) { l.vx += ((l.x - rp.x) / d) * 150 * f; l.vy += ((l.y - rp.y) / d) * 150 * f; l.spin += (Math.random() - 0.5) * 6 * f; }
+        }
+      }
+      const k = Math.exp(-1.4 * dt);
+      l.vx *= k; l.vy *= k; l.spin *= k;
+      l.x += l.vx * dt; l.y += l.vy * dt; l.angle += l.spin * dt;
+      if (l.x < 8) { l.x = 8; l.vx = Math.abs(l.vx) * 0.5; }
+      if (l.x > C.W - 8) { l.x = C.W - 8; l.vx = -Math.abs(l.vx) * 0.5; }
+      if (l.y < 8) { l.y = 8; l.vy = Math.abs(l.vy) * 0.5; }
+      if (l.y > C.H - 8) { l.y = C.H - 8; l.vy = -Math.abs(l.vy) * 0.5; }
+    }
+  }
+
+  // På tittelskjermen hopper en fisk av og til, så båtene driver litt.
+  function titleAmbience(dt) {
+    G.nextAmbient -= dt;
+    if (G.nextAmbient > 0) return;
+    G.nextAmbient = 5 + Math.random() * 4;
+    const w = G.world;
+    for (let tries = 0; tries < 12; tries++) {
+      const x = 40 + Math.random() * 280, y = 120 + Math.random() * 360;
+      if (w.bodies.every((b) => Math.hypot(b.x - x, b.y - y) > 130)) { E.tap(w, x, y); break; }
+    }
+  }
+
+  /* ---------- toppmeny, tips og hånd ---------- */
+  function updateHud() {
+    if (!G.entry || !G.world) return;
+    const lv = G.entry.lv;
+    $('hudId').textContent = lv.id;
+    $('hudName').textContent = I.pick(lv.name);
+    $('hudTaps').textContent = G.world.taps;
+    $('hudPar').textContent = t('par') + ' ' + lv.par;
+    paintHudStars(G.shownStars, -1);
+  }
+
+  function paintHudStars(n, lostIdx) {
+    const stars = $('hudStars').children;
+    for (let i = 0; i < 3; i++) {
+      stars[i].classList.toggle('off', i >= n);
+      if (i === lostIdx) { stars[i].classList.remove('lost'); void stars[i].getBoundingClientRect(); stars[i].classList.add('lost'); }
+    }
+  }
+
+  // Viser hvor mange stjerner som fortsatt er mulig.
+  function liveStars() {
+    if (!G.world || !G.entry) return;
+    const w = G.world, lv = G.entry.lv;
+    if (+$('hudTaps').textContent !== w.taps) $('hudTaps').textContent = w.taps;
+    const possible = G.completed ? starsFor(lv, w.taps) : starsFor(lv, E.isSettled(w) ? w.taps + 1 : w.taps);
+    if (possible !== G.shownStars) {
+      const lost = possible < G.shownStars ? possible : -1;
+      if (lost >= 0 && !G.completed) S.lose();
+      G.shownStars = possible;
+      paintHudStars(possible, lost);
+    }
+    $('btnRestart').classList.toggle('nudge', !G.completed && possible < 3);
+  }
+
+  function showBanner(lv) {
+    const b = $('banner');
+    $('bannerId').textContent = lv.id;
+    $('bannerName').textContent = I.pick(lv.name);
+    b.hidden = false;
+    b.style.animation = 'none'; void b.offsetWidth; b.style.animation = '';
+    clearTimeout(showBanner.tm);
+    showBanner.tm = setTimeout(() => { b.hidden = true; }, 2000);
+  }
+
+  function showTip(lv, delay) {
+    hideTip(true);
+    if (!lv.tip) return;
+    clearTimeout(showTip.tm);
+    showTip.tm = setTimeout(() => {
+      if (G.screen !== 'play' || G.entry.lv !== lv || G.world.taps > 0) return;
+      const el = $('tip');
+      $('tipText').textContent = I.pick(lv.tip);
+      el.classList.remove('out');
+      el.hidden = false;
+      G.tipOn = true;
+    }, delay || 0);
+  }
+  function hideTip(now) {
+    clearTimeout(showTip.tm);
+    const el = $('tip');
+    if (el.hidden) return;
+    if (now) { el.hidden = true; G.tipOn = false; return; }
+    el.classList.add('out');
+    setTimeout(() => { el.hidden = true; el.classList.remove('out'); }, 350);
+    G.tipOn = false;
+  }
+
+  function positionHand() {
+    const lv = G.entry && G.entry.lv;
+    if (!lv || !lv.hand) return;
+    const p = R.toScreen(lv.hand.x, lv.hand.y);
+    const el = $('hand');
+    el.style.left = p.x + 'px';
+    el.style.top = p.y + 'px';
+  }
+  function hideHand() { G.handOn = false; $('hand').hidden = true; }
+
+  function toast(msg) {
+    const el = $('toast');
+    el.textContent = msg;
+    el.hidden = false;
+    el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+    clearTimeout(toast.tm);
+    toast.tm = setTimeout(() => { el.hidden = true; }, 2700);
+  }
+
+  /* ---------- bane fullført ---------- */
+  function onComplete() {
+    G.completed = true;
+    G.aim = null; G.hint = null;
+    const lv = G.entry.lv, taps = G.world.taps;
+    const stars = starsFor(lv, taps);
+    const pearl = taps <= lv.pearl && !G.hintUsed;
+    const prev = rec(lv.id) ? Object.assign({}, rec(lv.id)) : null;
+    const starsBefore = totalStars();
+    const r = save.levels[lv.id] || (save.levels[lv.id] = { best: taps, stars: 0, pearl: false, plays: 0 });
+    r.best = Math.min(r.best, taps);
+    r.stars = Math.max(r.stars, stars);
+    r.pearl = !!(r.pearl || pearl);
+    r.plays = (r.plays || 0) + 1;
+    persist();
+    G.result = { stars, pearl, taps, prev, rec: r, firstPearl: pearl && !(prev && prev.pearl), newBest: !!prev && taps < prev.best, starsBefore };
+    G.winAt = G.time + 1.05;
+    hideTip(true);
+    setTimeout(() => { if (G.completed) { S.win(); confetti(); } }, 350);
+  }
+
+  function showWin() {
+    if (!G.result || G.screen !== 'play') return;
+    const res = G.result, lv = G.entry.lv;
+    $('winTitle').textContent = res.pearl ? t('winPearl') : t(res.stars === 3 ? 'win3' : res.stars === 2 ? 'win2' : 'win1');
+    const stars = $('winStars').children;
+    for (let i = 0; i < 3; i++) stars[i].classList.remove('on');
+    $('winStats').textContent = t('usedOfPar', { used: I.ripples(res.taps), par: lv.par });
+    const best = $('winBest');
+    best.hidden = !res.newBest;
+    best.textContent = t('newBest');
+
+    const box = $('pearlBox');
+    box.className = 'pearl-box';
+    if (res.firstPearl) {
+      box.classList.add('found');
+      $('pearlTitle').textContent = t('pearlFound');
+      $('pearlSub').textContent = t('pearlFoundSub');
+    } else if (res.rec.pearl) {
+      box.classList.add('have');
+      $('pearlTitle').textContent = t('pearlHave');
+      $('pearlSub').textContent = t('pearlHaveSub', { used: I.ripples(lv.pearl) });
+    } else {
+      box.classList.add('missing');
+      $('pearlTitle').textContent = t('pearlGoal', { used: I.ripples(lv.pearl) });
+      $('pearlSub').textContent = G.hintUsed ? t('pearlHintUsed') : t('pearlTease');
+    }
+    $('btnRetryTxt').textContent = res.stars < 3 ? t('retryFor3') : t('retry');
+    $('btnNextTxt').textContent = t('next');
+    $('btnWinMap').textContent = t('toMap');
+    $('win').hidden = false;
+
+    for (let i = 0; i < res.stars; i++) {
+      setTimeout(() => { if (!$('win').hidden) { stars[i].classList.add('on'); S.star(i); } }, 380 + i * 300);
+    }
+    if (res.firstPearl) setTimeout(() => { if (!$('win').hidden) S.pearl(); }, 480 + res.stars * 300);
+
+    // åpnet dette en ny verden?
+    const after = totalStars();
+    for (const w of LV.WORLDS) {
+      if (!w.soon && w.unlockStars && res.starsBefore < w.unlockStars && after >= w.unlockStars) {
+        setTimeout(() => toast(t('unlocked', { name: I.pick(w.name) })), 1400);
+      }
+    }
+  }
+
+  function goNext() {
+    S.click();
+    const e = G.entry;
+    const nxt = ALL[e.idx + 1];
+    if (nxt && levelOpen(nxt)) { transition(() => startLevel(nxt)); return; }
+    // slutten av verdenen: vis neste verden på kartet
+    transition(() => {
+      openMap(Math.min(LV.WORLDS.length - 1, e.wi + 1));
+      const w = LV.WORLDS[e.wi + 1];
+      if (w && !w.soon && !worldOpen(w)) toast(t('needStars', { n: w.unlockStars - totalStars(), name: I.pick(w.name) }));
+    });
+  }
+
+  /* ---------- banekart ---------- */
+  function openMap(wi) {
+    G.mapWorld = wi != null ? wi : G.entry ? G.entry.wi : nextToPlay().wi;
+    if (G.screen === 'play' || !G.world) { G.world = G.titleWorld; G.entry = null; spawnDecor('title'); setBoatFx(G.world); }
+    renderMap();
+    setScreen('map');
+  }
+
+  function starRow(n) {
+    let h = '';
+    for (let i = 0; i < 3; i++) h += `<svg class="star${i < n ? '' : ' off'}"><use href="#i-star"/></svg>`;
+    return h;
+  }
+
+  function renderMap() {
+    const w = LV.WORLDS[G.mapWorld];
+    $('mapWorldNo').textContent = t('world', { n: w.id });
+    $('mapWorldName').textContent = I.pick(w.name);
+    $('mapStars').textContent = totalStars();
+    $('mapPearls').textContent = totalPearls();
+    $('mapBlurb').textContent = I.pick(w.blurb);
+    const open = worldOpen(w);
+    const grid = $('levelGrid');
+    const lock = $('worldLock');
+    if (open && w.levels.length) {
+      const cur = nextToPlay();
+      grid.innerHTML = '';
+      for (const e of ALL.filter((x) => x.w === w)) {
+        const r = rec(e.lv.id);
+        const ok = levelOpen(e);
+        const b = document.createElement('button');
+        b.className = 'lvl' + (ok ? '' : ' locked') + (ok && e === cur && !r ? ' current' : '');
+        b.setAttribute('aria-label', `${e.lv.id} ${I.pick(e.lv.name)}`);
+        b.innerHTML = `<span class="pad">${ok ? `<span class="num">${e.li + 1}</span>` : '<svg class="lock"><use href="#i-lock"/></svg>'}`
+          + `${r && r.pearl ? '<i class="pearl lvl-pearl"></i>' : ''}</span>`
+          + `<span class="lvl-stars">${starRow(r ? r.stars : 0)}</span>`;
+        if (ok) b.addEventListener('click', () => { S.unlock(); S.click(); transition(() => startLevel(e)); });
+        grid.appendChild(b);
+      }
+      grid.hidden = false; lock.hidden = true;
+    } else {
+      grid.hidden = true; lock.hidden = false;
+      $('lockBlurb').textContent = I.pick(w.blurb);
+      let need = '', frac = 0;
+      if (w.unlockPearls) { need = t('unlockPearls', { n: w.unlockPearls }); frac = totalPearls() / w.unlockPearls; }
+      else if (!open && w.unlockStars) { need = t('unlockStars', { n: w.unlockStars }); frac = totalStars() / w.unlockStars; }
+      if (w.soon) need = (need ? need + ' · ' : '') + t('soon');
+      else if (open) { need = t('demoSoon'); frac = 1; }
+      $('lockNeed').textContent = need;
+      $('lockBarFill').style.width = Math.min(100, Math.round(frac * 100)) + '%';
+      $('mapBlurb').textContent = '';
+    }
+    const dots = $('worldDots');
+    dots.innerHTML = LV.WORLDS.map((_, i) => `<i class="${i === G.mapWorld ? 'on' : ''}"></i>`).join('');
+    $('worldPrev').disabled = G.mapWorld === 0;
+    $('worldNext').disabled = G.mapWorld === LV.WORLDS.length - 1;
+  }
+
+  /* ---------- hint (regnes ut fra situasjonen akkurat nå) ---------- */
+  function requestHint() {
+    if (!G.world || G.completed || G.screen !== 'play' || G.hintBusy) return;
+    S.unlock(); S.click();
+    if (!E.isSettled(G.world)) { toast(t('hintWait')); return; }
+    if (!G.hintUsed) { G.hintUsed = true; toast(t('hintUsed')); }
+    G.hintBusy = true;
+    $('btnHint').classList.add('busy');
+    const token = ++G.hintToken;
+    findHint(G.world, token, (pt) => {
+      if (token !== G.hintToken) return;
+      G.hintBusy = false;
+      $('btnHint').classList.remove('busy');
+      if (!pt) { toast(t('hintNone')); return; }
+      G.hint = pt;
+      hideTip();
+    });
+  }
+
+  function hintScore(w) {
+    let s = 0;
+    for (const b of w.boats) {
+      if (b.dock >= 0) { s += 1000; continue; }
+      let best = 1e9;
+      for (const d of w.docks) {
+        if (d.boat >= 0 || (d.color >= 0 && d.color !== b.color)) continue;
+        best = Math.min(best, Math.hypot(d.x - b.x, d.y - b.y));
+      }
+      s -= best;
+      for (const v of w.whirls) if (Math.hypot(v.x - b.x, v.y - b.y) < v.r) s -= 150;
+    }
+    return s;
+  }
+
+  // Som Engine.isSettled, men godtar krusninger som allerede har passert alt.
+  function calmEnough(w) {
+    for (const b of w.bodies) {
+      if (b.dock >= 0) continue;
+      if (b.sink > 0 || b.pushes.length) return false;
+      if (b.vx * b.vx + b.vy * b.vy > C.SETTLE_V * C.SETTLE_V) return false;
+      for (const rp of w.ripples) if (rp.r < C.RIPPLE_RANGE && rp.hit.indexOf(b.id) < 0) return false;
+    }
+    return true;
+  }
+
+  function findHint(world, token, cb) {
+    const base = E.clone(world);
+    const movers = base.bodies.filter((b) => b.dock < 0);
+    const reach = C.RIPPLE_RANGE - 12;
+    // bare trykk som faktisk når noe, i blandet rekkefølge (så vi kan stoppe tidlig)
+    const pts = [];
+    for (let y = 6; y < C.H; y += 11) {
+      for (let x = 5; x < C.W; x += 11) {
+        if (!E.insidePond(x, y, 8)) continue;
+        if (movers.some((b) => Math.hypot(b.x - x, b.y - y) < reach)) pts.push([x, y]);
+      }
+    }
+    const rnd = seeded('hint' + base.taps);
+    for (let i = pts.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); const tmp = pts[i]; pts[i] = pts[j]; pts[j] = tmp; }
+    const res = [];
+    let i = 0, wins = 0;
+    const now = hintScore(base);
+    (function chunk() {
+      if (token !== G.hintToken) return;
+      const t0 = performance.now();
+      while (i < pts.length && performance.now() - t0 < 11) {
+        const [x, y] = pts[i++];
+        const w = E.clone(base);
+        E.tap(w, x, y);
+        let done = false;
+        for (let s = 0; s < 760; s++) {
+          E.step(w); w.events.length = 0;
+          if (w.done) { done = true; break; }
+          if ((s & 7) === 7 && calmEnough(w)) break;
+        }
+        if (done) wins++;
+        res.push({ x, y, done, score: done ? 1e9 : hintScore(w) });
+      }
+      if (i < pts.length && wins < 40) { requestAnimationFrame(chunk); return; }
+      const winList = res.filter((r) => r.done);
+      if (winList.length) {
+        let best = null, bn = -1;
+        for (const p of winList) {
+          let n = 0;
+          for (const q of winList) if (Math.abs(p.x - q.x) <= 11 && Math.abs(p.y - q.y) <= 11) n++;
+          if (n > bn) { bn = n; best = p; }
+        }
+        cb({ x: best.x, y: best.y });
+        return;
+      }
+      let best = null;
+      for (const r of res) if (!best || r.score > best.score) best = r;
+      cb(best && best.score > now + 8 ? { x: best.x, y: best.y } : null);
+    })();
+  }
+
+  /* ---------- innstillinger ---------- */
+  function openSettings() {
+    S.unlock(); S.click();
+    $('resetConfirm').hidden = true;
+    $('setReset').hidden = false;
+    paintSettings();
+    $('settings').hidden = false;
+  }
+  function paintSettings() {
+    $('setSfx').setAttribute('aria-checked', String(save.sfx));
+    $('setMusic').setAttribute('aria-checked', String(save.music));
+    for (const b of $('setLang').children) b.classList.toggle('on', b.dataset.lang === save.lang);
+  }
+
+  /* ---------- tekster ---------- */
+  function applyTexts() {
+    document.documentElement.lang = save.lang === 'en' ? 'en' : 'no';
+    const logo = $('logo');
+    logo.innerHTML = 'Krusning'.split('').map((ch, i) => `<span style="--i:${i}">${ch}</span>`).join('');
+    $('tagline').textContent = t('tagline');
+    $('btnPlay').textContent = anyProgress() ? t('continueAt', { id: nextToPlay().lv.id }) : t('play');
+    $('btnLevelsTxt').textContent = t('levels');
+    $('soundTip').textContent = t('soundTip');
+    $('setTitle').textContent = t('settings');
+    $('setSfxLbl').textContent = t('sound');
+    $('setMusicLbl').textContent = t('music');
+    $('setLangLbl').textContent = t('language');
+    $('setReset').textContent = t('reset');
+    $('resetAsk').textContent = t('resetAsk');
+    $('resetYes').textContent = t('resetYes');
+    $('resetNo').textContent = t('cancel');
+    $('credits').textContent = t('credits');
+    $('btnHint').setAttribute('aria-label', t('hint'));
+    $('btnRestart').setAttribute('aria-label', t('restart'));
+    $('btnSettings').setAttribute('aria-label', t('settings'));
+    $('mapBack').setAttribute('aria-label', t('back'));
+    $('setClose').setAttribute('aria-label', t('close'));
+  }
+
+  /* ---------- knapper ---------- */
+  $('btnPlay').addEventListener('click', () => {
+    S.unlock(); S.click();
+    transition(() => startLevel(anyProgress() ? nextToPlay() : ALL[0]));
+  });
+  $('btnLevels').addEventListener('click', () => { S.unlock(); S.click(); openMap(); });
+  $('btnLevels2').addEventListener('click', () => { S.click(); openMap(G.entry ? G.entry.wi : 0); });
+  $('btnSettings').addEventListener('click', openSettings);
+  $('btnRestart').addEventListener('click', restart);
+  $('btnHint').addEventListener('click', requestHint);
+  $('btnRetry').addEventListener('click', () => { $('win').hidden = true; restart(); });
+  $('btnNext').addEventListener('click', goNext);
+  $('btnWinMap').addEventListener('click', () => { S.click(); transition(() => openMap(G.entry ? G.entry.wi : 0)); });
+  $('mapBack').addEventListener('click', () => { S.click(); toTitle(); });
+  $('worldPrev').addEventListener('click', () => { S.click(); G.mapWorld = Math.max(0, G.mapWorld - 1); renderMap(); });
+  $('worldNext').addEventListener('click', () => { S.click(); G.mapWorld = Math.min(LV.WORLDS.length - 1, G.mapWorld + 1); renderMap(); });
+  $('setClose').addEventListener('click', () => { S.click(); $('settings').hidden = true; });
+  $('settings').addEventListener('click', (e) => { if (e.target === $('settings')) $('settings').hidden = true; });
+  $('setSfx').addEventListener('click', () => { save.sfx = !save.sfx; S.setSfx(save.sfx); persist(); paintSettings(); S.click(); });
+  $('setMusic').addEventListener('click', () => { save.music = !save.music; S.setMusic(save.music); persist(); paintSettings(); S.click(); });
+  for (const b of $('setLang').children) {
+    b.addEventListener('click', () => {
+      save.lang = b.dataset.lang; I.lang = save.lang; persist();
+      applyTexts(); paintSettings(); updateHud();
+      if (G.screen === 'map') renderMap();
+      S.click();
+    });
+  }
+  $('setReset').addEventListener('click', () => { $('resetConfirm').hidden = false; $('setReset').hidden = true; });
+  $('resetNo').addEventListener('click', () => { $('resetConfirm').hidden = true; $('setReset').hidden = false; });
+  $('resetYes').addEventListener('click', () => {
+    save = Object.assign(defaults(), { lang: save.lang, sfx: save.sfx, music: save.music });
+    persist();
+    $('settings').hidden = true;
+    toTitle();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (G.screen !== 'play') return;
+    if (e.key === 'r' || e.key === 'R') restart();
+    if (e.key === 'h' || e.key === 'H') requestHint();
+  });
+
+  /* ---------- skjermstørrelse ---------- */
+  let resizeQueued = false;
+  function onResize() {
+    resizeQueued = false;
+    const r = canvas.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    G.rect = r;
+    R.resize(r.width, r.height, Math.min(2, window.devicePixelRatio || 1), 68, 10);
+  }
+  function queueResize() { if (!resizeQueued) { resizeQueued = true; requestAnimationFrame(onResize); } }
+  window.addEventListener('resize', queueResize);
+  window.addEventListener('orientationchange', queueResize);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', queueResize);
+  document.addEventListener('visibilitychange', () => {
+    if (!S.ctx) return;
+    if (document.hidden) S.ctx.suspend(); else if (save.sfx || save.music) S.ctx.resume();
+  });
+
+  /* ---------- oppstart ---------- */
+  function boot(data) {
+    I.lang = save.lang || 'no';
+    S.sfxOn = save.sfx; S.musicOn = save.music;
+    R.init(canvas);
+    onResize();
+    G.titleWorld = E.createWorld(TITLE_LEVEL);
+    toTitle();
+    const d = data || {};
+    if (d.screen === 'play' && d.level && byId(d.level) && levelOpen(byId(d.level))) startLevel(byId(d.level), true);
+    else if (d.screen === 'map') openMap(d.map || 0);
+    requestAnimationFrame((now) => { G.last = now; requestAnimationFrame(frame); });
+  }
+
+  // Når en ny versjon publiseres mens spillet er åpent, fortsetter vi der vi var.
+  const hot = window.claude && window.claude.hot;
+  try { if (hot && hot.snapshot) hot.snapshot(() => ({ screen: G.screen, level: G.entry && G.entry.lv.id, map: G.mapWorld })); } catch (e) { /* ok */ }
+  if (hot && hot.ready) hot.ready(boot); else boot((hot && hot.data) || {});
+
+  // til testing i nettleserkonsollen
+  window.Krusning = { G, startLevel: (id) => startLevel(byId(id)), save: () => save, playerTap, openMap };
+})();
+
+</script>

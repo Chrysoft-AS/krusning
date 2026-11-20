@@ -1,0 +1,15 @@
+{
+  "name": "krusning",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Krusning – et rolig fysikk-puslespill med papirbåter og krusninger.",
+  "scripts": {
+    "solve": "node tools/solve.js",
+    "playtest": "node tools/playtest.js",
+    "shots": "node tools/shots.js shots",
+    "build": "node tools/build-artifact.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.47.0"
+  }
+}

@@ -1,0 +1,127 @@
+/* =====================================================================
+ * Krusning – tekster (norsk og engelsk)
+ * ---------------------------------------------------------------------
+ * Legg til et nytt språk ved å kopiere "en"-blokken og oversette.
+ * {n}, {par} osv. byttes ut med tall når teksten vises.
+ * ===================================================================== */
+(function (root) {
+  'use strict';
+  const STRINGS = {
+    no: {
+      tagline: 'Hjelp papirbåtene hjem.\nÉn krusning om gangen.',
+      play: 'Spill',
+      continueAt: 'Fortsett · {id}',
+      levels: 'Baner',
+      settings: 'Innstillinger',
+      soundTip: 'Slå av lydløs-modus for lyd',
+      ripple1: 'krusning', rippleN: 'krusninger',
+      par: 'par',
+      world: 'Verden {n}',
+      next: 'Neste',
+      retry: 'Prøv igjen',
+      retryFor3: 'Prøv igjen for ★★★',
+      toMap: 'Til banene',
+      win1: 'I havn!', win2: 'Godt jobba!', win3: 'Strålende!', winPearl: 'Perfekt!',
+      usedOfPar: '{used} · par {par}',
+      newBest: 'Ny rekord',
+      pearlFound: 'Du fant perla!',
+      pearlFoundSub: 'Ingen kjent løsning er bedre enn din.',
+      pearlHave: 'Perla er funnet',
+      pearlHaveSub: 'Beste løsning: {used}.',
+      pearlGoal: 'Perle: klar det med {used}',
+      pearlTease: 'Det går an. Klarer du å finne måten?',
+      pearlHintUsed: 'Perla må finnes uten hint.',
+      locked: 'Låst',
+      unlockStars: 'Samle {n} ★ for å åpne',
+      unlockPearls: 'Samle {n} perler for å åpne',
+      soon: 'Kommer snart',
+      demoSoon: 'Kommer i neste versjon av demoen',
+      stars: 'stjerner', pearls: 'perler',
+      sound: 'Lydeffekter', music: 'Musikk', language: 'Språk',
+      on: 'På', off: 'Av',
+      reset: 'Nullstill fremgang',
+      resetAsk: 'Slette all fremgang?',
+      resetYes: 'Ja, slett',
+      cancel: 'Avbryt',
+      close: 'Lukk',
+      hint: 'Hint',
+      hintThinking: 'Tenker …',
+      hintWait: 'Vent til vannet er rolig',
+      hintUsed: 'Hint brukt – perla må finnes uten hjelp',
+      hintNone: 'Fant ikke noe godt trykk. Prøv å starte på nytt.',
+      restart: 'Start på nytt',
+      back: 'Tilbake',
+      unlocked: '{name} er åpnet!',
+      needStars: 'Samle {n} ★ til for å åpne {name}',
+      credits: 'Laget med Claude Code. Alt kjører lokalt på enheten – ingen konto, ingen server.',
+      tapToStart: 'Trykk på vannet',
+    },
+    en: {
+      tagline: 'Guide the paper boats home.\nOne ripple at a time.',
+      play: 'Play',
+      continueAt: 'Continue · {id}',
+      levels: 'Levels',
+      settings: 'Settings',
+      soundTip: 'Turn off silent mode for sound',
+      ripple1: 'ripple', rippleN: 'ripples',
+      par: 'par',
+      world: 'World {n}',
+      next: 'Next',
+      retry: 'Try again',
+      retryFor3: 'Try again for ★★★',
+      toMap: 'Levels',
+      win1: 'Home!', win2: 'Nice!', win3: 'Brilliant!', winPearl: 'Perfect!',
+      usedOfPar: '{used} · par {par}',
+      newBest: 'New best',
+      pearlFound: 'You found the pearl!',
+      pearlFoundSub: 'No known solution beats yours.',
+      pearlHave: 'Pearl found',
+      pearlHaveSub: 'Best solution: {used}.',
+      pearlGoal: 'Pearl: solve it in {used}',
+      pearlTease: 'It can be done. Can you find how?',
+      pearlHintUsed: 'Pearls must be found without hints.',
+      locked: 'Locked',
+      unlockStars: 'Collect {n} ★ to unlock',
+      unlockPearls: 'Collect {n} pearls to unlock',
+      soon: 'Coming soon',
+      demoSoon: 'Coming in the next demo version',
+      stars: 'stars', pearls: 'pearls',
+      sound: 'Sound effects', music: 'Music', language: 'Language',
+      on: 'On', off: 'Off',
+      reset: 'Reset progress',
+      resetAsk: 'Delete all progress?',
+      resetYes: 'Yes, delete',
+      cancel: 'Cancel',
+      close: 'Close',
+      hint: 'Hint',
+      hintThinking: 'Thinking …',
+      hintWait: 'Wait until the water is calm',
+      hintUsed: 'Hint used – pearls must be found unaided',
+      hintNone: 'No good move found. Try restarting.',
+      restart: 'Restart',
+      back: 'Back',
+      unlocked: '{name} is open!',
+      needStars: 'Collect {n} more ★ to open {name}',
+      credits: 'Made with Claude Code. Everything runs on your device – no account, no server.',
+      tapToStart: 'Tap the water',
+    },
+  };
+
+  const I18N = { lang: 'no', STRINGS };
+  I18N.t = function (key, vars) {
+    const table = STRINGS[I18N.lang] || STRINGS.no;
+    let s = table[key] != null ? table[key] : (STRINGS.no[key] != null ? STRINGS.no[key] : key);
+    if (vars) for (const k in vars) s = s.split('{' + k + '}').join(vars[k]);
+    return s;
+  };
+  // "3 krusninger", "1 krusning"
+  I18N.ripples = function (n) { return n + ' ' + I18N.t(n === 1 ? 'ripple1' : 'rippleN'); };
+  // tekst fra banefila: { no: '…', en: '…' } eller vanlig tekst
+  I18N.pick = function (v) {
+    if (v == null) return '';
+    if (typeof v === 'string') return v;
+    return v[I18N.lang] || v.no || v.en || '';
+  };
+
+  root.I18N = I18N;
+})(typeof window !== 'undefined' ? window : globalThis);

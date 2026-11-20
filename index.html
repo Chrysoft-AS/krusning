@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<!-- ARTIFACT-HEAD-START -->
+<title>Krusning</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#7fb850">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<!-- ARTIFACT-HEAD-END -->
+</head>
+<body>
+<!-- ARTIFACT-BODY-START -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2.8l2.85 5.8 6.4.93-4.63 4.5 1.1 6.37L12 17.4l-5.72 3 1.1-6.37-4.63-4.5 6.4-.93z" stroke-linejoin="round"/></symbol>
+    <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 2.6C9.2 6.9 6.2 10.1 6.2 14a5.8 5.8 0 0 0 11.6 0c0-3.9-3-7.1-5.8-11.4z"/></symbol>
+    <symbol id="i-restart" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M4 3.8v4.6h4.6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9.2 18.2h5.6M10.2 21h3.6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.2h5c0-.9.4-1.7 1.1-2.2A6 6 0 0 0 12 3z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><g fill="currentColor"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></g></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M4 7.5h9M18 7.5h2M4 16.5h3M11 16.5h9"/><circle cx="15.5" cy="7.5" r="2.4"/><circle cx="8.5" cy="16.5" r="2.4"/></g></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M14.5 5.5L8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="M9.5 5.5L16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="3" fill="currentColor"/><path d="M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5" fill="none" stroke="currentColor" stroke-width="2.4"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
+  </defs>
+</svg>
+
+<div id="app">
+  <canvas id="game" aria-label="Dammen"></canvas>
+
+  <!-- toppmeny under spilling -->
+  <div id="hud" class="hud" hidden>
+    <button id="btnLevels2" class="icon-btn" aria-label="Baner"><svg><use href="#i-grid"/></svg></button>
+    <div class="hud-center">
+      <div class="hud-title"><span id="hudId">1-1</span> · <span id="hudName">Første krusning</span></div>
+      <div class="hud-row">
+        <span class="hud-taps"><svg class="drop"><use href="#i-drop"/></svg><b id="hudTaps">0</b><small id="hudPar">par 1</small></span>
+        <span class="hud-stars" id="hudStars">
+          <svg class="star"><use href="#i-star"/></svg><svg class="star"><use href="#i-star"/></svg><svg class="star"><use href="#i-star"/></svg>
+        </span>
+      </div>
+    </div>
+    <div class="hud-right">
+      <button id="btnHint" class="icon-btn" aria-label="Hint"><svg><use href="#i-bulb"/></svg></button>
+      <button id="btnRestart" class="icon-btn" aria-label="Start på nytt"><svg><use href="#i-restart"/></svg></button>
+    </div>
+  </div>
+
+  <div id="banner" class="banner" hidden><b id="bannerId">1-1</b><span id="bannerName"></span></div>
+  <div id="tip" class="tip" hidden><span id="tipText"></span></div>
+  <div id="toast" class="toast" hidden></div>
+
+  <div id="hand" class="hand" hidden aria-hidden="true">
+    <svg viewBox="0 0 64 64"><path d="M26 9c-2.8 0-4.8 2.2-4.8 5v22.5l-3.6-3.4c-2-1.9-5.1-1.9-7 .1-1.8 1.9-1.7 4.8.1 6.6l13 13.2C27 56.3 30.6 58 34.6 58H40c8 0 14.5-6.5 14.5-14.5V31c0-2.6-2.1-4.6-4.6-4.6-1 0-1.9.3-2.6.8-.5-2.1-2.4-3.6-4.6-3.6-1.1 0-2.1.4-2.9 1-.7-1.8-2.4-3.1-4.5-3.1-.9 0-1.8.3-2.5.7V14c0-2.8-2-5-4.8-5z" fill="#fff" stroke="#12343d" stroke-width="3" stroke-linejoin="round"/></svg>
+  </div>
+
+  <!-- tittelskjerm -->
+  <section id="title" class="screen title-screen">
+    <div class="title-top">
+      <h1 class="logo" id="logo" aria-label="Krusning">Krusning</h1>
+      <p class="tagline" id="tagline"></p>
+    </div>
+    <div class="title-bottom">
+      <button id="btnPlay" class="btn btn-primary btn-big">Spill</button>
+      <div class="title-row">
+        <button id="btnLevels" class="btn btn-paper"><svg class="btn-icon"><use href="#i-grid"/></svg><span id="btnLevelsTxt">Baner</span></button>
+        <button id="btnSettings" class="icon-btn" aria-label="Innstillinger"><svg><use href="#i-sliders"/></svg></button>
+      </div>
+      <p class="sound-tip" id="soundTip"></p>
+    </div>
+  </section>
+
+  <!-- banekart -->
+  <section id="map" class="screen map-screen" hidden>
+    <header class="map-head">
+      <button id="mapBack" class="icon-btn" aria-label="Tilbake"><svg><use href="#i-back"/></svg></button>
+      <div class="map-title">
+        <small id="mapWorldNo">Verden 1</small>
+        <h2 id="mapWorldName">Dammen</h2>
+      </div>
+      <div class="map-totals">
+        <span class="tot"><svg class="star"><use href="#i-star"/></svg><b id="mapStars">0</b></span>
+        <span class="tot"><i class="pearl-dot"></i><b id="mapPearls">0</b></span>
+      </div>
+    </header>
+    <p class="map-blurb" id="mapBlurb"></p>
+    <div class="level-grid" id="levelGrid"></div>
+    <div class="world-lock" id="worldLock" hidden>
+      <svg class="lock-big"><use href="#i-lock"/></svg>
+      <p class="lock-blurb" id="lockBlurb"></p>
+      <p class="lock-need" id="lockNeed"></p>
+      <div class="lock-bar"><i id="lockBarFill"></i></div>
+    </div>
+    <nav class="world-nav">
+      <button id="worldPrev" class="icon-btn" aria-label="Forrige verden"><svg><use href="#i-back"/></svg></button>
+      <div class="world-dots" id="worldDots"></div>
+      <button id="worldNext" class="icon-btn" aria-label="Neste verden"><svg><use href="#i-next"/></svg></button>
+    </nav>
+  </section>
+
+  <!-- resultat -->
+  <div id="win" class="modal" hidden>
+    <div class="card win-card">
+      <h2 class="win-title" id="winTitle">Strålende!</h2>
+      <div class="win-stars" id="winStars">
+        <svg class="star"><use href="#i-star"/></svg><svg class="star big"><use href="#i-star"/></svg><svg class="star"><use href="#i-star"/></svg>
+      </div>
+      <p class="win-stats"><span id="winStats"></span><span class="badge" id="winBest" hidden></span></p>
+      <div class="pearl-box" id="pearlBox">
+        <i class="pearl"></i>
+        <div class="pearl-text"><b id="pearlTitle"></b><span id="pearlSub"></span></div>
+      </div>
+      <div class="win-actions">
+        <button id="btnRetry" class="btn btn-paper"><svg class="btn-icon"><use href="#i-restart"/></svg><span id="btnRetryTxt">Prøv igjen</span></button>
+        <button id="btnNext" class="btn btn-primary"><span id="btnNextTxt">Neste</span><svg class="btn-icon"><use href="#i-next"/></svg></button>
+      </div>
+      <button id="btnWinMap" class="link-btn">Baner</button>
+    </div>
+  </div>
+
+  <!-- innstillinger -->
+  <div id="settings" class="modal" hidden>
+    <div class="card settings-card">
+      <div class="card-head">
+        <h2 id="setTitle">Innstillinger</h2>
+        <button id="setClose" class="icon-btn small" aria-label="Lukk"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="set-row"><span id="setSfxLbl">Lydeffekter</span><button id="setSfx" class="toggle" role="switch" aria-checked="true"><i></i></button></div>
+      <div class="set-row"><span id="setMusicLbl">Musikk</span><button id="setMusic" class="toggle" role="switch" aria-checked="true"><i></i></button></div>
+      <div class="set-row"><span id="setLangLbl">Språk</span>
+        <div class="seg" id="setLang"><button data-lang="no">Norsk</button><button data-lang="en">English</button></div>
+      </div>
+      <div class="set-reset">
+        <button id="setReset" class="link-btn danger">Nullstill fremgang</button>
+        <div class="confirm" id="resetConfirm" hidden>
+          <span id="resetAsk">Slette all fremgang?</span>
+          <div class="confirm-btns"><button id="resetNo" class="btn btn-paper small">Avbryt</button><button id="resetYes" class="btn btn-danger small">Ja, slett</button></div>
+        </div>
+      </div>
+      <p class="credits" id="credits"></p>
+    </div>
+  </div>
+
+  <div id="fade" class="fade"></div>
+</div>
+
+<script src="js/strings.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/levels.js"></script>
+<script src="js/render.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/game.js"></script>
+<!-- ARTIFACT-BODY-END -->
+</body>
+</html>

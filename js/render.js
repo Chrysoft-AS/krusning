@@ -1,0 +1,839 @@
+/* =====================================================================
+ * Krusning – tegning (Canvas 2D)
+ * ---------------------------------------------------------------------
+ * Alt som tegnes på skjermen, i lag nedenfra og opp:
+ *   bakgrunn (gress, sand, vann)  →  lysmønster i vannet  →  fisk
+ *   → strøm og virvler → havner → skygger → krusninger → kjølvann
+ *   → steiner, stokker, vannliljer → båter → partikler → siktehjelp
+ *
+ * Alle mål er i "dam-enheter" (360 × 600). Fargene står i PAL.
+ * ===================================================================== */
+(function (root) {
+  'use strict';
+  const E = root.Engine;
+  const C = E.C;
+  const TAU = Math.PI * 2;
+
+  const PAL = {
+    grassA: '#a9d672', grassB: '#7fb850',
+    blade: ['rgba(70,120,40,0.35)', 'rgba(190,230,130,0.45)', 'rgba(95,150,55,0.4)'],
+    sand: '#f1dca6', sandEdge: '#dcc285',
+    waterTop: '#5cc6d0', waterMid: '#3aa9c2', waterBot: '#2b8bb0',
+    deep: 'rgba(16,70,110,0.20)',
+    shallow: 'rgba(205,250,240,1)',
+    foam: 'rgba(255,255,255,0.55)',
+    shadow: 'rgba(10,50,75,0.22)',
+    rock: '#9ba5ae', rockLight: '#d2d8dd', rockDark: '#6f7984',
+    log: '#946541', logLight: '#c38e5e', logEnd: '#e7c796', logRing: '#a8774a',
+    pad: '#6dc05b', padDark: '#4f9e44', padLight: '#9adf84',
+    flower: '#ff9fc8', flowerLight: '#ffd3e6', flowerC: '#ffe27a',
+    dock: '#ffe08a', dockDeep: '#f4b73f',
+    eye: '#1b2a33',
+    boats: [
+      ['#ff8f7e', '#e86d5d', '#ffd0c7'],
+      ['#ffd166', '#e7b23f', '#fff0c2'],
+      ['#7fe0b5', '#56c293', '#d3f7e7'],
+      ['#7cc4ff', '#559fe0', '#d5ecff'],
+      ['#c4a1ff', '#a17ce8', '#ece0ff'],
+      ['#ffb38a', '#ec8f62', '#ffe2d1'],
+    ],
+  };
+
+  // Forutsigbar "tilfeldighet" så pynten ser lik ut hver gang.
+  function rng(seed) {
+    let s = seed >>> 0 || 1;
+    return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return ((s >>> 0) % 100000) / 100000; };
+  }
+
+  const R = {
+    PAL,
+    canvas: null, ctx: null,
+    cssW: 0, cssH: 0, dpr: 1,
+    s: 1, ox: 0, oy: 0,
+    bg: null, caustic: null, causticPat: null,
+    rockShapes: new Map(),
+  };
+
+  R.init = function (canvas) {
+    R.canvas = canvas;
+    R.ctx = canvas.getContext('2d');
+    R.caustic = makeCaustics(96, 10, 7);
+  };
+
+  // Plasser dammen midt i det ledige området (mellom toppmeny og bunn).
+  R.resize = function (cssW, cssH, dpr, top, bottom) {
+    R.cssW = cssW; R.cssH = cssH; R.dpr = dpr;
+    R.canvas.width = Math.round(cssW * dpr);
+    R.canvas.height = Math.round(cssH * dpr);
+    const margin = 14;
+    const availH = cssH - top - bottom;
+    R.s = Math.min(cssW / (C.W + margin * 2), availH / (C.H + margin * 2));
+    R.ox = (cssW - C.W * R.s) / 2;
+    R.oy = top + (availH - C.H * R.s) / 2;
+    R.causticPat = R.ctx.createPattern(R.caustic, 'repeat');
+    R.bg = renderBackground();
+  };
+
+  R.toWorld = function (cx, cy) { return { x: (cx - R.ox) / R.s, y: (cy - R.oy) / R.s }; };
+  R.toScreen = function (x, y) { return { x: R.ox + x * R.s, y: R.oy + y * R.s }; };
+
+  function worldTransform(ctx) {
+    const k = R.dpr * R.s;
+    ctx.setTransform(k, 0, 0, k, R.dpr * R.ox, R.dpr * R.oy);
+  }
+
+  function pondPath(ctx, inset) {
+    const i = inset || 0;
+    const r = Math.max(2, C.CORNER - i);
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(i, i, C.W - i * 2, C.H - i * 2, r);
+    else {
+      const x = i, y = i, w = C.W - i * 2, h = C.H - i * 2;
+      ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+    }
+  }
+
+  /* ---------- bakgrunn (tegnes én gang per skjermstørrelse) ---------- */
+
+  function renderBackground() {
+    const cv = document.createElement('canvas');
+    cv.width = R.canvas.width; cv.height = R.canvas.height;
+    const ctx = cv.getContext('2d');
+    const k = R.dpr * R.s;
+    // synlig område i dam-enheter
+    const vx0 = -R.ox / R.s, vy0 = -R.oy / R.s;
+    const vx1 = (R.cssW - R.ox) / R.s, vy1 = (R.cssH - R.oy) / R.s;
+    worldTransform(ctx);
+
+    // gress
+    const g = ctx.createLinearGradient(0, vy0, 0, vy1);
+    g.addColorStop(0, PAL.grassA); g.addColorStop(1, PAL.grassB);
+    ctx.fillStyle = g;
+    ctx.fillRect(vx0 - 2, vy0 - 2, vx1 - vx0 + 4, vy1 - vy0 + 4);
+    const rnd = rng(7);
+    const area = (vx1 - vx0) * (vy1 - vy0);
+    const blades = Math.min(2600, Math.round(area / 55));
+    ctx.lineCap = 'round';
+    for (let i = 0; i < blades; i++) {
+      const x = vx0 + rnd() * (vx1 - vx0), y = vy0 + rnd() * (vy1 - vy0);
+      if (E.insidePond(x, y, -12)) continue;
+      ctx.strokeStyle = PAL.blade[i % 3];
+      ctx.lineWidth = 1.1;
+      const h = 3 + rnd() * 4, lean = (rnd() - 0.5) * 3;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + lean, y - h); ctx.stroke();
+    }
+    // små blomster i gresset
+    for (let i = 0; i < 60; i++) {
+      const x = vx0 + rnd() * (vx1 - vx0), y = vy0 + rnd() * (vy1 - vy0);
+      if (E.insidePond(x, y, -22)) continue;
+      const col = i % 3 === 0 ? '#fff6e0' : i % 3 === 1 ? '#ffd1e3' : '#fff2a6';
+      for (let p = 0; p < 5; p++) {
+        const a = (p / 5) * TAU;
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(x + Math.cos(a) * 1.7, y + Math.sin(a) * 1.7, 1.25, 0, TAU); ctx.fill();
+      }
+      ctx.fillStyle = '#f5b83d'; ctx.beginPath(); ctx.arc(x, y, 0.9, 0, TAU); ctx.fill();
+    }
+
+    // sandkant (litt ujevn ytterkant)
+    ctx.fillStyle = PAL.sandEdge;
+    wobblyRim(ctx, 11, 2.2, 3);
+    ctx.fill();
+    ctx.fillStyle = PAL.sand;
+    wobblyRim(ctx, 8.5, 1.6, 5);
+    ctx.fill();
+    // småstein i sanden
+    for (let i = 0; i < 90; i++) {
+      const t = rnd();
+      const p = rimPoint(t, 4 + rnd() * 4);
+      ctx.fillStyle = i % 2 ? 'rgba(150,130,90,0.35)' : 'rgba(255,255,255,0.4)';
+      ctx.beginPath(); ctx.arc(p.x, p.y, 0.6 + rnd() * 1.1, 0, TAU); ctx.fill();
+    }
+
+    // vann
+    const wg = ctx.createLinearGradient(0, 0, 0, C.H);
+    wg.addColorStop(0, PAL.waterTop); wg.addColorStop(0.5, PAL.waterMid); wg.addColorStop(1, PAL.waterBot);
+    pondPath(ctx, 0);
+    ctx.fillStyle = wg; ctx.fill();
+    ctx.save();
+    pondPath(ctx, 0); ctx.clip();
+    const rg = ctx.createRadialGradient(C.W / 2, C.H * 0.55, 30, C.W / 2, C.H * 0.55, C.H * 0.6);
+    rg.addColorStop(0, PAL.deep); rg.addColorStop(1, 'rgba(16,70,110,0)');
+    ctx.fillStyle = rg; ctx.fillRect(0, 0, C.W, C.H);
+    // grunt vann langs kanten (myk overgang)
+    for (let i = 7; i >= 0; i--) {
+      ctx.globalAlpha = 0.07;
+      ctx.strokeStyle = PAL.shallow;
+      ctx.lineWidth = 4 + i * 5;
+      pondPath(ctx, 0); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    // skumlinje
+    ctx.strokeStyle = PAL.foam; ctx.lineWidth = 1.6;
+    pondPath(ctx, 0.8); ctx.stroke();
+
+    // siv og steiner rundt dammen
+    const reeds = rng(11);
+    for (let i = 0; i < 16; i++) {
+      const p = rimPoint(reeds(), 13 + reeds() * 5);
+      if (p.x < vx0 || p.x > vx1 || p.y < vy0 || p.y > vy1) continue;
+      drawReeds(ctx, p.x, p.y, reeds);
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    void k;
+    return cv;
+  }
+
+  function rimPoint(t, out) {
+    // punkt langs dammens kant (t: 0..1), forskjøvet "out" utover
+    const W = C.W, H = C.H, Rr = C.CORNER;
+    const straightW = W - 2 * Rr, straightH = H - 2 * Rr, arc = (Math.PI / 2) * Rr;
+    const total = 2 * straightW + 2 * straightH + 4 * arc;
+    let d = t * total;
+    const segs = [
+      [straightW, (u) => ({ x: Rr + u, y: 0, nx: 0, ny: -1 })],
+      [arc, (u) => { const a = -Math.PI / 2 + u / Rr; return { x: W - Rr + Math.cos(a) * Rr, y: Rr + Math.sin(a) * Rr, nx: Math.cos(a), ny: Math.sin(a) }; }],
+      [straightH, (u) => ({ x: W, y: Rr + u, nx: 1, ny: 0 })],
+      [arc, (u) => { const a = u / Rr; return { x: W - Rr + Math.cos(a) * Rr, y: H - Rr + Math.sin(a) * Rr, nx: Math.cos(a), ny: Math.sin(a) }; }],
+      [straightW, (u) => ({ x: W - Rr - u, y: H, nx: 0, ny: 1 })],
+      [arc, (u) => { const a = Math.PI / 2 + u / Rr; return { x: Rr + Math.cos(a) * Rr, y: H - Rr + Math.sin(a) * Rr, nx: Math.cos(a), ny: Math.sin(a) }; }],
+      [straightH, (u) => ({ x: 0, y: H - Rr - u, nx: -1, ny: 0 })],
+      [arc, (u) => { const a = Math.PI + u / Rr; return { x: Rr + Math.cos(a) * Rr, y: Rr + Math.sin(a) * Rr, nx: Math.cos(a), ny: Math.sin(a) }; }],
+    ];
+    for (const [len, f] of segs) {
+      if (d <= len) { const p = f(d); return { x: p.x + p.nx * out, y: p.y + p.ny * out, nx: p.nx, ny: p.ny }; }
+      d -= len;
+    }
+    return { x: 0, y: 0, nx: 0, ny: -1 };
+  }
+
+  function wobblyRim(ctx, out, amp, seed) {
+    const n = 140;
+    ctx.beginPath();
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const wob = amp * (Math.sin(t * TAU * 9 + seed) * 0.6 + Math.sin(t * TAU * 23 + seed * 2) * 0.4);
+      const p = rimPoint(t, out + wob);
+      if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    }
+    ctx.closePath();
+  }
+
+  function drawReeds(ctx, x, y, rnd) {
+    const n = 3 + Math.floor(rnd() * 3);
+    for (let i = 0; i < n; i++) {
+      const bx = x + (rnd() - 0.5) * 8, by = y + (rnd() - 0.5) * 4;
+      const h = 12 + rnd() * 10, lean = (rnd() - 0.5) * 6;
+      ctx.strokeStyle = i % 2 ? '#5f9a3c' : '#4f8a33';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(bx, by); ctx.quadraticCurveTo(bx + lean * 0.3, by - h * 0.6, bx + lean, by - h); ctx.stroke();
+      if (i % 2 === 0) {
+        ctx.fillStyle = '#8a5a35';
+        ctx.beginPath(); ctx.ellipse(bx + lean * 0.9, by - h + 1, 1.6, 4, lean * 0.05, 0, TAU); ctx.fill();
+      }
+    }
+  }
+
+  // Lysmønster (som sol gjennom vann): Worley-støy som fliser sømløst.
+  function makeCaustics(size, points, seed) {
+    const cv = document.createElement('canvas');
+    cv.width = size; cv.height = size;
+    const ctx = cv.getContext('2d');
+    const img = ctx.createImageData(size, size);
+    const rnd = rng(seed);
+    const pts = [];
+    for (let i = 0; i < points; i++) pts.push([rnd() * size, rnd() * size]);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        let f1 = 1e9, f2 = 1e9;
+        for (const [px, py] of pts) {
+          for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+            const dx = x - (px + ox * size), dy = y - (py + oy * size);
+            const d = dx * dx + dy * dy;
+            if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) f2 = d;
+          }
+        }
+        const edge = Math.sqrt(f2) - Math.sqrt(f1);
+        const v = Math.max(0, 1 - edge / 6.5);
+        const a = Math.pow(v, 1.7);
+        const i = (y * size + x) * 4;
+        img.data[i] = 255; img.data[i + 1] = 255; img.data[i + 2] = 255;
+        img.data[i + 3] = Math.round(a * 255);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return cv;
+  }
+
+  /* ---------- hovedtegning ---------- */
+
+  R.draw = function (st) {
+    const ctx = R.ctx;
+    const t = st.time;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(R.bg, 0, 0);
+    worldTransform(ctx);
+    const w = st.world;
+
+    // alt "i vannet" klippes til dammen
+    ctx.save();
+    pondPath(ctx, 0); ctx.clip();
+    drawCaustics(ctx, t);
+    if (st.fish) drawFish(ctx, st.fish, t);
+    if (w) {
+      drawCurrents(ctx, w, t);
+      for (const v of w.whirls) drawWhirl(ctx, v, t);
+      for (const d of w.docks) drawDockWater(ctx, d, t);
+      drawShadows(ctx, w);
+    }
+    if (st.leaves) drawLeaves(ctx, st.leaves);
+    if (w) drawRipples(ctx, w.ripples);
+    drawParticles(ctx, st.particles, 'under');
+    ctx.restore();
+
+    if (w) {
+      for (const r of w.rocks) drawRock(ctx, r, t);
+      for (const l of w.logs) drawLog(ctx, l);
+      for (const p of w.pads) drawPad(ctx, p, t);
+      for (let i = 0; i < w.docks.length; i++) drawDock(ctx, w.docks[i], t, st.dockFx && st.dockFx[i]);
+      for (const b of w.boats) drawBoat(ctx, b, t, st.boatFx && st.boatFx[b.id], st.look);
+    }
+    drawParticles(ctx, st.particles, 'over');
+    if (st.hint) drawHint(ctx, st.hint, t);
+    if (st.hint && !st.aim && w) drawArrows(ctx, w, st.hint.x, st.hint.y, 0.55);
+    if (st.aim && w) drawAim(ctx, w, st.aim, t);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  };
+
+  function drawCaustics(ctx, t) {
+    if (!R.causticPat) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.085;
+    ctx.fillStyle = R.causticPat;
+    ctx.scale(2.1, 2.1);
+    ctx.translate((t * 2.6) % 96, (t * 1.5) % 96);
+    ctx.fillRect(-100, -100, C.W / 2.1 + 200, C.H / 2.1 + 200);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    worldTransform(ctx);
+    ctx.globalAlpha = 0.05;
+    ctx.scale(3.1, 3.1);
+    ctx.translate(-(t * 1.4) % 96, (t * 2.1) % 96);
+    ctx.fillRect(-100, -100, C.W / 3.1 + 200, C.H / 3.1 + 200);
+    ctx.restore();
+  }
+
+  function drawFish(ctx, fish, t) {
+    for (const f of fish) {
+      ctx.save();
+      ctx.translate(f.x, f.y);
+      ctx.rotate(f.angle);
+      ctx.globalAlpha = 0.22 * (f.alpha == null ? 1 : f.alpha);
+      ctx.fillStyle = '#0e4560';
+      const L = f.size, wig = Math.sin(t * (6 + f.speed * 0.08) + f.phase) * 0.35;
+      ctx.beginPath(); ctx.ellipse(0, 0, L, L * 0.36, 0, 0, TAU); ctx.fill();
+      ctx.save(); ctx.translate(-L * 0.9, 0); ctx.rotate(wig);
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-L * 0.7, -L * 0.35); ctx.lineTo(-L * 0.7, L * 0.35); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      ctx.beginPath(); ctx.ellipse(-L * 0.1, 0, L * 0.25, L * 0.62, 0.3, 0, TAU); ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawLeaves(ctx, leaves) {
+    for (const l of leaves) {
+      ctx.save();
+      ctx.translate(l.x, l.y); ctx.rotate(l.angle);
+      ctx.fillStyle = 'rgba(10,50,75,0.15)';
+      leafPath(ctx, l.size, 1.5, 2); ctx.fill();
+      ctx.fillStyle = l.color;
+      leafPath(ctx, l.size, 0, 0); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 0.6;
+      ctx.beginPath(); ctx.moveTo(-l.size, 0); ctx.lineTo(l.size, 0); ctx.stroke();
+      ctx.restore();
+    }
+  }
+  function leafPath(ctx, s, ox, oy) {
+    ctx.beginPath();
+    ctx.moveTo(-s + ox, oy);
+    ctx.quadraticCurveTo(ox, -s * 0.75 + oy, s + ox, oy);
+    ctx.quadraticCurveTo(ox, s * 0.75 + oy, -s + ox, oy);
+  }
+
+  // Strøm: myk lysere flate + små piler (›) som glir i strømretningen.
+  function drawCurrents(ctx, w, t) {
+    for (const c of w.currents) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(c.x, c.y, c.w, c.h); ctx.clip();
+      ctx.fillStyle = 'rgba(215,250,255,0.055)';
+      for (let k = 0; k < 3; k++) ctx.fillRect(c.x + k * 6, c.y + k * 6, c.w - k * 12, c.h - k * 12);
+      const sp = Math.hypot(c.vx, c.vy) || 1;
+      const ux = c.vx / sp, uy = c.vy / sp;
+      // rutenett som går opp i flaten, så mønsteret kan "rulle" uten skjøter
+      const nx = Math.max(1, Math.round(c.w / 28)), ny = Math.max(1, Math.round(c.h / 28));
+      const gx = c.w / nx, gy = c.h / ny, d = t * sp * 0.85, s = 5.5;
+      const stagger = ny % 2 === 0;
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = 2.1;
+      for (let j = 0; j < ny; j++) {
+        for (let i = 0; i < nx; i++) {
+          let x = c.x + (i + 0.5 + (stagger && j % 2 ? 0.5 : 0)) * gx + ux * d;
+          let y = c.y + (j + 0.5) * gy + uy * d;
+          x = c.x + ((((x - c.x) % c.w) + c.w) % c.w);
+          y = c.y + ((((y - c.y) % c.h) + c.h) % c.h);
+          const edge = Math.min(x - c.x, c.x + c.w - x, y - c.y, c.y + c.h - y);
+          const a = Math.max(0, Math.min(1, (edge - 3) / 14)) * 0.5;
+          if (a <= 0.02) continue;
+          ctx.strokeStyle = `rgba(255,255,255,${a})`;
+          ctx.beginPath();
+          ctx.moveTo(x - ux * s - uy * s, y - uy * s + ux * s);
+          ctx.lineTo(x, y);
+          ctx.lineTo(x - ux * s + uy * s, y - uy * s - ux * s);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+  }
+
+  function drawWhirl(ctx, v, t) {
+    const g = ctx.createRadialGradient(v.x, v.y, 2, v.x, v.y, v.r);
+    g.addColorStop(0, 'rgba(8,40,70,0.55)');
+    g.addColorStop(0.35, 'rgba(12,60,95,0.28)');
+    g.addColorStop(1, 'rgba(20,80,120,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(v.x, v.y, v.r, 0, TAU); ctx.fill();
+    ctx.save();
+    ctx.translate(v.x, v.y);
+    ctx.rotate(t * 1.6 * v.power * v.dir);
+    ctx.lineCap = 'round';
+    for (let arm = 0; arm < 4; arm++) {
+      ctx.rotate(TAU / 4);
+      ctx.beginPath();
+      for (let i = 0; i <= 28; i++) {
+        const u = i / 28;
+        const rr = v.r * (0.95 - u * 0.85);
+        const a = u * 3.2 * v.dir;
+        const x = Math.cos(a) * rr, y = Math.sin(a) * rr;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = 'rgba(255,255,255,0.32)';
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawDockWater(ctx, d, t) {
+    const pulse = 0.5 + 0.5 * Math.sin(t * 2.4);
+    const g = ctx.createRadialGradient(d.x, d.y, 2, d.x, d.y, d.r + 14);
+    const a = d.boat >= 0 ? 0.55 : 0.28 + pulse * 0.12;
+    g.addColorStop(0, `rgba(255,236,170,${a})`);
+    g.addColorStop(0.6, `rgba(255,226,140,${a * 0.5})`);
+    g.addColorStop(1, 'rgba(255,226,140,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(d.x, d.y, d.r + 14, 0, TAU); ctx.fill();
+  }
+
+  function drawShadows(ctx, w) {
+    ctx.fillStyle = PAL.shadow;
+    for (const r of w.rocks) { ctx.save(); ctx.translate(3, 5); rockPath(ctx, r); ctx.fill(); ctx.restore(); }
+    for (const l of w.logs) {
+      ctx.strokeStyle = PAL.shadow; ctx.lineCap = 'round'; ctx.lineWidth = l.r * 2;
+      ctx.beginPath(); ctx.moveTo(l.x1 + 3, l.y1 + 5); ctx.lineTo(l.x2 + 3, l.y2 + 5); ctx.stroke();
+    }
+    for (const p of w.pads) { ctx.beginPath(); ctx.arc(p.x + 2, p.y + 3, p.r, 0, TAU); ctx.fill(); }
+    for (const b of w.boats) {
+      if (b.sink > 0) continue;
+      ctx.save(); ctx.translate(b.x + 3, b.y + 5); ctx.rotate(b.angle);
+      hullPath(ctx); ctx.fill(); ctx.restore();
+    }
+  }
+
+  function drawRipples(ctx, ripples) {
+    ctx.lineCap = 'round';
+    for (const rp of ripples) {
+      const r = rp.r;
+      if (r < 1) continue;
+      const life = 1 - r / (C.RIPPLE_RANGE + 24);
+      const a = Math.max(0, E.falloff(r * 0.92)) * Math.min(1, life * 3);
+      if (a <= 0.01) continue;
+      // mørk kant utenfor (gir dybde)
+      ctx.strokeStyle = `rgba(10,60,90,${0.16 * a})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(rp.x, rp.y, r + 2.5, 0, TAU); ctx.stroke();
+      // hovedringen
+      ctx.strokeStyle = `rgba(255,255,255,${0.75 * a})`;
+      ctx.lineWidth = 2.6;
+      ctx.beginPath(); ctx.arc(rp.x, rp.y, r, 0, TAU); ctx.stroke();
+      // ringene bak
+      for (let k = 1; k <= 2; k++) {
+        const rr = r - k * 11;
+        if (rr <= 2) break;
+        ctx.strokeStyle = `rgba(255,255,255,${(0.38 / k) * a})`;
+        ctx.lineWidth = 2 - k * 0.4;
+        ctx.beginPath(); ctx.arc(rp.x, rp.y, rr, 0, TAU); ctx.stroke();
+      }
+    }
+  }
+
+  /* ---------- faste ting ---------- */
+
+  function rockShape(r) {
+    const key = r.seed + ':' + r.r;
+    let pts = R.rockShapes.get(key);
+    if (!pts) {
+      const rnd = rng(r.seed * 31 + 5);
+      pts = [];
+      const n = 9;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * TAU + rnd() * 0.3;
+        const rr = r.r * (0.9 + rnd() * 0.16);
+        pts.push([Math.cos(a) * rr, Math.sin(a) * rr]);
+      }
+      R.rockShapes.set(key, pts);
+    }
+    return pts;
+  }
+  function rockPath(ctx, r, scale, ox, oy) {
+    const pts = rockShape(r);
+    const s = scale || 1;
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const p0 = pts[i], p1 = pts[(i + 1) % pts.length];
+      const mx = (p0[0] + p1[0]) / 2, my = (p0[1] + p1[1]) / 2;
+      if (i === 0) ctx.moveTo(r.x + (ox || 0) + ((pts[pts.length - 1][0] + p0[0]) / 2) * s, r.y + (oy || 0) + ((pts[pts.length - 1][1] + p0[1]) / 2) * s);
+      ctx.quadraticCurveTo(r.x + (ox || 0) + p0[0] * s, r.y + (oy || 0) + p0[1] * s, r.x + (ox || 0) + mx * s, r.y + (oy || 0) + my * s);
+    }
+    ctx.closePath();
+  }
+  function drawRock(ctx, r, t) {
+    // skum rundt steinen
+    ctx.strokeStyle = `rgba(255,255,255,${0.28 + 0.08 * Math.sin(t * 1.7 + r.seed)})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(r.x, r.y, r.r + 3.5, 0, TAU); ctx.stroke();
+    ctx.fillStyle = PAL.rockDark; rockPath(ctx, r, 1.02, 0, 1.5); ctx.fill();
+    ctx.fillStyle = PAL.rock; rockPath(ctx, r); ctx.fill();
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = PAL.rockLight; rockPath(ctx, r, 0.62, -r.r * 0.16, -r.r * 0.2); ctx.fill();
+    ctx.globalAlpha = 1;
+    // mose-flekk
+    ctx.fillStyle = 'rgba(120,170,80,0.45)';
+    ctx.beginPath(); ctx.ellipse(r.x + r.r * 0.3, r.y + r.r * 0.32, r.r * 0.26, r.r * 0.14, 0.4, 0, TAU); ctx.fill();
+  }
+
+  function drawLog(ctx, l) {
+    const dx = l.x2 - l.x1, dy = l.y2 - l.y1, len = Math.hypot(dx, dy) || 1;
+    const px = -dy / len, py = dx / len;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = l.r * 2 + 4;
+    ctx.beginPath(); ctx.moveTo(l.x1, l.y1); ctx.lineTo(l.x2, l.y2); ctx.stroke();
+    ctx.strokeStyle = PAL.log; ctx.lineWidth = l.r * 2;
+    ctx.beginPath(); ctx.moveTo(l.x1, l.y1); ctx.lineTo(l.x2, l.y2); ctx.stroke();
+    ctx.strokeStyle = PAL.logLight; ctx.lineWidth = l.r * 0.7;
+    ctx.beginPath(); ctx.moveTo(l.x1 - px * l.r * 0.35, l.y1 - py * l.r * 0.35); ctx.lineTo(l.x2 - px * l.r * 0.35, l.y2 - py * l.r * 0.35); ctx.stroke();
+    // barkstreker
+    ctx.strokeStyle = 'rgba(70,40,20,0.35)'; ctx.lineWidth = 1;
+    const rnd = rng(Math.round(l.x1 * 3 + l.y1 * 5));
+    for (let s = 0.12; s < 0.9; s += 0.11) {
+      const u = s + rnd() * 0.05, o = (rnd() - 0.5) * l.r;
+      const x = l.x1 + dx * u + px * o, y = l.y1 + dy * u + py * o;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (dx / len) * 7, y + (dy / len) * 7); ctx.stroke();
+    }
+    // endeved med årringer
+    for (const [x, y] of [[l.x1, l.y1], [l.x2, l.y2]]) {
+      ctx.fillStyle = PAL.logEnd;
+      ctx.beginPath(); ctx.arc(x, y, l.r * 0.82, 0, TAU); ctx.fill();
+      ctx.strokeStyle = PAL.logRing; ctx.lineWidth = 0.9;
+      ctx.beginPath(); ctx.arc(x, y, l.r * 0.5, 0, TAU); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, l.r * 0.22, 0, TAU); ctx.stroke();
+    }
+  }
+
+  function drawPad(ctx, p, t) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.angle + Math.sin(t * 0.7 + p.id) * 0.05);
+    const notch = 0.32;
+    ctx.fillStyle = PAL.padDark;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, p.r, notch, TAU - notch); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = PAL.pad;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, p.r - 1.6, notch + 0.04, TAU - notch - 0.04); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(40,110,40,0.45)'; ctx.lineWidth = 1;
+    for (let i = 0; i < 7; i++) {
+      const a = notch + 0.35 + (i / 6) * (TAU - 2 * notch - 0.7);
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * p.r * 0.85, Math.sin(a) * p.r * 0.85); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.beginPath(); ctx.ellipse(-p.r * 0.3, -p.r * 0.35, p.r * 0.35, p.r * 0.18, -0.5, 0, TAU); ctx.fill();
+    if (p.flower) {
+      ctx.rotate(-p.angle);
+      for (let i = 0; i < 8; i++) {
+        ctx.rotate(TAU / 8);
+        ctx.fillStyle = i % 2 ? PAL.flower : PAL.flowerLight;
+        ctx.beginPath(); ctx.ellipse(p.r * 0.28, 0, p.r * 0.26, p.r * 0.12, 0, 0, TAU); ctx.fill();
+      }
+      ctx.fillStyle = PAL.flowerC;
+      ctx.beginPath(); ctx.arc(0, 0, p.r * 0.14, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawDock(ctx, d, t, fx) {
+    const occ = d.boat >= 0;
+    const flash = fx && fx.flash > 0 ? fx.flash : 0;
+    const col = d.color >= 0 ? PAL.boats[d.color % PAL.boats.length][0] : PAL.dock;
+    ctx.save();
+    ctx.translate(d.x, d.y);
+    // flytende bøyer i en ring
+    const n = 8;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU + t * (occ ? 0.15 : 0.35);
+      const bob = Math.sin(t * 2.2 + i) * 0.6;
+      const x = Math.cos(a) * (d.r + bob), y = Math.sin(a) * (d.r + bob);
+      ctx.fillStyle = 'rgba(10,50,75,0.2)';
+      ctx.beginPath(); ctx.arc(x + 1, y + 1.6, 3.1, 0, TAU); ctx.fill();
+      ctx.fillStyle = i % 2 ? '#ffffff' : col;
+      ctx.beginPath(); ctx.arc(x, y, 3.1, 0, TAU); ctx.fill();
+    }
+    // tau mellom bøyene
+    ctx.strokeStyle = occ ? 'rgba(255,240,190,0.95)' : 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = occ ? 1.8 : 1.1;
+    ctx.setLineDash(occ ? [] : [3, 4]);
+    ctx.beginPath(); ctx.arc(0, 0, d.r, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    if (flash > 0) {
+      ctx.strokeStyle = `rgba(255,240,180,${flash})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(0, 0, d.r + (1 - flash) * 22, 0, TAU); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /* ---------- båter ---------- */
+
+  function hullPath(ctx) {
+    ctx.beginPath();
+    ctx.moveTo(-17, 0);
+    ctx.lineTo(-11, -9.5);
+    ctx.lineTo(11, -9.5);
+    ctx.lineTo(17.5, 0);
+    ctx.lineTo(11, 9.5);
+    ctx.lineTo(-11, 9.5);
+    ctx.closePath();
+  }
+
+  function drawBoat(ctx, b, t, fx, look) {
+    const pal = PAL.boats[b.color % PAL.boats.length];
+    let scale = 1.12 + Math.sin(t * 2.1 + b.id * 1.7) * 0.02;
+    let alpha = 1, spin = 0;
+    if (fx && fx.squash > 0) scale += Math.sin(fx.squash * Math.PI) * 0.16;
+    if (b.sink > 0) {
+      const u = Math.min(1, b.sink / C.SINK_TIME);
+      scale *= 1 - u * 0.85; alpha = 1 - u * 0.9; spin = u * 9;
+    }
+    if (fx && fx.pop > 0) scale *= 1 + Math.sin(fx.pop * Math.PI) * 0.25;
+    const ang = (fx ? fx.angle : b.angle) + spin;
+    const rock = Math.sin(t * 1.9 + b.id) * 0.05;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(b.x, b.y);
+    ctx.save();
+    ctx.rotate(ang + rock);
+    ctx.scale(scale, scale);
+    // skrog
+    ctx.fillStyle = pal[1];
+    hullPath(ctx); ctx.fill();
+    ctx.fillStyle = pal[0];
+    ctx.beginPath();
+    ctx.moveTo(-16, -0.5); ctx.lineTo(-10.4, -8.6); ctx.lineTo(10.4, -8.6); ctx.lineTo(16.4, -0.5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = pal[2];
+    ctx.globalAlpha = alpha * 0.55;
+    ctx.beginPath(); ctx.moveTo(-10.4, -8.6); ctx.lineTo(10.4, -8.6); ctx.lineTo(8, -6.4); ctx.lineTo(-8, -6.4); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = alpha;
+    // seilet (brettet midtparti)
+    ctx.fillStyle = pal[2];
+    ctx.beginPath(); ctx.moveTo(-11, 0); ctx.lineTo(0, -5.2); ctx.lineTo(11, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = pal[1];
+    ctx.beginPath(); ctx.moveTo(-11, 0); ctx.lineTo(0, 5.2); ctx.lineTo(11, 0); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(60,30,30,0.18)'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(-11, 0); ctx.lineTo(11, 0); ctx.stroke();
+    hullPath(ctx); ctx.stroke();
+    ctx.restore();
+
+    // ansikt (alltid oppreist – ser søtere ut)
+    drawFace(ctx, b, t, fx, look, scale);
+    ctx.restore();
+  }
+
+  function drawFace(ctx, b, t, fx, look, scale) {
+    const happy = b.dock >= 0;
+    const s = scale;
+    const ex = 4.6 * s, ey = -1.5 * s;
+    const blink = fx && fx.blink > 0;
+    const speed = Math.hypot(b.vx, b.vy);
+    let lx = 0, ly = 0;
+    if (look && !happy) {
+      const dx = look.x - b.x, dy = look.y - b.y, d = Math.hypot(dx, dy) || 1;
+      lx = (dx / d) * 1.2; ly = (dy / d) * 1.2;
+    } else if (speed > 15) { lx = (b.vx / speed) * 1.2; ly = (b.vy / speed) * 1.2; }
+    for (const side of [-1, 1]) {
+      const x = side * ex, y = ey;
+      if (happy) {
+        ctx.strokeStyle = PAL.eye; ctx.lineWidth = 1.5 * s; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(x, y + 1 * s, 2.2 * s, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+        continue;
+      }
+      if (b.sink > 0) {
+        ctx.strokeStyle = PAL.eye; ctx.lineWidth = 1.2 * s;
+        ctx.beginPath(); ctx.moveTo(x - 1.6 * s, y - 1.6 * s); ctx.lineTo(x + 1.6 * s, y + 1.6 * s);
+        ctx.moveTo(x + 1.6 * s, y - 1.6 * s); ctx.lineTo(x - 1.6 * s, y + 1.6 * s); ctx.stroke();
+        continue;
+      }
+      const squint = speed > 160 ? 0.55 : 1;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.ellipse(x, y, 2.9 * s, (blink ? 0.4 : 3.3 * squint) * s, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(27,42,51,0.35)'; ctx.lineWidth = 0.6 * s; ctx.stroke();
+      if (!blink) {
+        ctx.fillStyle = PAL.eye;
+        ctx.beginPath(); ctx.arc(x + lx * s, y + ly * s, 1.75 * s * (squint < 1 ? 0.8 : 1), 0, TAU); ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(x + lx * s - 0.6 * s, y + ly * s - 0.7 * s, 0.6 * s, 0, TAU); ctx.fill();
+      }
+    }
+    if (happy) {
+      ctx.fillStyle = 'rgba(255,120,120,0.45)';
+      ctx.beginPath(); ctx.ellipse(-7.4 * s, 2.2 * s, 2 * s, 1.2 * s, 0, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(7.4 * s, 2.2 * s, 2 * s, 1.2 * s, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = PAL.eye; ctx.lineWidth = 1.2 * s;
+      ctx.beginPath(); ctx.arc(0, 1.6 * s, 2 * s, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+    }
+  }
+
+  /* ---------- effekter ---------- */
+
+  function drawParticles(ctx, parts, layer) {
+    if (!parts) return;
+    for (const p of parts) {
+      if ((p.layer || 'over') !== layer) continue;
+      const u = p.t / p.life;
+      const a = Math.max(0, 1 - u);
+      switch (p.type) {
+        case 'drop':
+          ctx.fillStyle = `rgba(235,252,255,${a * 0.9})`;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (1 - u * 0.5), 0, TAU); ctx.fill();
+          break;
+        case 'flash':
+          ctx.strokeStyle = `rgba(255,255,255,${a * 0.8})`;
+          ctx.lineWidth = 2.5 * a + 0.5;
+          ctx.beginPath(); ctx.arc(p.x, p.y, 3 + u * p.size, 0, TAU); ctx.stroke();
+          break;
+        case 'wake':
+          ctx.strokeStyle = `rgba(255,255,255,${a * 0.42})`;
+          ctx.lineWidth = 1.6 * (1 - u * 0.5);
+          ctx.lineCap = 'round';
+          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.angle || 0);
+          ctx.beginPath(); ctx.arc(0, 0, p.size * (1 + u * 2.4), Math.PI * 0.62, Math.PI * 1.38); ctx.stroke();
+          ctx.restore();
+          break;
+        case 'spark': {
+          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.angle + u * 3);
+          const s = p.size * (1 - u * 0.6);
+          ctx.fillStyle = p.color || `rgba(255,226,120,${a})`;
+          ctx.globalAlpha = a;
+          ctx.beginPath();
+          for (let i = 0; i < 4; i++) {
+            const an = (i / 4) * TAU;
+            ctx.lineTo(Math.cos(an) * s, Math.sin(an) * s);
+            ctx.lineTo(Math.cos(an + TAU / 8) * s * 0.35, Math.sin(an + TAU / 8) * s * 0.35);
+          }
+          ctx.closePath(); ctx.fill();
+          ctx.restore(); ctx.globalAlpha = 1;
+          break;
+        }
+        case 'paper': {
+          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.angle + p.t * p.spin);
+          ctx.globalAlpha = Math.min(1, a * 2);
+          ctx.fillStyle = p.color;
+          const sq = Math.abs(Math.cos(p.t * p.flip));
+          ctx.fillRect(-p.size, -p.size * 0.6 * sq, p.size * 2, p.size * 1.2 * sq);
+          ctx.restore(); ctx.globalAlpha = 1;
+          break;
+        }
+        case 'bubble':
+          ctx.strokeStyle = `rgba(255,255,255,${a * 0.8})`; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (0.6 + u), 0, TAU); ctx.stroke();
+          break;
+        case 'ringfx':
+          ctx.strokeStyle = `rgba(${p.rgb || '255,240,180'},${a * 0.9})`;
+          ctx.lineWidth = 3 * a + 0.5;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.r0 + u * p.size, 0, TAU); ctx.stroke();
+          break;
+      }
+    }
+  }
+
+  function drawHint(ctx, h, t) {
+    const pulse = (t * 1.3) % 1;
+    ctx.strokeStyle = `rgba(255,236,150,${0.9 * (1 - pulse)})`;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(h.x, h.y, 6 + pulse * 26, 0, TAU); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,236,150,0.95)';
+    ctx.beginPath(); ctx.arc(h.x, h.y, 4.5, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(120,80,0,0.4)'; ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  function drawAim(ctx, w, aim, t) {
+    const ok = !aim.cancel;
+    // rekkevidde
+    ctx.save();
+    ctx.setLineDash([4, 7]);
+    ctx.lineDashOffset = -t * 20;
+    ctx.strokeStyle = ok ? 'rgba(255,255,255,0.28)' : 'rgba(255,160,160,0.3)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(aim.x, aim.y, C.RIPPLE_RANGE * 0.98, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+    // dråpen som skal slippes
+    const bob = Math.sin(t * 8) * 1.2;
+    ctx.fillStyle = 'rgba(10,50,75,0.25)';
+    ctx.beginPath(); ctx.ellipse(aim.x, aim.y + 2, 5, 2.5, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = ok ? 'rgba(255,255,255,0.9)' : 'rgba(255,170,170,0.9)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(aim.x, aim.y, 9 + bob, 0, TAU); ctx.stroke();
+    if (!ok) {
+      ctx.beginPath(); ctx.moveTo(aim.x - 5, aim.y - 5); ctx.lineTo(aim.x + 5, aim.y + 5);
+      ctx.moveTo(aim.x + 5, aim.y - 5); ctx.lineTo(aim.x - 5, aim.y + 5); ctx.stroke();
+      return;
+    }
+    drawArrows(ctx, w, aim.x, aim.y, 1);
+  }
+
+  // piler på det som vil bli dyttet (styrke = lengde og tykkelse)
+  function drawArrows(ctx, w, x, y, alpha) {
+    for (const p of E.preview(w, x, y)) {
+      const b = p.body;
+      const len = 10 + 46 * p.f;
+      const sx = b.x + p.nx * (b.r + 5), sy = b.y + p.ny * (b.r + 5);
+      const ex = sx + p.nx * len, ey = sy + p.ny * len;
+      const a = (0.35 + 0.6 * p.f) * alpha;
+      ctx.strokeStyle = `rgba(255,255,255,${a})`;
+      ctx.fillStyle = `rgba(255,255,255,${a})`;
+      ctx.lineWidth = 2 + 2.5 * p.f;
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex - p.nx * 4, ey - p.ny * 4); ctx.stroke();
+      const hx = -p.ny, hy = p.nx, hs = 4 + 3 * p.f;
+      ctx.beginPath();
+      ctx.moveTo(ex + p.nx * 3, ey + p.ny * 3);
+      ctx.lineTo(ex - p.nx * hs + hx * hs, ey - p.ny * hs + hy * hs);
+      ctx.lineTo(ex - p.nx * hs - hx * hs, ey - p.ny * hs - hy * hs);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+
+  root.Render = R;
+})(typeof window !== 'undefined' ? window : globalThis);
