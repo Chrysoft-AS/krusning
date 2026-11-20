@@ -150,7 +150,7 @@ Hver verden legger til **én hovedmekanikk** og ofte én liten krydder. Rekkefø
 | 1 · Dammen | trykk, retning, styrke, stein, stokk, flere båter, biljard, vannliljer, virvel | Sikte og styrke | **15 baner** |
 | 2 · Bekken | **strøm** + **fargede havner** (båten må til havna med samme farge og merke) | Planlegge med noe som beveger seg, og sortere båter | **15 baner** |
 | 3 · Fossen | **foss nedover** (båten glir ned til en lavere vannhøyde, men kommer aldri opp igjen, og krusninger når bare båter på samme høyde) og **foss ovenfra** (vann som faller ned dytter båter bort, og treffer båten midten, krasjer den) | Tenke i etasjer: hva må skje før båten går utfor? | **15 baner** |
-| 4 · Regnværet | **regndråper** som faller på faste steder i fast takt og lager egne krusninger (takten starter på nytt ved hvert trykk), og **tunge båter** (lasteskuter) | Bruk regnet som et ekstra trykk, eller hold deg unna det | **15 baner** |
+| 4 · Regnværet | **regndråper** som faller på faste steder i fast takt og lager egne krusninger (takten starter på nytt ved hvert trykk, og skyen venter når alt er i ro), og **tunge båter** (lasteskuter) | Bruk regnet som et ekstra trykk, eller hold deg unna det | **15 baner** |
 | 5 · Slusene | **moloer** som stopper båter og krusninger (skygge bak), **brytere** som åpner en **sluseport** når en båt (eller vannlilje) kjører over dem | Rekkefølge: gjør ting i riktig rekkefølge | **15 baner** |
 | 6 · Natten | **frosker** som hopper når krusningen treffer dem og lager en ny krusning der de lander, og **mørke** (du ser bare nær lykter, båter og havner, og krusningene lyser opp vannet) | Kjedereaksjoner og å huske banen | **15 baner** |
 | 7 · Isen | **glatt is** (båtene glir nesten uten å stoppe) og **vind** som blåser jevnt i faste felt | Små trykk og fin kontroll | **15 baner** |
@@ -169,7 +169,7 @@ Hver verden legger til **én hovedmekanikk** og ofte én liten krydder. Rekkefø
 Alle nye mekanikker må være deterministiske (fast mønster, ingen tilfeldighet), slik at løseren og hintet virker.
 
 **To valg som ble tatt underveis (verden 4–7):**
-- **Regnet går i takt med trykkene dine.** Første dråpe faller litt etter hvert trykk, og så i fast takt. Da blir resultatet det samme uansett hvor lenge du venter før du trykker, og hint-knappen treffer. Det passer også med at spillet ikke skal ha tidspress.
+- **Regnet går i takt med trykkene dine.** Første dråpe faller litt etter hvert trykk, og så i fast takt, men bare så lenge noe i dammen er i bevegelse. Når alt er i ro, venter skyen til neste trykk. Da ligger båtene stille mens du tenker, resultatet blir det samme uansett hvor lenge du venter før du trykker, og hint-knappen treffer. Det passer også med at spillet ikke skal ha tidspress.
 - **Vinden blåser jevnt i faste felt** (vist med striper), ikke i kast. Kast som kommer av seg selv ville flyttet båtene mens du tenker, og da kan verken løseren eller hintet regne riktig.
 - Natten har innstillingen «Mer lys om natten».
 

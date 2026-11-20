@@ -141,7 +141,9 @@
     (level.currents || []).forEach((c) => w.currents.push({ x: c.x, y: c.y, w: c.w, h: c.h, vx: c.vx || 0, vy: c.vy || 0 }));
 
     // Regn: en dråpe faller på samme sted i fast takt. Takten starter på nytt
-    // ved hvert trykk, så resultatet blir det samme uansett når du trykker.
+    // ved hvert trykk, og dråpene faller bare mens noe er i bevegelse. Når alt
+    // er i ro, venter skyen til neste trykk. Da ligger båtene stille mens du
+    // tenker, og resultatet blir det samme uansett når du trykker.
     (level.rain || []).forEach((d) => w.rains.push({
       x: d.x, y: d.y,
       p: d.power || C.RAIN_POWER, range: d.range || C.RAIN_RANGE,
@@ -277,8 +279,9 @@
     const dt = C.DT;
     w.t += dt; w.steps++;
 
-    // 0) regndråper faller i fast takt etter siste trykk
-    if (w.rains.length) {
+    // 0) regndråper faller i fast takt etter siste trykk, men bare så lenge
+    //    noe er i bevegelse (når alt er i ro, venter skyen til neste trykk)
+    if (w.rains.length && !isSettled(w)) {
       const rel = w.steps - w.tapStep;
       for (const d of w.rains) {
         if (rel < d.ds || (rel - d.ds) % d.es !== 0) continue;
@@ -615,9 +618,9 @@
 
   /* ---------- tilstand ---------- */
 
-  // Alt i ro? Regndråper teller ikke (de faller hele tiden).
+  // Alt i ro? (Da faller heller ingen flere regndråper før neste trykk.)
   function isSettled(w) {
-    for (const rp of w.ripples) if (!rp.amb) return false;
+    if (w.ripples.length) return false;
     for (const fr of w.frogs) if (fr.jt >= 0) return false;
     for (const b of w.bodies) {
       if (b.sink > 0) return false;
@@ -631,9 +634,10 @@
   // Som isSettled, men godtar krusninger som allerede har passert alt
   // (brukes av hint-knappen for å stoppe tidlig).
   function isCalm(w) {
+    if (w.rains.length) return isSettled(w); // regnet kan dytte igjen så lenge noe beveger seg
     for (const fr of w.frogs) if (fr.jt >= 0) return false;
     for (const rp of w.ripples) {
-      if (rp.amb || rp.r >= rp.range) continue;
+      if (rp.r >= rp.range) continue;
       for (const fr of w.frogs) if (rp.fhit.indexOf(fr.id) < 0) return false;
     }
     for (const b of w.bodies) {
@@ -669,8 +673,9 @@
     return best;
   }
 
-  // Når faller neste dråpe? (antall steg, til tegningen)
+  // Når faller neste dråpe? (antall steg, til tegningen; Infinity når alt er i ro)
   function nextDrop(w, d) {
+    if (isSettled(w)) return Infinity;
     const rel = w.steps - w.tapStep;
     if (rel < d.ds) return d.ds - rel;
     return d.es - ((rel - d.ds) % d.es);
