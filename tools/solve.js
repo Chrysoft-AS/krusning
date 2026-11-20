@@ -59,11 +59,12 @@ function score(w) {
     let best = 1e9;
     for (const d of w.docks) {
       if (d.boat >= 0 || (d.color >= 0 && d.color !== b.color)) continue;
-      best = Math.min(best, Math.hypot(d.x - b.x, d.y - b.y));
+      best = Math.min(best, Engine.pathDist(w, b.x, b.y, d.x, d.y));
     }
     s -= best;
     for (const v of w.whirls) if (Math.hypot(v.x - b.x, v.y - b.y) < v.r) s -= 150;
   }
+  for (const sw of w.switches) if (sw.on) s += 250; // åpnet sluse er et steg nærmere
   return s;
 }
 
@@ -212,13 +213,16 @@ function centerOf(pts) {
 }
 
 // Banen som tekst: B båt, H havn (tall = farget havn), O stein, # stokk, L vannlilje, @ virvel,
-// = foss nedover, V foss ovenfra, * vinnende trykk
+// = foss nedover, V foss ovenfra, r regndråpe, M molo, G sluseport, S bryter, f frosk (blad),
+// - is, > vind, * vinnende trykk
 function asciiMap(level, wins) {
   const cw = 9, ch = 15, cols = Math.ceil(C.W / cw), rows = Math.ceil(C.H / ch);
   const g = Array.from({ length: rows }, () => Array(cols).fill(' '));
   const put = (x, y, c) => { const cx = Math.floor(x / cw), cy = Math.floor(y / ch); if (g[cy] && cx >= 0 && cx < cols) g[cy][cx] = c; };
   const disc = (x, y, r, c) => { for (let yy = y - r; yy <= y + r; yy += 3) for (let xx = x - r; xx <= x + r; xx += 3) if (Math.hypot(xx - x, yy - y) <= r) put(xx, yy, c); };
   for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) if (Engine.insidePond(x * cw + cw / 2, y * ch + ch / 2, 0)) g[y][x] = '·';
+  for (const r of level.ice || []) for (let y = r.y + 4; y < r.y + r.h; y += 15) for (let x = r.x + 4; x < r.x + r.w; x += 9) if (g[Math.floor(y / ch)] && g[Math.floor(y / ch)][Math.floor(x / cw)] === '·') put(x, y, '-');
+  for (const r of level.winds || []) for (let y = r.y + 4; y < r.y + r.h; y += 15) for (let x = r.x + 4; x < r.x + r.w; x += 9) if (g[Math.floor(y / ch)] && g[Math.floor(y / ch)][Math.floor(x / cw)] === '·') put(x, y, Math.abs(r.ax || 0) >= Math.abs(r.ay || 0) ? (r.ax > 0 ? '>' : '<') : (r.ay > 0 ? 'v' : '^'));
   for (const [x, y] of wins) put(x, y, '*');
   for (const v of level.whirls || []) disc(v.x, v.y, v.r * 0.35, '@');
   for (const r of level.rocks || []) disc(r.x, r.y, r.r, 'O');
@@ -226,9 +230,14 @@ function asciiMap(level, wins) {
   for (const l of level.logs || []) { for (let t = 0; t <= 1; t += 0.02) put(l.x1 + (l.x2 - l.x1) * t, l.y1 + (l.y2 - l.y1) * t, '#'); }
   for (const f of level.falls || []) { for (let t = -0.2; t <= 1.2; t += 0.01) put(f.x1 + (f.x2 - f.x1) * t, f.y1 + (f.y2 - f.y1) * t, '='); }
   for (const c of level.cascades || []) disc(c.x, c.y, 12, 'V');
+  for (const l of level.walls || []) { for (let t = 0; t <= 1; t += 0.01) put(l.x1 + (l.x2 - l.x1) * t, l.y1 + (l.y2 - l.y1) * t, 'M'); }
+  for (const l of level.gates || []) { for (let t = 0; t <= 1; t += 0.01) put(l.x1 + (l.x2 - l.x1) * t, l.y1 + (l.y2 - l.y1) * t, 'G'); }
+  for (const s of level.switches || []) disc(s.x, s.y, 6, 'S');
+  for (const d of level.rain || []) disc(d.x, d.y, 5, 'r');
+  for (const f of level.frogs || []) for (const [x, y] of f.hops) disc(x, y, 5, 'f');
   for (const d of level.docks || []) disc(d.x, d.y, 12, d.color != null ? String(d.color) : 'H');
   const colored = (level.docks || []).some((d) => d.color != null);
-  (level.boats || []).forEach((b, i) => disc(b.x, b.y, 9, colored ? String.fromCharCode(97 + (b.color != null ? b.color : i)) : 'B'));
+  (level.boats || []).forEach((b, i) => disc(b.x, b.y, 9, colored ? String.fromCharCode(97 + (b.color != null ? b.color : i)) : b.heavy ? 'T' : 'B'));
   return g.map((r) => '    |' + r.join('') + '|').join('\n');
 }
 

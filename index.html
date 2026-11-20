@@ -78,6 +78,7 @@
         <button id="btnSettings" class="icon-btn" aria-label="Innstillinger"><svg><use href="#i-sliders"/></svg></button>
       </div>
       <p class="sound-tip" id="soundTip"></p>
+      <button id="btnJump" class="link-btn jump-link" hidden>Test: velg bane</button>
     </div>
   </section>
 
@@ -159,6 +160,17 @@
     </div>
   </div>
 
+  <!-- MIDLERTIDIG: hopp til valgfri bane (for testing). Slås av med DEV_JUMP i game.js -->
+  <div id="jump" class="modal" hidden>
+    <div class="card jump-card">
+      <div class="card-head">
+        <h2 id="jumpTitle">Velg bane</h2>
+        <button id="jumpClose" class="icon-btn small" aria-label="Lukk"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="jump-list" id="jumpList"></div>
+    </div>
+  </div>
+
   <!-- innstillinger -->
   <div id="settings" class="modal" hidden>
     <div class="card settings-card">
@@ -168,6 +180,7 @@
       </div>
       <div class="set-row"><span id="setSfxLbl">Lydeffekter</span><button id="setSfx" class="toggle" role="switch" aria-checked="true"><i></i></button></div>
       <div class="set-row"><span id="setMusicLbl">Musikk</span><button id="setMusic" class="toggle" role="switch" aria-checked="true"><i></i></button></div>
+      <div class="set-row"><span id="setLightLbl">Mer lys om natten</span><button id="setLight" class="toggle" role="switch" aria-checked="false"><i></i></button></div>
       <div class="set-row"><span id="setLangLbl">Språk</span>
         <div class="seg" id="setLang"><button data-lang="no">Norsk</button><button data-lang="en">English</button></div>
       </div>

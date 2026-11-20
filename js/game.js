@@ -15,6 +15,9 @@
   const C = E.C;
   const TAU = Math.PI * 2;
   const $ = (id) => document.getElementById(id);
+  // MIDLERTIDIG: «Test: velg bane» på tittelskjermen hopper til hvilken som
+  // helst bane, også låste. Sett til false før lansering.
+  const DEV_JUMP = true;
   const t = (k, v) => I.t(k, v);
 
   /* ---------- lagring (localStorage – bare på denne enheten) ---------- */
@@ -28,7 +31,7 @@
     for (const tr of TIERS) q[tr] = { i: 0, played: 0, three: 0, pearls: 0, streak: 0, best: 0 };
     return q;
   }
-  function defaults() { return { v: 2, lang: 'no', sfx: true, music: true, levels: {}, last: null, quick: quickDefaults(), daily: {} }; }
+  function defaults() { return { v: 2, lang: 'no', sfx: true, music: true, light: false, levels: {}, last: null, quick: quickDefaults(), daily: {} }; }
   function upgrade(s) {
     const out = Object.assign(defaults(), s, { v: 2 });
     out.quick = quickDefaults();
@@ -184,7 +187,7 @@
       return;
     }
     if (G.screen !== 'play' || G.completed || !E.insidePond(p.x, p.y, 2)) return;
-    G.aim = { x: p.x, y: p.y, cancel: false, id: e.pointerId };
+    G.aim = { x: p.x, y: p.y, cancel: !E.canTap(G.world, p.x, p.y), id: e.pointerId };
     hideHand();
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ok */ }
     e.preventDefault();
@@ -193,7 +196,7 @@
     if (!G.aim || e.pointerId !== G.aim.id) return;
     const p = toWorld(e);
     G.aim.x = p.x; G.aim.y = p.y;
-    G.aim.cancel = !E.insidePond(p.x, p.y, 2);
+    G.aim.cancel = !E.canTap(G.world, p.x, p.y);
   });
   canvas.addEventListener('pointerup', (e) => {
     if (!G.aim || e.pointerId !== G.aim.id) return;
@@ -237,7 +240,7 @@
       world: G.world, time: G.time,
       particles: G.particles, fish: G.fish, leaves: G.leaves,
       boatFx: G.boatFx, dockFx: G.dockFx,
-      look: G.look, aim: G.aim, hint: G.hint,
+      look: G.look, aim: G.aim, hint: G.hint, light: save.light,
     });
     if (G.handOn) positionHand();
     requestAnimationFrame(frame);
@@ -265,6 +268,10 @@
         case 'crash': crashFx(ev); S.crash(); break;
         case 'fall': fallFx(ev); S.fall(); break;
         case 'respawn': respawnFx(ev); S.pop(); break;
+        case 'drop': dropFx(ev); S.drop(ev.x / C.W); break;
+        case 'frog': S.frog(); break;
+        case 'land': splash(ev.x, ev.y); S.land(); break;
+        case 'switch': switchFx(ev); if (ev.opened) S.gate(); break;
       }
     }
     w.events.length = 0;
@@ -318,6 +325,23 @@
       addP({ type: 'drop', x: ev.x, y: ev.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, drag: 4.5, size: 1 + Math.random() * 1.4, life: 0.3 + Math.random() * 0.3 });
     }
     const f = G.boatFx[ev.id]; if (f) f.squash = 0.8;
+  }
+  function dropFx(ev) {
+    addP({ type: 'flash', x: ev.x, y: ev.y, size: 14, life: 0.35 });
+    for (let i = 0; i < 6; i++) {
+      const a = Math.random() * TAU, sp = 30 + Math.random() * 50;
+      addP({ type: 'drop', x: ev.x, y: ev.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, drag: 5, size: 0.9 + Math.random(), life: 0.25 + Math.random() * 0.2 });
+    }
+  }
+  function switchFx(ev) {
+    addP({ type: 'ringfx', x: ev.x, y: ev.y, r0: 10, size: 30, life: 0.6 });
+    const g = G.world.gates[ev.gate];
+    if (g && ev.opened) {
+      for (let i = 0; i < 12; i++) {
+        const u = i / 11, x = g.x1 + (g.x2 - g.x1) * u, y = g.y1 + (g.y2 - g.y1) * u;
+        addP({ type: 'drop', x, y, vx: (Math.random() - 0.5) * 50, vy: (Math.random() - 0.5) * 50, drag: 4, size: 1 + Math.random() * 1.3, life: 0.4 + Math.random() * 0.3 });
+      }
+    }
   }
   function respawnFx(ev) {
     addP({ type: 'ringfx', x: ev.x, y: ev.y, r0: 6, size: 30, life: 0.5, rgb: '255,255,255' });
@@ -649,7 +673,7 @@
     if (e.mode === 'quick') { transition(() => startLevel(quickEntry(e.tier))); return; }
     if (e.mode === 'daily') { shareDaily(e.day); return; }
     const nxt = ALL[e.idx + 1];
-    if (nxt && levelOpen(nxt)) { transition(() => startLevel(nxt)); return; }
+    if (nxt && (levelOpen(nxt) || (DEV_JUMP && nxt.w === e.w))) { transition(() => startLevel(nxt)); return; }
     // slutten av verdenen: vis neste verden på kartet
     transition(() => {
       openMap(Math.min(LV.WORLDS.length - 1, e.wi + 1));
@@ -865,6 +889,30 @@
     });
   }
 
+  /* ---------- MIDLERTIDIG: hopp til bane (testing) ---------- */
+  function openJump() {
+    $('jumpTitle').textContent = t('jumpTitle');
+    const box = $('jumpList');
+    box.innerHTML = '';
+    for (const w of LV.WORLDS) {
+      if (!w.levels || !w.levels.length) continue;
+      const sec = document.createElement('div');
+      sec.className = 'jump-world';
+      sec.innerHTML = `<b>${t('world', { n: w.id })} · ${I.pick(w.name)}</b><div class="jump-grid"></div>`;
+      const grid = sec.querySelector('.jump-grid');
+      for (const e of ALL.filter((x) => x.w === w)) {
+        const b = document.createElement('button');
+        b.textContent = e.lv.id;
+        b.title = I.pick(e.lv.name);
+        if (rec(e.lv.id)) b.className = 'done';
+        b.addEventListener('click', () => { S.click(); $('jump').hidden = true; transition(() => startLevel(e)); });
+        grid.appendChild(b);
+      }
+      box.appendChild(sec);
+    }
+    $('jump').hidden = false;
+  }
+
   /* ---------- hint (regnes ut fra situasjonen akkurat nå) ---------- */
   function requestHint() {
     if (!G.world || G.completed || G.screen !== 'play' || G.hintBusy) return;
@@ -891,35 +939,28 @@
       let best = 1e9;
       for (const d of w.docks) {
         if (d.boat >= 0 || (d.color >= 0 && d.color !== b.color)) continue;
-        best = Math.min(best, Math.hypot(d.x - b.x, d.y - b.y));
+        best = Math.min(best, E.pathDist(w, b.x, b.y, d.x, d.y));
       }
       s -= best;
       for (const v of w.whirls) if (Math.hypot(v.x - b.x, v.y - b.y) < v.r) s -= 150;
     }
+    for (const sw of w.switches) if (sw.on) s += 250;
     return s;
   }
 
-  // Som Engine.isSettled, men godtar krusninger som allerede har passert alt.
-  function calmEnough(w) {
-    for (const b of w.bodies) {
-      if (b.dock >= 0) continue;
-      if (b.sink > 0 || b.pushes.length) return false;
-      if (b.vx * b.vx + b.vy * b.vy > C.SETTLE_V * C.SETTLE_V) return false;
-      for (const rp of w.ripples) if (rp.r < C.RIPPLE_RANGE && rp.hit.indexOf(b.id) < 0) return false;
-    }
-    return true;
-  }
 
   function findHint(world, token, cb) {
     const base = E.clone(world);
     const movers = base.bodies.filter((b) => b.dock < 0);
     const reach = C.RIPPLE_RANGE - 12;
+    const maxSteps = base.ice.length || base.winds.length ? 1100 : 760; // på is glir båtene lenge
     // bare trykk som faktisk når noe, i blandet rekkefølge (så vi kan stoppe tidlig)
     const pts = [];
     for (let y = 6; y < C.H; y += 11) {
       for (let x = 5; x < C.W; x += 11) {
         if (!E.insidePond(x, y, 8)) continue;
-        if (movers.some((b) => Math.hypot(b.x - x, b.y - y) < reach)) pts.push([x, y]);
+        if (!E.canTap(base, x, y)) continue;
+        if (movers.some((b) => Math.hypot(b.x - x, b.y - y) < reach) || base.frogs.some((f) => Math.hypot(f.x - x, f.y - y) < reach)) pts.push([x, y]);
       }
     }
     const rnd = seeded('hint' + base.taps);
@@ -935,10 +976,10 @@
         const w = E.clone(base);
         E.tap(w, x, y);
         let done = false;
-        for (let s = 0; s < 760; s++) {
+        for (let s = 0; s < maxSteps; s++) {
           E.step(w); w.events.length = 0;
           if (w.done) { done = true; break; }
-          if ((s & 7) === 7 && calmEnough(w)) break;
+          if ((s & 7) === 7 && E.isCalm(w)) break;
         }
         if (done) wins++;
         res.push({ x, y, done, score: done ? 1e9 : hintScore(w) });
@@ -972,6 +1013,7 @@
   function paintSettings() {
     $('setSfx').setAttribute('aria-checked', String(save.sfx));
     $('setMusic').setAttribute('aria-checked', String(save.music));
+    $('setLight').setAttribute('aria-checked', String(!!save.light));
     for (const b of $('setLang').children) b.classList.toggle('on', b.dataset.lang === save.lang);
   }
 
@@ -984,6 +1026,8 @@
     $('btnPlay').textContent = anyProgress() ? t('continueAt', { id: nextToPlay().lv.id }) : t('play');
     $('btnLevelsTxt').textContent = t('levels');
     $('btnDailyTxt').textContent = t('daily');
+    $('btnJump').hidden = !DEV_JUMP;
+    $('btnJump').textContent = t('jumpOpen');
     $('btnQuickTxt').textContent = t('quick');
     $('dailyDot').hidden = !!save.daily[todayKey()];
     $('dailyClose').setAttribute('aria-label', t('close'));
@@ -992,6 +1036,7 @@
     $('setTitle').textContent = t('settings');
     $('setSfxLbl').textContent = t('sound');
     $('setMusicLbl').textContent = t('music');
+    $('setLightLbl').textContent = t('moreLight');
     $('setLangLbl').textContent = t('language');
     $('setReset').textContent = t('reset');
     $('resetAsk').textContent = t('resetAsk');
@@ -1018,6 +1063,9 @@
   $('btnRetry').addEventListener('click', () => { $('win').hidden = true; restart(); });
   $('btnNext').addEventListener('click', goNext);
   $('btnWinMap').addEventListener('click', () => { S.click(); if (G.entry && G.entry.mode) leaveMode(); else transition(() => openMap(G.entry ? G.entry.wi : 0)); });
+  $('btnJump').addEventListener('click', () => { S.unlock(); S.click(); openJump(); });
+  $('jumpClose').addEventListener('click', () => { S.click(); $('jump').hidden = true; });
+  $('jump').addEventListener('click', (e) => { if (e.target === $('jump')) $('jump').hidden = true; });
   $('btnDaily').addEventListener('click', () => { S.unlock(); S.click(); openDaily(); });
   $('btnQuick').addEventListener('click', () => { S.unlock(); S.click(); openQuick(); });
   $('dailyClose').addEventListener('click', () => { S.click(); $('daily').hidden = true; });
@@ -1033,6 +1081,7 @@
   $('settings').addEventListener('click', (e) => { if (e.target === $('settings')) $('settings').hidden = true; });
   $('setSfx').addEventListener('click', () => { save.sfx = !save.sfx; S.setSfx(save.sfx); persist(); paintSettings(); S.click(); });
   $('setMusic').addEventListener('click', () => { save.music = !save.music; S.setMusic(save.music); persist(); paintSettings(); S.click(); });
+  $('setLight').addEventListener('click', () => { save.light = !save.light; persist(); paintSettings(); S.click(); });
   for (const b of $('setLang').children) {
     b.addEventListener('click', () => {
       save.lang = b.dataset.lang; I.lang = save.lang; persist();

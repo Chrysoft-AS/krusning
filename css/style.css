@@ -360,6 +360,15 @@ svg { fill: currentColor; }
 .tier-btn.locked { opacity: 0.6; }
 .tier-btn.locked .tier-dots i { background: rgba(18, 52, 61, 0.2); }
 
+/* MIDLERTIDIG: hopp til bane */
+.jump-link { color: #fff; text-shadow: 0 1px 6px rgba(8, 55, 75, 0.6); font-size: 14px; padding: 2px 8px; }
+.jump-card { max-height: calc(100vh - 40px); max-height: calc(100dvh - 40px); display: flex; flex-direction: column; }
+.jump-list { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-bottom: 6px; }
+.jump-world b { display: block; font-size: 15px; margin-bottom: 6px; color: var(--ink); }
+.jump-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.jump-grid button { border: 0; border-radius: 10px; padding: 8px 0; background: #fff; font-size: 14px; font-weight: 600; color: var(--teal); box-shadow: 0 2px 0 var(--paper-shade); }
+.jump-grid button.done { background: #fff4cc; }
+
 .fade { position: absolute; inset: 0; z-index: 40; background: #c9f1f2; opacity: 0; pointer-events: none; transition: opacity 0.22s ease; }
 .fade.on { opacity: 1; }
 
