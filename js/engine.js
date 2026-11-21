@@ -47,6 +47,10 @@
     SINK_R: 9,
     SINK_TIME: 1.1,
     TIMBER_R: 9,                  // tømmerstokk i elva: tykkelse (radius)
+    MAEL_SWIRL: 420,              // malstrøm: kraftig sirkelbevegelse…
+    MAEL_PULL: 120,               // …og svakere sug inn mot midten
+    MAEL_CORE: 16,                // malstrøm: midt i blir båten dratt ned
+    MAEL_MAX: 6,                  // malstrøm: høyst så mange sekunder rundt før den drar båten ned
 
     FALL_KICK: 70,                // fart nedover når en båt går utfor en foss
     FALL_LIP: 2,                  // båter under fossen kommer ikke opp igjen
@@ -151,6 +155,7 @@
       bodies: [], boats: [], pads: [],
       docks: [], rocks: [], logs: [], whirls: [], currents: [], falls: [], cascades: [],
       rains: [], walls: [], gates: [], switches: [], frogs: [], ice: [], winds: [], timber: [],
+      banks: [], maels: [], tide: null, tideI: 0, tideT: -9,
       ripples: [], events: [], rippleSeq: 0, tapStep: 0,
       dark: !!level.dark,
       done: false, doneAt: -1,
@@ -216,6 +221,14 @@
     // mellomrom. Mellomrommene lages fra et frø, så de er like hver gang du
     // spiller banen. Treffer en stokk båten, blir den knust og starter på nytt.
     (level.timber || []).forEach((t, i) => w.timber.push(makeTimber(t, i)));
+    // Tidevann: vannstanden skifter for hvert trykk etter et fast mønster
+    // (2 = flo, 1 = middels, 0 = fjære). Sandbanker med høyde h stikker opp
+    // når vannstanden er lavere enn h, og er da land som stopper båter.
+    if (level.tide) w.tide = level.tide.slice();
+    (level.banks || []).forEach((k) => w.banks.push({ x1: k.x1, y1: k.y1, x2: k.x2 != null ? k.x2 : k.x1, y2: k.y2 != null ? k.y2 : k.y1, r: k.r || 20, h: k.h || 1 }));
+    // Malstrøm: en stor virvel som slynger båten rundt og ut igjen. Havner den
+    // midt i (eller går rundt for lenge), blir den dratt ned og starter på nytt.
+    (level.maels || []).forEach((m) => w.maels.push({ x: m.x, y: m.y, r: m.r || 110, dir: m.dir || 1, power: m.power || 1 }));
     // Molo: en mur som stopper båter og krusninger (skygge bak).
     (level.walls || []).forEach((l) => w.walls.push({ x1: l.x1, y1: l.y1, x2: l.x2, y2: l.y2, r: C.WALL_R }));
     // Sluseport: som en molo, men åpnes for godt når en båt treffer bryteren.
@@ -277,8 +290,13 @@
     t = t < 0 ? 0 : t > 1 ? 1 : t;
     return Math.hypot(px - (s.x1 + abx * t), py - (s.y1 + aby * t));
   }
+  // Vannstanden nå, og om en sandbank stikker opp.
+  function tideLevel(w) { return w.tide ? w.tide[w.tideI % w.tide.length] : 2; }
+  function bankUp(w, k) { return tideLevel(w) < k.h; }
+
   function onWall(w, x, y, m) {
     for (const s of w.walls) if (segDist(x, y, s) < s.r + m) return true;
+    for (const k of w.banks) if (bankUp(w, k) && segDist(x, y, k) < k.r + m) return true;
     for (const g of w.gates) if (!g.open && segDist(x, y, g) < g.r + m) return true;
     return false;
   }
@@ -304,6 +322,7 @@
 
   function tap(w, x, y) {
     if (!canTap(w, x, y)) return false;
+    if (w.tide) { w.tideI++; w.tideT = w.t; w.events.push({ type: 'tide', level: tideLevel(w) }); }
     addRipple(w, x, y, 1, C.RIPPLE_RANGE, false, [], 'tap');
     w.tapStep = w.steps;
     w.taps++;
@@ -453,6 +472,24 @@
       }
       if (b.sink > 0) continue;
 
+      // malstrømmer: sterk sirkelbevegelse, svakt sug, og ned i midten
+      let inMael = false;
+      for (const m of w.maels) {
+        const dx = m.x - b.x, dy = m.y - b.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d >= m.r || d < 1e-6) continue;
+        inMael = true;
+        if (b.kind === 'boat' && (d < C.MAEL_CORE || b.mt > C.MAEL_MAX)) { startSink(w, b, m); break; }
+        const s = 1 - d / m.r;
+        const swirl = C.MAEL_SWIRL * m.power * Math.sin(Math.PI * Math.min(1, s * 1.4)) * m.dir;
+        const pull = C.MAEL_PULL * m.power * s;
+        const ux = dx / d, uy = dy / d;
+        b.vx += (ux * pull - uy * swirl) * dt / b.mass;
+        b.vy += (uy * pull + ux * swirl) * dt / b.mass;
+      }
+      b.mt = inMael ? (b.mt || 0) + dt : 0;
+      if (b.sink > 0) continue;
+
       // fosser ovenfra: dytter bort, og midt i krasjer båten
       for (const c of w.cascades) {
         const dx = b.x - c.x, dy = b.y - c.y;
@@ -512,6 +549,7 @@
           collideStatic(w, b, l.x1 + abx * t, l.y1 + aby * t, l.r, C.REST_STATIC, report, 'log');
         }
         for (const s of w.walls) collideSeg(w, b, s, report, 'rock');
+        for (const k of w.banks) if (bankUp(w, k)) collideSeg(w, b, k, report, 'sand');
         for (const g of w.gates) if (!g.open) collideSeg(w, b, g, report, 'log');
         collideBounds(w, b, report);
         collideFalls(w, b, report);
@@ -705,9 +743,18 @@
   /* ---------- tilstand ---------- */
 
   // Alt i ro? (Da faller heller ingen flere regndråper før neste trykk.)
+  // En båt inne i en malstrøm ligger aldri i ro: den blir slynget ut eller
+  // dratt ned (senest etter MAEL_MAX sekunder), selv om farten er lav et øyeblikk.
+  function inMael(w, b) {
+    if (b.kind !== 'boat' || b.dock >= 0 || b.sink > 0) return false;
+    for (const m of w.maels) if (Math.hypot(b.x - m.x, b.y - m.y) < m.r) return true;
+    return false;
+  }
+
   function isSettled(w) {
     for (const rp of w.ripples) if (!rp.amb || rainPending(w, rp)) return false;
     if (w.timber.length) for (const b of w.bodies) if (stuckInTimber(w, b)) return false;
+    if (w.maels.length) for (const b of w.bodies) if (inMael(w, b)) return false;
     for (const fr of w.frogs) if (fr.jt >= 0) return false;
     for (const b of w.bodies) {
       if (b.sink > 0) return false;
@@ -736,6 +783,7 @@
   // (brukes av hint-knappen for å stoppe tidlig).
   function isCalm(w) {
     if (w.rains.length || w.timber.length) return isSettled(w); // regn og tømmer kan fortsatt flytte noe
+    if (w.maels.length) for (const b of w.bodies) if (inMael(w, b)) return false;
     for (const fr of w.frogs) if (fr.jt >= 0) return false;
     for (const rp of w.ripples) {
       if (rp.r >= rp.range) continue;
@@ -800,7 +848,7 @@
 
   const Engine = {
     C, createWorld, step, tap, canTap, preview, previewFrogs, falloff, insidePond, isSettled, isCalm, clone,
-    levelAt, eachTimber, fallSide, blocked, nextDrop, pathDist,
+    levelAt, eachTimber, tideLevel, bankUp, fallSide, blocked, nextDrop, pathDist,
   };
   root.Engine = Engine;
   if (typeof module !== 'undefined' && module.exports) module.exports = Engine;

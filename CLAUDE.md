@@ -19,6 +19,7 @@ js/strings.js       all tekst, norsk + engelsk
 js/game.js          skjermer, input, stjerner/perler, lagring, hint
 tools/solve.js      banetester: finner minste antall trykk, sjekker par/perle
 tools/gen.js        lager og tester brett til Rask runde og Dagens dam → js/pool.js
+tools/worldgen.js   lager og tester forslag til nye verdener på Stien (blandingsverdener)
 tools/playtest.js   spiller alle baner i ekte nettleser (følger hint-knappen)
 tools/shots.js      skjermbilder av alle skjermer (iPhone-størrelse)
 tools/build-artifact.js   bygger dist/krusning.html (én fil) for deling
@@ -42,6 +43,15 @@ tools/build-artifact.js   bygger dist/krusning.html (én fil) for deling
 3. `node tools/solve.js <id> --map` viser hvor ett trykk løser banen (`*`). Sett `pearl` til det minste antallet løseren finner, og `par` vanligvis én høyere.
 4. Perla bør ha et vindu på minst ca. 15 trykkpunkter. Under 6 regnes som flaks, og løseren varsler da.
 5. Kjør `node tools/playtest.js <id>`.
+
+## Ny verden (blanding av mekanikker)
+
+Spillet har ingen siste verden: nye verdener blander mekanikkene som finnes (se DESIGN.md kap. 7).
+1. Legg til en oppskrift i `RECIPES` i `tools/worldgen.js` (hvilke grupper verdenen bruker).
+2. `node tools/worldgen.js make <verden> 35` lager 35 testede forslag (tar 5–15 min). Hvert forslag er sjekket med løseren, og løsningen må bruke alle gruppene.
+3. `node tools/worldgen.js pick <verden>` velger 15 baner fra lett til vanskelig og skriver dem ut som tekst til `levels.js`. Gi dem navn, og et tips på første bane.
+4. Kjør `node tools/solve.js <verden>` og `node tools/playtest.js` på de nye banene. Bytt ut baner der hintet ikke klarer seg.
+Forslagene lagres i `tools/out/` (ikke i git).
 
 ## Flere brett i Rask runde / Dagens dam
 

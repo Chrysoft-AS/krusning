@@ -4,3 +4,4 @@ www/
 ios/
 .DS_Store
 dist/*.zip
+tools/out/

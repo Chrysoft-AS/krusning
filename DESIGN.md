@@ -63,7 +63,7 @@ En vanlig spiller spiller 10–20 minutter om gangen, gjerne én eller to ganger
 
 | Lag | Hva | Hvor lenge det varer |
 |---|---|---|
-| **Stien** (hovedløpet) | 7 verdener × 15 baner = **105 baner** ved lansering, pluss **Perlebukta** (12 mesterbaner) | Første gjennomgang ca. 2 timer. Med stjerner og perler 4–6 timer |
+| **Stien** (hovedløpet) | 19 verdener × 15 baner = **285 baner**, pluss **Perlebukta** (mesterbaner). Nye blandingsverdener kan legges til så lenge det finnes nye kombinasjoner | Første gjennomgang ca. 5–6 timer. Med stjerner og perler mye lenger |
 | **Dagens dam** | Én ny bane hver dag, lik for alle | 3–5 minutter hver dag, uten slutt |
 | **Rask runde** | Tilfeldige, testede brett i tre vanskelighetsgrader | Uten slutt |
 
@@ -82,8 +82,10 @@ Tallene for spilletid er anslag (ca. 1 minutt per bane første gang, med omstart
 | 5 | 108 | 180 |
 | 6 | 135 | 225 |
 | 7 | 162 | 270 |
-| 8 | 189 | 279 |
-| ◉ Perlebukta | 30 perler | 105 |
+| 8 | 189 | 315 |
+| 9 | 216 | 360 |
+| 10–19 | 243, 270 … 486 (27 mer per verden) | |
+| ◉ Perlebukta | 30 perler | |
 
   Hvorfor 60 %: det er nok til at du *må* hente noen ekstra stjerner, men aldri så mye at du sitter fast. Hintet hjelper deg alltid til minst én stjerne.
 - **Ingen energi, ingen ventetid, ingen liv.** Det passer ikke med et rolig spill, og det gir dårlige anmeldelser. Fart i progresjonen styres bare av stjerneportene og av at Dagens dam kommer én gang om dagen.
@@ -108,7 +110,7 @@ Verdenene vises som en svingete sti langs en bekk fra dammen til fjorden, med en
 
 | Modus | Hva | Gratis? | Prioritet |
 |---|---|---|---|
-| **Stien** | Hovedløpet med verdener, stjerner og perler | Verden 1–2 | Finnes (17 baner) |
+| **Stien** | Hovedløpet med verdener, stjerner og perler | Verden 1–2 | Finnes (285 baner) |
 | **Dagens dam** | Én bane per dag, lik for alle, delbart resultat | Ja | **Laget** (fase 1) |
 | **Rask runde** | Tilfeldig testet brett, velg Lett / Middels / Vrien | Lett er gratis | **Laget** (fase 1) |
 | **Bare vann** | Ingen mål. Trykk og lag musikk mens båtene flyter. For barn og for å slappe av | Ja | Liten, når det passer |
@@ -155,9 +157,10 @@ Hver verden legger til **én hovedmekanikk** og ofte én liten krydder. Rekkefø
 | 5 · Slusene | **moloer** som stopper båter og krusninger (skygge bak), **brytere** som åpner en **sluseport** når en båt (eller vannlilje) kjører over dem | Rekkefølge: gjør ting i riktig rekkefølge | **15 baner** |
 | 6 · Natten | **frosker** som hopper når krusningen treffer dem og lager en ny krusning der de lander, og **mørke** (du ser bare nær lykter, båter og havner, og krusningene lyser opp vannet) | Kjedereaksjoner og å huske banen | **15 baner** |
 | 7 · Isen | **glatt is** (båtene glir nesten uten å stoppe) og **vind** som blåser jevnt i faste felt | Små trykk og fin kontroll | **15 baner** |
-| 8 · Elva | **tømmerstokker** som flyter med strømmen med ujevne mellomrom. Treffer en stokk båten (eller blir den liggende fast i elva), blir den knust og starter på nytt | Timing: send båten over i en åpning | **3 baner** (prøve) |
-| ◉ Perlebukta | ingen ny regel, alt kombinert | Perfekte løsninger | Ny |
-| Senere: Fjorden | tidevann (steiner kommer og går), bølger | | Idé |
+| 8 · Elva | **tømmerstokker** som flyter med strømmen med ujevne mellomrom. Treffer en stokk båten (eller blir den liggende fast i elva), blir den knust og starter på nytt | Timing: send båten over i en åpning | **15 baner** |
+| 9 · Fjorden | **tidevann** (vannet stiger og synker for hvert trykk i et fast mønster, og **sandbanker** stikker opp ved fjære og stenger veien) og **malstrøm** (slynger båten rundt og ut igjen, men drar den ned hvis den havner midt i) | Tenke ett trykk fram: hvor står vannet *etter* neste trykk? | **15 baner** |
+| 10–19 · Blandingsverdener | ingen ny regel. Mekanikkene settes sammen, to og to (verden 10–14) og så tre og tre (verden 15–19) | Se under | **150 baner** |
+| ◉ Perlebukta | ingen ny regel, alt kombinert | Perfekte løsninger | Kommer |
 
 **Krydder som kan brukes overalt:**
 - **Trykkesoner:** du kan bare trykke i solflekker eller utenfor sivet. Krever ingen ny fysikk, men gjør baner mye smartere. Innføres i verden 2.
@@ -170,12 +173,35 @@ Hver verden legger til **én hovedmekanikk** og ofte én liten krydder. Rekkefø
 
 Alle nye mekanikker må være deterministiske (fast mønster, ingen tilfeldighet), slik at løseren og hintet virker.
 
-**Valg som ble tatt underveis (verden 4–8):**
+### Blandingsverdener (10 og utover)
+
+Spillet har ingen siste verden. Etter Fjorden kommer verdener som **setter sammen** mekanikkene spilleren allerede kan. Det kommer gradvis: først to og to, så tre og tre, og slik kan vi lage nye verdener til alle kombinasjoner er brukt opp (8 grupper gir 28 par og 56 trioer).
+
+| Verden | Blanding | Stemning |
+|---|---|---|
+| 10 · Stryket | strøm + fosser | |
+| 11 · Regnkanalen | regn + sluser | regn |
+| 12 · Polarnatta | frosker/mørke + is/vind | skumring |
+| 13 · Tømmerfjorden | tømmer + tidevann/malstrøm | |
+| 14 · Isflakene | strøm + is/vind | is |
+| 15 · Mølledammen | strøm + sluser + frosker | skumring |
+| 16 · Haglbygen | regn + is/vind + fosser | regn |
+| 17 · Sagbruket | tømmer + fosser + sluser | |
+| 18 · Stormnatta | tidevann/malstrøm + frosker + regn | skumring |
+| 19 · Polarhavet | tidevann/malstrøm + is/vind + strøm | is |
+
+- Spilleren er rutinert nå, så **første bane i en blandingsverden er ikke en nybegynnerbane** (par 2–3). Vanskeligheten stiger jevnt mot finalen, med en pustebane som nest siste bane.
+- I verdener med tre grupper bruker noen baner bare to av dem, så det nye kommer litt etter litt.
+- Banene lages med `tools/worldgen.js`: den setter sammen baner fra en oppskrift, og løseren sjekker at hver bane kan løses, at perla er rettferdig, og at løsningen faktisk **bruker** mekanikkene i oppskriften. Så velges 15 baner fra lett til vanskelig.
+
+**Valg som ble tatt underveis (verden 4–9):**
 - **Regnet går i takt med trykkene dine.** Første dråpe faller litt etter hvert trykk, og så i fast takt, men bare så lenge noe i dammen er i bevegelse. Når alt er i ro, venter skyen til neste trykk. Da ligger båtene stille mens du tenker, resultatet blir det samme uansett hvor lenge du venter før du trykker, og hint-knappen treffer. Det passer også med at spillet ikke skal ha tidspress.
 - **Vinden blåser jevnt i faste felt** (vist med striper), ikke i kast. Kast som kommer av seg selv ville flyttet båtene mens du tenker, og da kan verken løseren eller hintet regne riktig.
 - **Tømmerstokkene ser tilfeldige ut, men er like hver gang** du spiller en bane (de lages fra et frø). Da kan hint-knappen regne ut et godt øyeblikk. Hintet viser en ring som krymper inn og lyser grønt når det er tid for å trykke.
 - **Regnet blir tettere utover i verden 4:** dråpene faller omtrent hvert sekund, og antall skyer øker fra én til fem.
 - Natten har innstillingen «Mer lys om natten».
+- **Tidevannet skifter for hvert trykk**, ikke med klokka, av samme grunn som regnet: båtene ligger stille mens du tenker. En stang øverst til venstre viser vannet nå (fylt prikk) og etter neste trykk (ring), og sandbanker som kommer opp ved neste trykk har stiplet kant.
+- **Malstrømmen er en stor virvel** som slynger båten rundt og ut igjen. Den drar båten ned bare hvis den havner midt i, eller går rundt for lenge (6 sekunder).
 
 ---
 

@@ -288,6 +288,8 @@
       drawIce(ctx, w, t);
       drawWinds(ctx, w, t);
       for (const v of w.whirls) drawWhirl(ctx, v, t);
+      for (const m of w.maels) drawMael(ctx, m, t);
+      if (w.banks.length) drawBanksUnder(ctx, w, t);
       for (const c of w.cascades) drawCascadeWater(ctx, c, t);
       drawRainSpots(ctx, w, t);
       for (const d of w.docks) drawDockWater(ctx, d, t);
@@ -300,6 +302,7 @@
     ctx.restore();
 
     if (w) {
+      if (w.banks.length) drawBanksUp(ctx, w, t);
       for (const r of w.rocks) drawRock(ctx, r, t);
       for (const l of w.logs) drawLog(ctx, l);
       if (w.walls.length || w.gates.length) {
@@ -320,6 +323,7 @@
       drawFallingDrops(ctx, w);
     }
     drawParticles(ctx, st.particles, 'over');
+    if (w && w.tide) drawTideGauge(ctx, w, t);
     if (w) drawMood(ctx, w, t);
     if (w && w.dark) drawDark(ctx, w, st, t);
     if (st.hint) drawHint(ctx, st.hint, t, w);
@@ -749,6 +753,114 @@
         drawLog(ctx, { x1, y1: y1 + bob, x2, y2: y2 + bob, r }, i * 7 + 3);
       });
     }
+  }
+
+  // Malstrøm: mørk virvel med skumarmer som går rundt, og et hull i midten.
+  function drawMael(ctx, m, t) {
+    const g = ctx.createRadialGradient(m.x, m.y, 4, m.x, m.y, m.r);
+    g.addColorStop(0, 'rgba(5,30,55,0.75)'); g.addColorStop(0.25, 'rgba(10,45,75,0.4)');
+    g.addColorStop(0.7, 'rgba(20,70,100,0.14)'); g.addColorStop(1, 'rgba(20,70,100,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, TAU); ctx.fill();
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    ctx.rotate(t * 1.6 * m.dir);
+    ctx.lineCap = 'round';
+    for (let a = 0; a < 5; a++) {
+      ctx.rotate(TAU / 5);
+      ctx.strokeStyle = 'rgba(235,250,255,0.5)';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      for (let k = 0; k <= 24; k++) {
+        const u = k / 24, rr = 14 + u * (m.r - 18), ang = -m.dir * u * 2.4;
+        const x = Math.cos(ang) * rr, y = Math.sin(ang) * rr;
+        if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.fillStyle = 'rgba(3,18,35,0.85)';
+    ctx.beginPath(); ctx.arc(m.x, m.y, C.MAEL_CORE, 0, TAU); ctx.fill();
+  }
+
+  // Sandbanker. Under vann: svak sandflekk (stiplet kant hvis den kommer
+  // opp ved neste trykk). Over vann: tegnes som en sandøy.
+  function bankShape(ctx, k, grow) {
+    ctx.lineCap = 'round';
+    ctx.lineWidth = (k.r + grow) * 2;
+    ctx.beginPath(); ctx.moveTo(k.x1, k.y1); ctx.lineTo(k.x2 + 0.01, k.y2); ctx.stroke();
+  }
+  function tideFade(w) { return Math.min(1, Math.max(0, (w.t - w.tideT) / 0.6)); }
+  function drawBanksUnder(ctx, w, t) {
+    const f = tideFade(w);
+    const nextUp = w.tide ? w.tide[(w.tideI + 1) % w.tide.length] : 2;
+    for (const k of w.banks) {
+      const up = E.bankUp(w, k);
+      ctx.strokeStyle = `rgba(241,220,166,${up ? 0.25 : 0.22 + 0.2 * (1 - f) * 0})`;
+      bankShape(ctx, k, 2);
+      if (!up && nextUp < k.h) {
+        ctx.save();
+        ctx.setLineDash([5, 6]); ctx.lineDashOffset = -t * 10;
+        ctx.strokeStyle = `rgba(255,248,220,${0.45 + 0.25 * Math.sin(t * 4)})`; ctx.lineWidth = 2;
+        const dx = k.x2 - k.x1, dy = k.y2 - k.y1, L = Math.hypot(dx, dy);
+        if (L < 1) { ctx.beginPath(); ctx.arc(k.x1, k.y1, k.r + 2, 0, TAU); ctx.stroke(); }
+        else {
+          const px = -dy / L * (k.r + 2), py = dx / L * (k.r + 2), a = Math.atan2(dy, dx);
+          ctx.beginPath();
+          ctx.moveTo(k.x1 + px, k.y1 + py); ctx.lineTo(k.x2 + px, k.y2 + py);
+          ctx.arc(k.x2, k.y2, k.r + 2, a + Math.PI / 2, a - Math.PI / 2, true);
+          ctx.lineTo(k.x1 - px, k.y1 - py);
+          ctx.arc(k.x1, k.y1, k.r + 2, a - Math.PI / 2, a + Math.PI / 2, true);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+  }
+  function drawBanksUp(ctx, w, t) {
+    const f = tideFade(w);
+    for (const k of w.banks) {
+      if (!E.bankUp(w, k)) continue;
+      ctx.save();
+      ctx.globalAlpha = 0.35 + 0.65 * f;
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)'; bankShape(ctx, k, 3 + Math.sin(t * 2) * 0.8);
+      ctx.strokeStyle = PAL.sandEdge; bankShape(ctx, k, 0);
+      ctx.strokeStyle = PAL.sand; bankShape(ctx, k, -3);
+      // noen småstein
+      const rnd = rng(Math.round(k.x1 * 7 + k.y1 * 3));
+      ctx.fillStyle = 'rgba(150,130,90,0.5)';
+      for (let i = 0; i < 4; i++) {
+        const u = rnd(), o = (rnd() - 0.5) * k.r;
+        const dx = k.x2 - k.x1, dy = k.y2 - k.y1, L = Math.hypot(dx, dy) || 1;
+        ctx.beginPath(); ctx.arc(k.x1 + dx * u - dy / L * o, k.y1 + dy * u + dx / L * o, 1.6 + rnd() * 1.4, 0, TAU); ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+  // Tidevannsstaken på venstre side: viser vannstanden nå (fylt) og ved
+  // neste trykk (ring).
+  // Tidevannsstang øverst til venstre i vannet: fylt prikk = vannet nå,
+  // ring = hvor vannet står etter neste trykk.
+  function drawTideGauge(ctx, w, t) {
+    const x = 18, y0 = 26, h = 50;
+    const lv = E.tideLevel(w), nx = w.tide[(w.tideI + 1) % w.tide.length];
+    ctx.fillStyle = 'rgba(10,50,70,0.18)';
+    ctx.beginPath(); ctx.ellipse(x + 2, y0 + h + 8, 9, 3, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(126,88,52,0.95)';
+    ctx.fillRect(x - 2.5, y0 - 8, 5, h + 16);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillRect(x - 2.5, y0 - 8, 1.5, h + 16);
+    for (let i = 0; i <= 2; i++) {
+      const y = y0 + h - (i / 2) * h;
+      ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(x - 6, y - 1, 12, 2);
+    }
+    const f = tideFade(w);
+    const ny = y0 + h - (nx / 2) * h;
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(x, ny, 5, 0, TAU); ctx.stroke();
+    const cy = y0 + h - (lv / 2) * h;
+    ctx.fillStyle = `rgba(80,190,240,${0.6 + 0.4 * f})`;
+    ctx.beginPath(); ctx.arc(x, cy, 4.5, 0, TAU); ctx.fill();
   }
 
   // Molo: en mur av steinblokker.
