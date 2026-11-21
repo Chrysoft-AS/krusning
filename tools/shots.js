@@ -87,6 +87,39 @@ const file = 'file://' + path.resolve(__dirname, '..', 'index.html');
     await page.screenshot({ path: path.join(out, `15-quick-${tr}.png`) });
   }
 
+  // Stryket (elvestryk)
+  await page.reload();
+  await page.waitForTimeout(1000);
+  await page.click('#btnStryk');
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: path.join(out, '16-stryk-menu.png') });
+  for (const i of [0, 1]) {
+    await page.evaluate((i) => { document.getElementById('stryk').hidden = true; Krusning.startStryk(i); }, i);
+    await page.waitForTimeout(2500);
+    await page.screenshot({ path: path.join(out, `17-stryk-${i + 1}-start.png`) });
+    // spol fram til midt i banen (uten krasj: båten flyttes trygt ved hver bøye)
+    for (const frac of [0.3, 0.55, 0.8]) {
+      await page.evaluate((frac) => {
+        const st = Krusning.sk();
+        const target = st.lv.length * frac;
+        while (st.dist < target) { Stryket.step(st); if (st.sink > 0) { st.sink = 0; st.crashes = 0; st.x = 180; } }
+        st.events.length = 0;
+      }, frac);
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: path.join(out, `18-stryk-${i + 1}-${Math.round(frac * 100)}.png`) });
+    }
+  }
+  // tapp ved siden av båten
+  await page.evaluate(() => Krusning.startStryk(0));
+  await page.waitForTimeout(1500);
+  p = await toScreen(150, 455);
+  await page.mouse.click(p.x, p.y);
+  await page.waitForTimeout(450);
+  await page.screenshot({ path: path.join(out, '19-stryk-tap.png') });
+  await page.evaluate(() => { const st = Krusning.sk(); while (!st.done) { Stryket.step(st); if (st.sink > 0) { st.sink = 0; st.x = 180; } } });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: path.join(out, '20-stryk-win.png') });
+
   console.log(errors.length ? errors.join('\n') : 'Ingen feil i konsollen ✔');
   await browser.close();
 })();

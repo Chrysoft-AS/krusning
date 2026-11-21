@@ -13,11 +13,13 @@ js/engine.js        fysikk – deterministisk, uten DOM, uten tilfeldighet
 js/levels.js        ALLE baner som data (den fila som endres oftest)
 js/gen.js           brettgenerator for Rask runde og Dagens dam (frø → brett)
 js/pool.js          ferdig testede frø (LAGES av tools/gen.js, ikke rediger)
+js/stryket.js       Stryket (elvestryk): egen modus, simulering + baner (deterministisk, uten DOM)
 js/render.js        tegning på canvas (dam, båter, krusninger, effekter)
 js/audio.js         syntetisert lyd og musikk (Web Audio, ingen lydfiler)
 js/strings.js       all tekst, norsk + engelsk
 js/game.js          skjermer, input, stjerner/perler, lagring, hint
 tools/solve.js      banetester: finner minste antall trykk, sjekker par/perle
+tools/stryk.js      banetester for Stryket (en robot spiller banene)
 tools/gen.js        lager og tester brett til Rask runde og Dagens dam → js/pool.js
 tools/worldgen.js   lager og tester forslag til nye verdener på Stien (blandingsverdener)
 tools/playtest.js   spiller alle baner i ekte nettleser (følger hint-knappen)
@@ -57,9 +59,16 @@ Forslagene lagres i `tools/out/` (ikke i git).
 
 `node tools/gen.js quick medium 40` legger til 40 brett, `node tools/gen.js daily 60` legger til 60 dager. Verktøyet fortsetter der det slapp. `node tools/gen.js show M12` viser et brett som tekst. Dagens dam #1 er 20. november 2026; når lista er brukt opp, starter den forfra.
 
+## Stryket (elvestryk)
+
+Egen spillmodus, ikke koblet til Stien eller stjernene der. Elva ruller av seg selv, båten ligger fast nede på skjermen, og spilleren styrer sidelengs med krusninger. Baner, fysikk og konstanter ligger i `js/stryket.js` (`LEVELS`), tegningen i `R.drawStryk` i `render.js`, og skjerm/meny/lagring (`save.stryk`) i Stryket-delen av `game.js`.
+- Alt i elva har en avstand `d` fra start og en `x`. Steiner, stokker og virvler gir krasj; elvebredden spretter bare. Etter krasj starter båten ved siste bøye (`checkpoints`).
+- Stjerner: ingen krasj = 3, 1–2 krasj = 2, ellers 1. Perlene i elva er ekstra.
+- Etter endringer: `node tools/stryk.js` (må gi ✔), `node tools/stryk.js --pearls` (alle perler skal kunne fanges) og `node tools/stryk.js --slow --se=1.4` (en treg robot som ser kort; S-1 bør klares, S-2 er ment å være vanskeligere).
+
 ## Midlertidig testknapp
 
-`DEV_JUMP` i `js/game.js` viser «Test: velg bane» på tittelskjermen, så man kan hoppe til hvilken som helst bane. Sett den til `false` før lansering.
+`DEV_JUMP` i `js/game.js` viser «Test: velg bane» på tittelskjermen, så man kan hoppe til hvilken som helst bane. Den åpner også alle baner i Stryket. Sett den til `false` før lansering.
 
 ## Ny mekanikk
 

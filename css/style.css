@@ -383,3 +383,13 @@ svg { fill: currentColor; }
   .lvl .pad { width: 64px; height: 64px; }
   .btn-big { padding: 14px 44px; }
 }
+
+/* ---------- Stryket (elvestryk) ---------- */
+.hud.stryk .hud-taps, .hud.stryk #btnHint { display: none; }
+.hud-prog { position: relative; width: 92px; height: 9px; border-radius: 6px; background: rgba(18, 52, 61, 0.14); overflow: hidden; }
+.hud-prog i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 6px; background: var(--teal); }
+.hud-pearls { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.hud-pearls .pearl-dot { width: 14px; height: 14px; }
+.hud-pearls b { font-size: 16px; font-weight: 700; }
+.stryk-lvl .tier-dots { width: 58px; gap: 1px; }
+.stryk-lvl .tier-dots .star { width: 18px; height: 18px; }
