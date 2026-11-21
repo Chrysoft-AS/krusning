@@ -1635,11 +1635,11 @@
     // havna i mål
     const fy = Y(lv.length);
     if (fy > -60 && fy < C.H + 60) drawStrykDock(ctx, lv, fy, t, st.done);
-    // bøyer (ny start)
-    (lv.checkpoints || []).forEach((cp, i) => {
+    // bøyer ved en tredel og to tredeler (stjerner)
+    (lv.marks || []).forEach((cp, i) => {
       const y = Y(cp.d);
       if (y < -20 || y > C.H + 20) return;
-      const L = Sx.bankL(lv, cp.d), Rr = Sx.bankR(lv, cp.d), passed = st.cp > i;
+      const L = Sx.bankL(lv, cp.d), Rr = Sx.bankR(lv, cp.d), passed = st.mark > i;
       ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1.1; ctx.setLineDash([3, 4]);
       ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(Rr, y); ctx.stroke(); ctx.setLineDash([]);
       const n = Math.max(3, Math.round((Rr - L) / 34));
@@ -1647,7 +1647,7 @@
         const x = L + 6 + (Rr - L - 12) * (k / n), bob = Math.sin(t * 2.4 + k) * 0.8;
         ctx.fillStyle = 'rgba(10,50,75,0.2)';
         ctx.beginPath(); ctx.arc(x + 1, y + 1.6 + bob, 3.4, 0, TAU); ctx.fill();
-        ctx.fillStyle = k % 2 ? '#ffffff' : passed ? '#7fe0b5' : '#ff8f7e';
+        ctx.fillStyle = k % 2 ? '#ffffff' : passed ? '#7fe0b5' : '#ffd25e';
         ctx.beginPath(); ctx.arc(x, y + bob, 3.4, 0, TAU); ctx.fill();
       }
     });
@@ -1675,6 +1675,11 @@
       if (Math.max(e.y1, e.y2) < -30 || Math.min(e.y1, e.y2) > C.H + 30) return;
       drawLog(ctx, { x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, r: K.LOG_R }, i * 13 + 5);
     });
+    // flagg ved bredden der rekorden din er
+    if (view.bestD > 0 && view.bestD < lv.length) {
+      const y = Y(view.bestD);
+      if (y > -40 && y < C.H + 40) drawStrykFlag(ctx, Sx.bankR(lv, view.bestD) + 6, y, t);
+    }
     const fx = view.boatFx || {};
     const sinkU = st.sink > 0 ? 1 - st.sink / K.SINK_TIME : 0;
     drawBoat(ctx, {
@@ -1684,6 +1689,17 @@
     drawParticles(ctx, view.particles, 'over');
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   };
+
+  // Lite rødt flagg på en stang (rekorden din).
+  function drawStrykFlag(ctx, x, y, t) {
+    ctx.fillStyle = 'rgba(10,50,40,0.25)';
+    ctx.beginPath(); ctx.ellipse(x + 3, y + 2, 6, 2.5, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#6b4a2e'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 30); ctx.stroke();
+    const w = Math.sin(t * 5) * 2;
+    ctx.fillStyle = '#ff6b5e';
+    ctx.beginPath(); ctx.moveTo(x, y - 30); ctx.quadraticCurveTo(x + 9, y - 27 + w, x + 18, y - 25); ctx.lineTo(x, y - 19); ctx.closePath(); ctx.fill();
+  }
 
   function drawPearl(ctx, x, y, t) {
     ctx.fillStyle = 'rgba(10,50,75,0.22)';

@@ -126,6 +126,8 @@
     $('hud').hidden = name !== 'play' && name !== 'stryk';
     $('hud').classList.toggle('stryk', name === 'stryk');
     $('hudProg').hidden = $('hudPearls').hidden = name !== 'stryk';
+    // i elvestryket viser toppmenyen liv (hjerter) i stedet for stjerner
+    for (const u of $('hudStars').querySelectorAll('use')) u.setAttribute('href', name === 'stryk' ? '#i-heart' : '#i-star');
     $('win').hidden = true;
     if (name !== 'play' && name !== 'stryk') { hideTip(true); hideHand(); $('banner').hidden = true; G.aim = null; G.hint = null; }
   }
@@ -252,7 +254,7 @@
     if (G.screen === 'title') titleAmbience(dt);
     if (G.screen === 'play') { liveStars(); advanceHint(); }
     if (G.winAt > 0 && G.time >= G.winAt) { G.winAt = -1; if (G.screen === 'stryk') showStrykWin(); else showWin(); }
-    if (G.screen === 'stryk' && G.sk) R.drawStryk(G.sk, { time: G.time, particles: G.particles, boatFx: G.skFx });
+    if (G.screen === 'stryk' && G.sk) R.drawStryk(G.sk, { time: G.time, particles: G.particles, boatFx: G.skFx, bestD: G.skBest });
     else R.draw({
       world: G.world, time: G.time,
       particles: G.particles, fish: G.fish, leaves: G.leaves,
@@ -912,8 +914,11 @@
   // Egen modus: elva renner av seg selv, og båten styres med krusninger.
   // Simuleringen og banene ligger i stryket.js, tegningen i render.js.
   const SK = window.Stryket;
-  const strykRec = (id) => save.stryk[id];
-  const strykOpen = (i) => i === 0 || !!strykRec(SK.LEVELS[i - 1].id) || DEV_JUMP;
+  // Rekord per bane: { best: lengste strekning, stars, pearls, plays, done }.
+  // (Rekorder fra første versjon av modusen, uten best, regnes som ikke spilt.)
+  const strykRec = (id) => { const r = save.stryk[id]; return r && r.best != null ? r : null; };
+  // Neste bane åpnes når du har kommet en tredel av den forrige (én stjerne).
+  const strykOpen = (i) => i === 0 || DEV_JUMP || ((strykRec(SK.LEVELS[i - 1].id) || {}).stars || 0) >= 1;
 
   function openStryk() { renderStryk(); $('stryk').hidden = false; }
   function renderStryk() {
@@ -926,7 +931,7 @@
       const b = document.createElement('button');
       b.className = 'tier-btn stryk-lvl' + (ok ? '' : ' locked');
       const sub = !ok ? t('strykNeed', { id: SK.LEVELS[i - 1].id })
-        : r ? t('strykStats', { p: r.pearls, n: lv.pearls.length }) : t('strykNew');
+        : r ? t('strykStats', { m: SK.meters(r.best), M: SK.meters(lv.length), p: r.pearls, n: lv.pearls.length }) : t('strykNew');
       b.innerHTML = `<span class="tier-dots">${starRow(r ? r.stars : 0)}</span><span class="tier-text"><b>${lv.id} · ${I.pick(lv.name)}</b><span>${sub}</span></span>`;
       b.addEventListener('click', () => {
         S.click();
@@ -946,10 +951,11 @@
     G.particles = []; G.acc = 0;
     G.completed = false; G.winAt = -1; G.result = null;
     G.skFx = { squash: 0, blink: 0, nextBlink: 2, angle: -Math.PI / 2, pop: again ? 1 : 0, wake: 0 };
-    G.shownStars = 3;
+    G.skBest = (strykRec(lv.id) || {}).best || 0;
+    G.shownStars = SK.K.LIVES;
     setScreen('stryk');
     strykHud(true);
-    paintHudStars(3, -1);
+    paintHudStars(SK.K.LIVES, -1);
     $('btnRestart').classList.remove('nudge');
     if (!again) showBanner(lv, lv.id);
     // tips første gang (forsvinner ved første trykk)
@@ -1015,13 +1021,13 @@
     $('hudProgFill').style.width = (SK.progress(st) * 100).toFixed(1) + '%';
     const pn = st.pearls + '/' + lv.pearls.length;
     if ($('hudPearlN').textContent !== pn) $('hudPearlN').textContent = pn;
-    const stars = SK.starsFor(st.crashes);
-    if (stars !== G.shownStars) {
-      const lost = stars < G.shownStars ? stars : -1;
+    // hjerter: ett forsvinner ved hvert krasj
+    const lives = Math.max(0, st.lives);
+    if (lives !== G.shownStars) {
+      const lost = lives < G.shownStars ? lives : -1;
       if (lost >= 0) S.lose();
-      G.shownStars = stars;
-      paintHudStars(stars, lost);
-      $('btnRestart').classList.toggle('nudge', stars < 3);
+      G.shownStars = lives;
+      paintHudStars(lives, lost);
     }
   }
 
@@ -1045,60 +1051,63 @@
           }
           S.dock(Math.min(6, st.pearls - 1));
           break;
-        case 'checkpoint': toast(t('strykCheck')); S.gate(); break;
-        case 'complete': onStrykComplete(); break;
+        case 'mark': toast(t(ev.n === 1 ? 'strykMark1' : 'strykMark2')); S.star(ev.n - 1); break;
+        case 'complete': onStrykEnd(true); break;
+        case 'over': onStrykEnd(false); break;
       }
     }
     st.events.length = 0;
   }
 
-  function onStrykComplete() {
+  // Løpet er slutt: enten i havn, eller båten tålte ikke flere krasj.
+  function onStrykEnd(home) {
     G.completed = true;
     hideTip(true);
     const st = G.sk, lv = st.lv, n = lv.pearls.length;
-    const stars = SK.starsFor(st.crashes);
+    const far = home ? lv.length : st.far;
+    const stars = SK.starsFor(far, lv.length);
     const prev = strykRec(lv.id) ? Object.assign({}, strykRec(lv.id)) : null;
-    const r = save.stryk[lv.id] || (save.stryk[lv.id] = { stars: 0, pearls: 0, plays: 0 });
+    const r = strykRec(lv.id) || (save.stryk[lv.id] = { best: 0, stars: 0, pearls: 0, plays: 0, done: false });
+    r.best = Math.max(r.best, Math.round(far));
     r.stars = Math.max(r.stars, stars);
     r.pearls = Math.max(r.pearls, st.pearls);
     r.plays = (r.plays || 0) + 1;
+    r.done = r.done || home;
     persist();
+    const opened = G.skI + 1 < SK.LEVELS.length && !(prev && prev.stars >= 1) && stars >= 1;
     G.result = {
-      stars, crashes: st.crashes, pearls: st.pearls, n, secs: Math.round(st.t), rec: r,
+      home, stars, far, len: lv.length, pearls: st.pearls, n, rec: r, opened,
       firstAll: st.pearls === n && !(prev && prev.pearls === n),
-      newBest: !!prev && (stars > prev.stars || st.pearls > prev.pearls),
+      newBest: !prev || far > prev.best,
     };
-    G.winAt = G.time + 1.5;
-    setTimeout(() => { if (G.completed && G.screen === 'stryk') { S.win(); confetti(); } }, 450);
+    G.winAt = G.time + (home ? 1.5 : 1.0);
+    if (home) setTimeout(() => { if (G.completed && G.screen === 'stryk') { S.win(); confetti(); } }, 450);
   }
 
   function showStrykWin() {
     const res = G.result;
     if (!res || G.screen !== 'stryk') return;
-    $('winTitle').textContent = t(res.stars === 3 ? 'win3' : res.stars === 2 ? 'win2' : 'win1');
+    $('winTitle').textContent = t('strykEnd' + res.stars);
     const stars = $('winStars').children;
     for (let i = 0; i < 3; i++) stars[i].classList.remove('on');
-    $('winStats').textContent = (res.crashes ? t('crashN', { n: res.crashes }) : t('crash0')) + ' · ' + t('strykTime', { s: res.secs });
-    $('winBest').hidden = !res.newBest;
-    $('winBest').textContent = t('newBest');
+    $('winStats').textContent = t('strykDist', { m: SK.meters(res.far), M: SK.meters(res.len), pct: Math.floor(res.far / res.len * 100) });
+    $('winBest').hidden = false;
+    $('winBest').textContent = res.newBest ? t('strykRecord') : t('strykBest', { m: SK.meters(res.rec.best) });
     const box = $('pearlBox');
     box.className = 'pearl-box';
     if (res.firstAll) {
       box.classList.add('found');
       $('pearlTitle').textContent = t('strykPearlsAll');
       $('pearlSub').textContent = t('strykPearlsAllSub');
-    } else if (res.rec.pearls === res.n) {
-      box.classList.add('have');
-      $('pearlTitle').textContent = t('strykPearls', { p: res.pearls, n: res.n });
-      $('pearlSub').textContent = t('strykPearlsHave');
     } else {
-      box.classList.add('missing');
+      box.classList.add(res.rec.pearls === res.n ? 'have' : 'missing');
       $('pearlTitle').textContent = t('strykPearls', { p: res.pearls, n: res.n });
-      $('pearlSub').textContent = t('strykPearlsSub') + (res.rec.pearls > res.pearls ? ' ' + t('strykPearlsBest', { b: res.rec.pearls, n: res.n }) : '');
+      $('pearlSub').textContent = res.rec.pearls === res.n ? t('strykPearlsHave')
+        : t('strykPearlsSub') + (res.rec.pearls > res.pearls ? ' ' + t('strykPearlsBest', { b: res.rec.pearls, n: res.n }) : '');
     }
-    $('btnRetryTxt').textContent = res.stars < 3 ? t('strykRetry3') : t('retry');
-    const last = G.skI + 1 >= SK.LEVELS.length;
-    $('btnNextTxt').textContent = last ? t('menu') : t('strykNext');
+    $('btnRetryTxt').textContent = res.stars < 3 ? t('strykRetry') : t('retry');
+    const nextOk = G.skI + 1 < SK.LEVELS.length && strykOpen(G.skI + 1);
+    $('btnNextTxt').textContent = nextOk ? t('strykNext') : t('menu');
     $('btnNext').querySelector('use').setAttribute('href', '#i-next');
     $('btnWinMap').textContent = t('stryk');
     $('win').hidden = false;
@@ -1106,6 +1115,7 @@
       setTimeout(() => { if (!$('win').hidden) { stars[i].classList.add('on'); S.star(i); } }, 380 + i * 300);
     }
     if (res.firstAll) setTimeout(() => { if (!$('win').hidden) S.pearl(); }, 480 + res.stars * 300);
+    if (res.opened) setTimeout(() => toast(t('strykOpened', { id: SK.LEVELS[G.skI + 1].id })), 1400);
   }
 
   /* ---------- MIDLERTIDIG: hopp til bane (testing) ---------- */

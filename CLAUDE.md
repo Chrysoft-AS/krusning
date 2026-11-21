@@ -61,14 +61,15 @@ Forslagene lagres i `tools/out/` (ikke i git).
 
 ## Stryket (elvestryk)
 
-Heter «Elvestryk» i spillet (ikke å forveksle med verden 10 «Stryket» på Stien). Egen spillmodus, ikke koblet til Stien eller stjernene der. Elva ruller av seg selv, båten ligger fast nede på skjermen, og spilleren styrer sidelengs med krusninger. Baner, fysikk og konstanter ligger i `js/stryket.js` (`LEVELS`), tegningen i `R.drawStryk` i `render.js`, og skjerm/meny/lagring (`save.stryk`) i Stryket-delen av `game.js`.
-- Alt i elva har en avstand `d` fra start og en `x`. Steiner, stokker og virvler gir krasj; elvebredden spretter bare. Etter krasj starter båten ved siste bøye (`checkpoints`).
-- Stjerner: ingen krasj = 3, 1–2 krasj = 2, ellers 1. Perlene i elva er ekstra.
-- Etter endringer: `node tools/stryk.js` (må gi ✔), `node tools/stryk.js --pearls` (alle perler skal kunne fanges) og `node tools/stryk.js --slow --se=1.4` (en treg robot som ser kort; S-1 bør klares, S-2 er ment å være vanskeligere).
+Heter «Elvestryk» i spillet (ikke å forveksle med verden 10 «Stryket» på Stien). Egen spillmodus med 15 baner, ikke koblet til Stien eller stjernene der. Elva ruller av seg selv og går fortere og fortere, båten ligger fast nede på skjermen, og spilleren styrer sidelengs med krusninger. Simulering, banebygger og baneoppskrifter ligger i `js/stryket.js` (`DEFS`), tegningen i `R.drawStryk` i `render.js`, og skjerm/meny/lagring (`save.stryk`) i Stryket-delen av `game.js`.
+- Tre liv. Etter et krasj starter båten på siste rolige sted bak krasjet. Tre krasj, og løpet er over. Målet er å komme langt: de fleste skal ikke nå havna.
+- Stjerner etter hvor langt du kom: en tredel = 1, to tredeler = 2, havna = 3. Neste bane åpnes med 1 stjerne. Rekorden (`best`) vises som et flagg ved bredden.
+- Banene er oppskrifter, ikke tegnet for hånd: frø, lengde, fart (`v`), rolig vann mellom hindrene (`gap`), bredde, sving og `mix` (hvilke hindre). `build()` lager elva bit for bit. Hindrene heter rock, pair, wall, slalom, field, gate, stagger, diag, swinglog, swingrock, whirl, whirl2, whirlrow, drift, narrow og wallgap.
+- Endrer du en oppskrift eller banebyggeren: kjør `node tools/stryk.js --fix` (bytter ut biter roboten ikke klarer, og skriver `fix` i fila), så `node tools/stryk.js` (alle må gi ✔) og `node tools/stryk.js --human` (en «vanlig spiller» med tre liv; snittet bør ligge rundt 30–60 %, og de senere banene lavere).
 
 ## Midlertidig testknapp
 
-`DEV_JUMP` i `js/game.js` viser «Test: velg bane» på tittelskjermen, så man kan hoppe til hvilken som helst bane. Den åpner også alle baner i Stryket. Sett den til `false` før lansering.
+`DEV_JUMP` i `js/game.js` viser «Test: velg bane» på tittelskjermen, så man kan hoppe til hvilken som helst bane. Den åpner også alle baner i Elvestryk. Sett den til `false` før lansering.
 
 ## Ny mekanikk
 

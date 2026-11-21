@@ -102,7 +102,7 @@ const file = 'file://' + path.resolve(__dirname, '..', 'index.html');
       await page.evaluate((frac) => {
         const st = Krusning.sk();
         const target = st.lv.length * frac;
-        while (st.dist < target) { Stryket.step(st); if (st.sink > 0) { st.sink = 0; st.crashes = 0; st.x = 180; } }
+        while (st.dist < target) { Stryket.step(st); if (st.sink > 0) { st.sink = 0; st.crashes = 0; st.lives = 3; st.x = 180; } }
         st.events.length = 0;
       }, frac);
       await page.waitForTimeout(400);
@@ -116,9 +116,16 @@ const file = 'file://' + path.resolve(__dirname, '..', 'index.html');
   await page.mouse.click(p.x, p.y);
   await page.waitForTimeout(450);
   await page.screenshot({ path: path.join(out, '19-stryk-tap.png') });
-  await page.evaluate(() => { const st = Krusning.sk(); while (!st.done) { Stryket.step(st); if (st.sink > 0) { st.sink = 0; st.x = 180; } } });
+  // løpet er over (tre krasj): kortet viser hvor langt du kom
+  await page.evaluate(() => { const st = Krusning.sk(); while (st.dist < st.lv.length * 0.4) { Stryket.step(st); if (st.sink > 0) { st.sink = 0; st.lives = 3; st.x = 180; } } st.lives = 1; });
+  await page.waitForTimeout(3500);
+  await page.screenshot({ path: path.join(out, '20-stryk-over.png') });
+  // helt i havn
+  await page.evaluate(() => { document.getElementById('win').hidden = true; Krusning.startStryk(0); });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { const st = Krusning.sk(); while (!st.done) { Stryket.step(st); if (st.sink > 0) { st.sink = 0; st.lives = 3; st.x = 180; } } });
   await page.waitForTimeout(2500);
-  await page.screenshot({ path: path.join(out, '20-stryk-win.png') });
+  await page.screenshot({ path: path.join(out, '21-stryk-win.png') });
 
   console.log(errors.length ? errors.join('\n') : 'Ingen feil i konsollen ✔');
   await browser.close();
