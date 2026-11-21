@@ -391,6 +391,21 @@ svg { fill: currentColor; }
   .btn-big { padding: 14px 44px; }
 }
 
+/* ---------- Stryket (elvestryk) ---------- */
+.hud.stryk .hud-taps, .hud.stryk #btnHint { display: none; }
+.hud-prog { position: relative; width: 92px; height: 9px; border-radius: 6px; background: rgba(18, 52, 61, 0.14); overflow: hidden; }
+.hud-prog i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 6px; background: var(--teal); }
+.hud-pearls { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.hud-pearls .pearl-dot { width: 14px; height: 14px; }
+.hud-pearls b { font-size: 16px; font-weight: 700; }
+.stryk-lvl .tier-dots { width: 58px; gap: 1px; }
+.stryk-lvl .tier-dots .star { width: 18px; height: 18px; }
+/* hjerter (liv) i elvestryket */
+.hud.stryk .hud-stars .star:not(.off) { fill: #ff7a8a; stroke: #d94d62; }
+/* elvestryk-kortet: lista med 15 baner kan rulles */
+.stryk-card { max-height: calc(100vh - 40px); max-height: calc(100dvh - 40px); display: flex; flex-direction: column; }
+.stryk-list { min-height: 0; overflow-y: auto; padding-bottom: 6px; }
+
 </style>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
@@ -406,6 +421,8 @@ svg { fill: currentColor; }
     <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3.5" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M3.5 10h17M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/><circle cx="12" cy="15" r="2.2" fill="currentColor"/></symbol>
     <symbol id="i-dice" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="4.5" fill="none" stroke="currentColor" stroke-width="2.3"/><g fill="currentColor"><circle cx="8.5" cy="8.5" r="1.7"/><circle cx="15.5" cy="15.5" r="1.7"/><circle cx="12" cy="12" r="1.7"/></g></symbol>
     <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3.5v11M7.5 8L12 3.5 16.5 8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 12.5v5.5a2.5 2.5 0 0 0 2.5 2.5h7a2.5 2.5 0 0 0 2.5-2.5v-5.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20.6s-7.6-4.6-8.9-9.6C2.2 7.6 4.4 4.6 7.6 4.6c1.9 0 3.4 1 4.4 2.6 1-1.6 2.5-2.6 4.4-2.6 3.2 0 5.4 3 4.5 6.4-1.3 5-8.9 9.6-8.9 9.6z" stroke-linejoin="round"/></symbol>
+    <symbol id="i-wave" viewBox="0 0 24 24"><path d="M3 9c2.2 0 2.2-2 4.5-2S9.7 9 12 9s2.2-2 4.5-2S18.8 9 21 9M3 16c2.2 0 2.2-2 4.5-2s2.2 2 4.5 2 2.2-2 4.5-2 2.3 2 4.5 2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
   </defs>
 </svg>
@@ -420,6 +437,8 @@ svg { fill: currentColor; }
       <div class="hud-title"><span id="hudId">1-1</span> · <span id="hudName">Første krusning</span></div>
       <div class="hud-row">
         <span class="hud-taps"><svg class="drop"><use href="#i-drop"/></svg><b id="hudTaps">0</b><small id="hudPar">par 1</small></span>
+        <span class="hud-prog" id="hudProg" hidden><i id="hudProgFill"></i></span>
+        <span class="hud-pearls" id="hudPearls" hidden><i class="pearl-dot"></i><b id="hudPearlN">0</b></span>
         <span class="hud-stars" id="hudStars">
           <svg class="star"><use href="#i-star"/></svg><svg class="star"><use href="#i-star"/></svg><svg class="star"><use href="#i-star"/></svg>
         </span>
@@ -453,6 +472,7 @@ svg { fill: currentColor; }
       </div>
       <div class="title-row">
         <button id="btnLevels" class="btn btn-paper"><svg class="btn-icon"><use href="#i-grid"/></svg><span id="btnLevelsTxt">Baner</span></button>
+        <button id="btnStryk" class="btn btn-paper"><svg class="btn-icon"><use href="#i-wave"/></svg><span id="btnStrykTxt">Stryket</span></button>
         <button id="btnSettings" class="icon-btn" aria-label="Innstillinger"><svg><use href="#i-sliders"/></svg></button>
       </div>
       <p class="sound-tip" id="soundTip"></p>
@@ -535,6 +555,18 @@ svg { fill: currentColor; }
       </div>
       <p class="daily-sub" id="quickSub"></p>
       <div class="tiers" id="quickTiers"></div>
+    </div>
+  </div>
+
+  <!-- Stryket (elvestryk) -->
+  <div id="stryk" class="modal" hidden>
+    <div class="card quick-card stryk-card">
+      <div class="card-head">
+        <h2 id="strykTitle">Stryket</h2>
+        <button id="strykClose" class="icon-btn small" aria-label="Lukk"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <p class="daily-sub" id="strykSub"></p>
+      <div class="tiers stryk-list" id="strykList"></div>
     </div>
   </div>
 
@@ -660,6 +692,27 @@ svg { fill: currentColor; }
       menu: 'Til menyen',
       wd0: 'søndag', wd1: 'mandag', wd2: 'tirsdag', wd3: 'onsdag', wd4: 'torsdag', wd5: 'fredag', wd6: 'lørdag',
       wdShort: 'M,T,O,T,F,L,S',
+      stryk: 'Elvestryk',
+      strykSub: 'Elva går fortere og fortere. Trykk ved siden av båten for å styre unna steinene. Tre krasj, og løpet er over. Hvor langt kommer du?',
+      strykWorld: 'Villmarkselva',
+      strykNew: 'Ikke spilt ennå',
+      strykNeed: 'Kom en tredel av {id} først',
+      strykStats: 'Rekord {m} av {M} m · perler {p}/{n}',
+      strykMark1: '★ En tredel av stryket!',
+      strykMark2: '★★ To tredeler av stryket!',
+      strykEnd0: 'Prøv igjen!', strykEnd1: 'Godt padlet!', strykEnd2: 'Så langt!', strykEnd3: 'I havn!',
+      strykDist: '{m} av {M} meter ({pct} %)',
+      strykRecord: 'Ny rekord!',
+      strykBest: 'Rekord: {m} m',
+      strykOpened: 'Neste stryk ({id}) er åpnet',
+      strykPearls: 'Perler: {p} av {n}',
+      strykPearlsAll: 'Alle perlene!',
+      strykPearlsAllSub: 'Du fanget hver eneste perle i elva.',
+      strykPearlsHave: 'Alle perlene er fanget før',
+      strykPearlsSub: 'Styr innom perlene i elva for å fange dem.',
+      strykPearlsBest: 'Beste: {b} av {n}.',
+      strykRetry: 'Prøv å komme lenger',
+      strykNext: 'Neste stryk',
     },
     en: {
       tagline: 'Guide the paper boats home.\nOne ripple at a time.',
@@ -735,6 +788,27 @@ svg { fill: currentColor; }
       menu: 'Menu',
       wd0: 'Sunday', wd1: 'Monday', wd2: 'Tuesday', wd3: 'Wednesday', wd4: 'Thursday', wd5: 'Friday', wd6: 'Saturday',
       wdShort: 'M,T,W,T,F,S,S',
+      stryk: 'River run',
+      strykSub: 'The river keeps getting faster. Tap beside the boat to steer clear of the rocks. Three crashes and the run is over. How far can you go?',
+      strykWorld: 'The wild river',
+      strykNew: 'Not played yet',
+      strykNeed: 'Get a third of the way through {id} first',
+      strykStats: 'Best {m} of {M} m · pearls {p}/{n}',
+      strykMark1: '★ A third of the way!',
+      strykMark2: '★★ Two thirds of the way!',
+      strykEnd0: 'Try again!', strykEnd1: 'Nice paddling!', strykEnd2: 'So far!', strykEnd3: 'Made it!',
+      strykDist: '{m} of {M} metres ({pct}%)',
+      strykRecord: 'New record!',
+      strykBest: 'Record: {m} m',
+      strykOpened: 'The next rapids ({id}) are open',
+      strykPearls: 'Pearls: {p} of {n}',
+      strykPearlsAll: 'Every pearl!',
+      strykPearlsAllSub: 'You caught every single pearl in the river.',
+      strykPearlsHave: 'All pearls caught before',
+      strykPearlsSub: 'Steer through the pearls in the river to catch them.',
+      strykPearlsBest: 'Best: {b} of {n}.',
+      strykRetry: 'Try to get further',
+      strykNext: 'Next rapids',
     },
   };
 
@@ -5471,6 +5545,727 @@ svg { fill: currentColor; }
 </script>
 <script>
 /* =====================================================================
+ * Krusning – Stryket (elvestryk)
+ * ---------------------------------------------------------------------
+ * En egen spillmodus: elva renner av seg selv, og du styrer båten til
+ * sidene med krusninger. Trykk til venstre for båten, så glir den mot
+ * høyre. Unngå steiner, tømmerstokker og virvler.
+ *
+ * Elva går fortere og fortere, og hvert stryk er langt. Båten tåler tre
+ * krasj (tre liv). Etter et krasj starter du litt bak der det skjedde.
+ * De fleste kommer ikke helt til havna: målet er å komme så langt som
+ * mulig. En tredel gir én stjerne, to tredeler to, og havna tre.
+ *
+ * Banene lages av en banebygger (build) fra en kort oppskrift: frø,
+ * lengde, fart og hvilke hindre som skal være med. Samme oppskrift gir
+ * alltid samme elv. tools/stryk.js lar en robot spille hver bane og
+ * bytter ut biter roboten ikke klarer (lagres i `fix`).
+ *
+ * Her ligger bare simuleringen og banene (ingen tegning, ingen DOM,
+ * ingen Math.random). Samme trykk til samme tid gir alltid samme løp.
+ *
+ * Koordinater: skjermen er 360 × 600 som dammen. Båten ligger fast
+ * rundt y = 450, og elva ruller forbi. Alt i elva har en avstand `d`
+ * fra start (oppover), og en x fra venstre. 10 enheter = 1 meter.
+ * ===================================================================== */
+(function (root) {
+  'use strict';
+
+  const K = {
+    W: 360, H: 600, DT: 1 / 120,
+    BOAT_Y: 450,                 // der båten ligger på skjermen
+    BOAT_R: 11,                  // båtens størrelse når den krasjer (litt snill)
+    RIPPLE_SPEED: 430,           // krusningen sprer seg fortere enn i dammen
+    RIPPLE_RANGE: 190,           // og rekker kortere
+    FALLOFF_POW: 1.15,
+    PUSH: 300,                   // største fart sidelengs fra én krusning
+    PUSH_STEPS: 6,
+    SIDE_DRAG: 2.4,              // hvor fort båten stopper sidelengs
+    Y_SPRING: 5, Y_DRAG: 4,      // båten glir tilbake til plassen sin
+    Y_MIN: 340, Y_MAX: 540,
+    REST_BANK: 0.45,             // sprett mot elvebredden
+    LOG_R: 8,                    // tømmerstokkens tykkelse (radius)
+    WHIRL_PULL: 520,             // virvel: sug inn mot midten…
+    WHIRL_SWIRL: 200,            // …og rundt
+    WHIRL_CORE: 0.3,             // innerste del av virvelen (andel av radius) drar båten ned
+    PEARL_R: 20,                 // så nærme må båten for å ta perla
+    TAP_GAP: 0.1,                // minste tid mellom to trykk
+    MAX_RIPPLES: 6,
+    SINK_TIME: 1.0,              // tid fra krasj til ny start
+    LIVES: 3,                    // så mange krasj båten tåler
+    GRACE: 1.4,                  // etter ny start: elva tar seg opp igjen så lenge
+    DOCK_IN: 90,                 // målet regnes som nådd så langt før brygga
+    PER_M: 10,                   // enheter per meter (til visning)
+  };
+
+  const TAU = Math.PI * 2;
+  const SIDE_MUL = Math.exp(-K.SIDE_DRAG * K.DT);
+  const Y_MUL = Math.exp(-K.Y_DRAG * K.DT);
+
+  function falloff(d) {
+    if (d >= K.RIPPLE_RANGE) return 0;
+    return Math.pow(1 - d / K.RIPPLE_RANGE, K.FALLOFF_POW);
+  }
+
+  // Verdi langs elva: lista er [[d, a, b, …], …] sortert på d (binærsøk,
+  // fordi lange elver har mange punkter).
+  function along(list, d, col) {
+    if (!list || !list.length) return null;
+    if (d <= list[0][0]) return list[0][col];
+    const n = list.length;
+    if (d >= list[n - 1][0]) return list[n - 1][col];
+    let lo = 0, hi = n - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (list[m][0] <= d) lo = m; else hi = m; }
+    const a = list[lo], b = list[hi];
+    const u = (d - a[0]) / (b[0] - a[0] || 1);
+    return a[col] + (b[col] - a[col]) * u;
+  }
+
+  function speedAt(lv, d) { return along(lv.speed, d, 1) || 90; }
+  function bankL(lv, d) { const v = along(lv.banks, d, 1); return v == null ? 26 : v; }
+  function bankR(lv, d) { const v = along(lv.banks, d, 2); return v == null ? 334 : v; }
+
+  // Første plass i en lista (sortert på d) med d >= verdien.
+  function firstAt(list, d) {
+    let lo = 0, hi = list.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (list[m].d < d) lo = m + 1; else hi = m; }
+    return lo;
+  }
+
+  /* ---------- oppretting ---------- */
+
+  function create(lv) {
+    return {
+      lv, t: 0, steps: 0, dist: 0,
+      x: lv.startX || 180, y: K.BOAT_Y, vx: 0, vy: 0,
+      ripples: [], events: [], lastTap: -9,
+      taps: 0, crashes: 0, lives: K.LIVES, mark: 0, far: 0,
+      got: (lv.pearls || []).map(() => false), pearls: 0,
+      sink: 0, sinkX: 0, sinkY: 0, why: '', grace: 0,
+      done: false, doneT: 0, over: false,
+    };
+  }
+
+  // Hvor en ting i elva (avstand d) ligger på skjermen nå.
+  function sy(st, d) { return K.BOAT_Y - (d - st.dist); }
+  // Båtens avstand langs elva.
+  function boatD(st) { return st.dist + (K.BOAT_Y - st.y); }
+
+  // Stokk: to ender, og eventuelt en bevegelse fram og tilbake.
+  function logEnds(st, g) {
+    let off = 0;
+    if (g.swing) off = g.swing[0] * Math.sin(TAU * st.dist / g.swing[1] + (g.swing[2] || 0));
+    return { x1: g.x1 + off, y1: sy(st, g.d1 != null ? g.d1 : g.d), x2: g.x2 + off, y2: sy(st, g.d2 != null ? g.d2 : g.d) };
+  }
+  function rockX(st, r) {
+    return r.swing ? r.x + r.swing[0] * Math.sin(TAU * st.dist / r.swing[1] + (r.swing[2] || 0)) : r.x;
+  }
+
+  /* ---------- trykk ---------- */
+
+  function tap(st, x, y) {
+    if (st.done || st.over || st.sink > 0) return false;
+    if (st.t - st.lastTap < K.TAP_GAP) return false;
+    if (st.ripples.length >= K.MAX_RIPPLES) st.ripples.shift();
+    st.lastTap = st.t;
+    st.taps++;
+    st.ripples.push({ x, y, r: 0, hit: false, push: null, n: 0 });
+    st.events.push({ type: 'tap', x, y });
+    return true;
+  }
+
+  /* ---------- ett tidssteg ---------- */
+
+  function crash(st, why) {
+    st.sink = K.SINK_TIME;
+    st.sinkX = st.x; st.sinkY = st.y;
+    st.crashes++;
+    st.lives--;
+    st.why = why;
+    st.ripples.length = 0;
+    st.events.push({ type: 'crash', x: st.x, y: st.y, why, lives: st.lives });
+  }
+
+  // Ny start på siste trygge sted bak krasjet (et rolig stykke mellom hindrene).
+  function respawn(st) {
+    const lv = st.lv, safe = lv.safe || [];
+    const bd = boatD(st);
+    let p = { d: 0, x: lv.startX || 180 };
+    for (let i = firstAt(safe, bd) - 1; i >= 0; i--) { p = safe[i]; break; }
+    st.dist = p.d;
+    st.x = p.x; st.y = K.BOAT_Y; st.vx = 0; st.vy = 0;
+    st.ripples.length = 0;
+    st.sink = 0;
+    st.grace = K.GRACE;
+    st.events.push({ type: 'respawn', x: st.x, y: st.y });
+  }
+
+  function step(st) {
+    const lv = st.lv, DT = K.DT;
+    st.steps++; st.t += DT;
+    if (st.over) return;
+
+    if (st.sink > 0) {
+      st.sink -= DT;
+      if (st.sink <= 0) {
+        if (st.lives <= 0) { st.over = true; st.sink = 0.001; st.events.push({ type: 'over' }); return; }
+        respawn(st);
+      }
+      return;
+    }
+    if (st.done) {
+      // inne i havna: elva roer seg og båten glir inn
+      st.doneT += DT;
+      const v = speedAt(lv, st.dist) * Math.max(0, 1 - st.doneT / 1.2);
+      st.dist += v * DT;
+      st.x += (lv.dockX - st.x) * Math.min(1, DT * 3);
+      st.y += (K.BOAT_Y - 40 - st.y) * Math.min(1, DT * 2);
+      for (const rp of st.ripples) rp.r += K.RIPPLE_SPEED * DT;
+      st.ripples = st.ripples.filter((rp) => rp.r < K.RIPPLE_RANGE + 30);
+      return;
+    }
+
+    // etter ny start går elva sakte et lite øyeblikk
+    let v = speedAt(lv, st.dist);
+    if (st.grace > 0) { st.grace -= DT; v *= 1 - 0.75 * Math.max(0, st.grace) / K.GRACE; }
+    st.dist += v * DT;
+
+    // krusninger: når ringen når båten, får den et dytt bort fra trykket
+    for (const rp of st.ripples) {
+      const prev = rp.r;
+      rp.r += K.RIPPLE_SPEED * DT;
+      if (!rp.hit) {
+        const dx = st.x - rp.x, dy = st.y - rp.y, d = Math.hypot(dx, dy);
+        if (d <= rp.r && d >= prev - 1) {
+          rp.hit = true;
+          const f = falloff(d);
+          if (f > 0) {
+            let nx, ny;
+            if (d > 4) { nx = dx / d; ny = dy / d; } else { nx = dx >= 0 ? 1 : -1; ny = 0; }
+            rp.push = { x: nx * K.PUSH * f / K.PUSH_STEPS, y: ny * K.PUSH * f / K.PUSH_STEPS };
+            st.events.push({ type: 'hit', f });
+          }
+        } else if (d < prev - 1) rp.hit = true; // båten var allerede innenfor
+      }
+      if (rp.push && rp.n < K.PUSH_STEPS) { st.vx += rp.push.x; st.vy += rp.push.y; rp.n++; }
+    }
+    st.ripples = st.ripples.filter((rp) => rp.r < K.RIPPLE_RANGE + 30);
+
+    const bd = boatD(st);
+
+    // sidestrøm: drar båten mot en fart sidelengs
+    for (const c of (lv.drifts || [])) {
+      if (bd < c.d || bd > c.d + c.len || st.x < c.x1 || st.x > c.x2) continue;
+      st.vx += (c.vx - st.vx) * Math.min(1, 2.2 * DT);
+    }
+    // virvler (bare de som er i nærheten)
+    const ws = lv.whirls || [];
+    for (let i = firstAt(ws, bd - 120); i < ws.length && ws[i].d < bd + 120; i++) {
+      const wv = ws[i];
+      const cx = wv.x, cy = sy(st, wv.d);
+      const dx = cx - st.x, dy = cy - st.y, d = Math.hypot(dx, dy);
+      if (d > wv.r) continue;
+      if (d < wv.r * K.WHIRL_CORE) { crash(st, 'whirl'); return; }
+      const k = Math.pow(1 - d / wv.r, 0.6); // trekker godt også ytterst i virvelen
+      const nx = dx / d, ny = dy / d, dir = wv.dir || 1;
+      st.vx += (nx * K.WHIRL_PULL * k + -ny * dir * K.WHIRL_SWIRL * k) * DT;
+      st.vy += (ny * K.WHIRL_PULL * k + nx * dir * K.WHIRL_SWIRL * k) * DT;
+    }
+
+    // båten glir tilbake til plassen sin (opp/ned) og bremser sidelengs
+    st.vy += (K.BOAT_Y - st.y) * K.Y_SPRING * DT;
+    st.vx *= SIDE_MUL; st.vy *= Y_MUL;
+    st.x += st.vx * DT; st.y += st.vy * DT;
+    if (st.y < K.Y_MIN) { st.y = K.Y_MIN; st.vy = Math.max(0, st.vy); }
+    if (st.y > K.Y_MAX) { st.y = K.Y_MAX; st.vy = Math.min(0, st.vy); }
+
+    // elvebredden: båten spretter tilbake (ingen krasj)
+    const R = K.BOAT_R, bd2 = boatD(st);
+    const L = bankL(lv, bd2), Rt = bankR(lv, bd2);
+    if (st.x - R < L) { st.x = L + R; if (st.vx < 0) { if (st.vx < -40) st.events.push({ type: 'bump', x: st.x - R, y: st.y, v: -st.vx }); st.vx = -st.vx * K.REST_BANK; } }
+    if (st.x + R > Rt) { st.x = Rt - R; if (st.vx > 0) { if (st.vx > 40) st.events.push({ type: 'bump', x: st.x + R, y: st.y, v: st.vx }); st.vx = -st.vx * K.REST_BANK; } }
+
+    // steiner og stokker: krasj (bare de som er i nærheten)
+    const rs = lv.rocks || [];
+    for (let i = firstAt(rs, bd2 - 60); i < rs.length && rs[i].d < bd2 + 60; i++) {
+      const r = rs[i];
+      if (Math.hypot(st.x - rockX(st, r), st.y - sy(st, r.d)) < r.r + R) { crash(st, 'rock'); return; }
+    }
+    const gs = lv.logs || [];
+    for (let i = firstAt(gs, bd2 - 120); i < gs.length && gs[i].d < bd2 + 120; i++) {
+      const e = logEnds(st, gs[i]);
+      if (segDist(st.x, st.y, e.x1, e.y1, e.x2, e.y2) < K.LOG_R + R) { crash(st, 'log'); return; }
+    }
+
+    // perler
+    const ps = lv.pearls || [];
+    for (let i = firstAt(ps, bd2 - 40); i < ps.length && ps[i].d < bd2 + 40; i++) {
+      if (st.got[i]) continue;
+      const p = ps[i];
+      if (Math.hypot(st.x - p.x, st.y - sy(st, p.d)) < K.PEARL_R) {
+        st.got[i] = true; st.pearls++;
+        st.events.push({ type: 'pearl', x: p.x, y: sy(st, p.d), i });
+      }
+    }
+
+    // lengste strekning i dette løpet, og merkene for stjerner
+    if (bd2 > st.far) st.far = Math.min(lv.length, bd2);
+    const ms = lv.marks || [];
+    while (st.mark < ms.length && bd2 >= ms[st.mark].d) {
+      st.mark++;
+      st.events.push({ type: 'mark', n: st.mark });
+    }
+
+    // havna (rett før brygga, så båten kan gli inn i åpningen)
+    if (bd2 >= lv.length - K.DOCK_IN) {
+      st.done = true; st.doneT = 0; st.far = lv.length;
+      st.events.push({ type: 'complete' });
+    }
+  }
+
+  function segDist(px, py, x1, y1, x2, y2) {
+    const dx = x2 - x1, dy = y2 - y1, L2 = dx * dx + dy * dy || 1;
+    const u = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / L2));
+    return Math.hypot(px - x1 - dx * u, py - y1 - dy * u);
+  }
+
+  function progress(st) { return Math.max(0, Math.min(1, boatD(st) / st.lv.length)); }
+  // Stjerner etter hvor langt du kom: en tredel, to tredeler, eller helt i havn.
+  function starsFor(far, length) { return far >= length ? 3 : far >= length * 2 / 3 ? 2 : far >= length / 3 ? 1 : 0; }
+  const meters = (d) => Math.round(d / K.PER_M);
+
+  // Kopi av tilstanden (til testverktøyet, som prøver mange trykk).
+  function clone(st) {
+    const c = Object.assign({}, st);
+    c.ripples = st.ripples.map((r) => Object.assign({}, r, { push: r.push && Object.assign({}, r.push) }));
+    c.events = [];
+    c.got = st.got.slice();
+    return c;
+  }
+
+  /* =====================================================================
+   * Banebyggeren: oppskrift → elv
+   * ---------------------------------------------------------------------
+   * Elva bygges bit for bit. Hver bit er ett hinder (en stein, en
+   * steinvegg, en stokk-port, en virvel …). Mellom bitene er det et rolig
+   * stykke der båten kan starte på nytt etter krasj. Etter hvert går elva
+   * fortere, og bitene kommer tettere.
+   * ===================================================================== */
+
+  // Enkel tallgenerator med frø (samme frø gir alltid samme tall).
+  function rng(a) {
+    return function () {
+      a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function mix(a, b, c) {
+    let h = 2166136261;
+    for (const v of [a, b, c]) { h ^= v; h = Math.imul(h, 16777619); h ^= h >>> 13; }
+    return h >>> 0;
+  }
+  const lerp = (a, b, u) => a + (b - a) * u;
+  const smooth = (u) => u * u * (3 - 2 * u);
+
+  function build(def) {
+    const len = def.len;
+    const r0 = rng(mix(def.seed, 7777, 0));
+    const ph1 = r0() * TAU, ph2 = r0() * TAU;
+    const bend = def.bend || [0, 2400];
+    const P = (d) => Math.max(0, Math.min(1, d / len));
+    const vAt = (d) => lerp(def.v[0], def.v[1], P(d));
+    const narrows = [];
+    const base = (d) => 180 + bend[0] * Math.min(1, d / 1800) *
+      (0.7 * Math.sin(TAU * d / bend[1] + ph1) + 0.3 * Math.sin(TAU * d / (bend[1] * 0.43) + ph2));
+    // hvor mye en trang renne gjelder akkurat her (0 = ikke, 1 = helt)
+    const inNarrow = (n, d) => {
+      if (d <= n.d0 - 160 || d >= n.d1 + 160) return 0;
+      return 1 - smooth(d < n.d0 ? (n.d0 - d) / 160 : d > n.d1 ? (d - n.d1) / 160 : 0);
+    };
+    const center = (d) => { let c = base(d); for (const n of narrows) c += n.off * inNarrow(n, d); return c; };
+    const width = (d) => {
+      let w = lerp(def.w[0], def.w[1], P(d));
+      for (const n of narrows) { const k = inNarrow(n, d); if (k > 0) w = Math.min(w, lerp(w, n.w, k)); }
+      return w;
+    };
+    const bL = (d) => Math.max(14, center(d) - width(d) / 2);
+    const bR = (d) => Math.min(346, center(d) + width(d) / 2);
+
+    const lv = {
+      id: def.id, name: def.name, tip: def.tip, startX: 180, dockX: 180, length: len,
+      speed: [[0, def.v[0]], [len, def.v[1]]],
+      rocks: [], logs: [], whirls: [], drifts: [], pearls: [], safe: [], parts: [], banks: [],
+      marks: [{ d: len / 3 }, { d: len * 2 / 3 }],
+    };
+    let h = 0; // hvor vanskelig akkurat her (0 ved start, 1 ved havna)
+    // Hvor forrige åpning var. Neste åpning legges et stykke unna, så
+    // båten må flytte seg – mer og mer jo lenger ned i elva du kommer.
+    let lane = 180;
+    const pickLane = (R, lo, hi) => {
+      const shift = lerp(0.12, 0.42, h) * (hi - lo + 60);
+      const a = [lo, lane - shift], b = [lane + shift, hi];
+      const okA = a[1] > a[0], okB = b[1] > b[0];
+      let x;
+      if (okA && okB) x = R() < 0.5 ? lerp(a[0], a[1], R()) : lerp(b[0], b[1], R());
+      else if (okA) x = lerp(a[0], a[1], R());
+      else if (okB) x = lerp(b[0], b[1], R());
+      else x = lane < (lo + hi) / 2 ? hi : lo;
+      lane = x;
+      return x;
+    };
+    // vegg fra den ene bredden: velg siden som tvinger båten bort fra der den er
+    const wallSide = (R, L, Rr) => {
+      const c = (L + Rr) / 2, far = Math.abs(lane - c) > lerp(60, 15, h) ? 0 : 1;
+      return far ? (R() < 0.5 ? -1 : 1) : (lane < c ? -1 : 1);
+    };
+    const rock = (d, x, r, swing) => lv.rocks.push(swing ? { d, x, r, swing } : { d, x, r });
+    const log = (o) => lv.logs.push(o);
+
+    // Hindrene. Hver får et startpunkt d, en tallgenerator R og "sp" (hvor
+    // tett ting kommer etter hverandre), og gir tilbake der den slutter.
+    const P_ = {
+      // én stein (noen ganger to)
+      rock(d, R) {
+        const n = R() < 0.35 ? 2 : 1;
+        let end = d;
+        for (let k = 0; k < n; k++) {
+          const r = 16 + 10 * R(), dd = d + r + k * 60;
+          const L = bL(dd), Rr = bR(dd);
+          rock(dd, lerp(L + r + 24, Rr - r - 24, R()), r);
+          end = dd + r;
+        }
+        return end;
+      },
+      // to steiner med en åpning mellom
+      pair(d, R) {
+        const r = 18 + 6 * R(), g = lerp(100, 76, h) + 26 * R(); d += r;
+        const L = bL(d), Rr = bR(d), gx = pickLane(R, L + g / 2 + 30, Rr - g / 2 - 30);
+        rock(d, gx - g / 2 - r, r); rock(d, gx + g / 2 + r, r);
+        return d + r;
+      },
+      // steinvegg fra den ene bredden, ut forbi midten
+      wall(d, R, sp, side) {
+        const r = 17 + 4 * R(); d += r;
+        const L = bL(d), Rr = bR(d), W = Rr - L, reach = W * (lerp(0.42, 0.52, h) + 0.08 * R());
+        const s = side || wallSide(R, L, Rr);
+        lane = s < 0 ? (L + reach + Rr) / 2 + 10 : (L + Rr - reach) / 2 - 10;
+        for (let k = 0; k * 30 < reach; k++) {
+          const x = s < 0 ? L + 6 + k * 30 : Rr - 6 - k * 30;
+          rock(d + (R() - 0.5) * 8, x, r + (R() - 0.5) * 4);
+        }
+        return d + r + 4;
+      },
+      // slalåm: steinvegger annenhver side
+      slalom(d, R, sp) {
+        const n = 2 + Math.floor(R() * (1 + 2 * h)), gap = sp * lerp(2.4, 1.6, h);
+        let s = R() < 0.5 ? -1 : 1;
+        for (let k = 0; k < n; k++) { d = P_.wall(d, R, sp, s) + gap; s = -s; }
+        return d - gap;
+      },
+      // steinrøys: mange små steiner spredt utover
+      field(d, R, sp) {
+        const n = 4 + Math.floor(R() * 3 + 4 * h), span = sp * 2.2;
+        const pts = [];
+        for (let k = 0, tries = 0; k < n && tries < 80; tries++) {
+          const dd = d + 14 + R() * span, r = 10 + 6 * R();
+          const L = bL(dd), Rr = bR(dd), x = lerp(L + r + 8, Rr - r - 8, R());
+          if (pts.some((p) => Math.hypot(p.x - x, p.d - dd) < p.r + r + 40)) continue;
+          pts.push({ d: dd, x, r }); k++;
+        }
+        pts.sort((a, b) => a.d - b.d).forEach((p) => rock(p.d, p.x, p.r));
+        return d + span + 30;
+      },
+      // tømmerstokker fra begge bredder, med en port
+      gate(d, R) {
+        d += 10;
+        const L = bL(d), Rr = bR(d), g = lerp(126, 98, h) + 24 * R(), gx = pickLane(R, L + g / 2 + 20, Rr - g / 2 - 20);
+        if (gx - g / 2 - L > 30) log({ d, x1: L - 12, x2: gx - g / 2 });
+        if (Rr - gx - g / 2 > 30) log({ d, x1: gx + g / 2, x2: Rr + 12 });
+        return d + 10;
+      },
+      // stokker annenhver side, som tvinger båten i sikksakk
+      stagger(d, R, sp) {
+        const n = 2 + Math.floor(R() * (1 + h)), gap = sp * lerp(2.9, 2.0, h);
+        let s = wallSide(R, bL(d), bR(d));
+        for (let k = 0; k < n; k++) {
+          d += 10;
+          const L = bL(d), Rr = bR(d), W = Rr - L, reach = W * (lerp(0.42, 0.5, h) + 0.06 * R());
+          if (s < 0) log({ d, x1: L - 12, x2: L + reach }); else log({ d, x1: Rr - reach, x2: Rr + 12 });
+          lane = s < 0 ? (L + reach + Rr) / 2 : (L + Rr - reach) / 2;
+          d += 10 + gap; s = -s;
+        }
+        return d - gap;
+      },
+      // skrå stokk fra bredden
+      diag(d, R) {
+        const dh = 30 + 35 * R();
+        const L = bL(d + dh), Rr = bR(d + dh), W = Rr - L, reach = W * (lerp(0.42, 0.5, h) + 0.08 * R());
+        const s = wallSide(R, L, Rr);
+        lane = s < 0 ? (L + reach + Rr) / 2 : (L + Rr - reach) / 2;
+        if (s < 0) log({ d: d + dh / 2, d1: d + dh, x1: L - 10, d2: d + 10, x2: L + reach });
+        else log({ d: d + dh / 2, d1: d + dh, x1: Rr + 10, d2: d + 10, x2: Rr - reach });
+        return d + dh + 10;
+      },
+      // stokk som glir fram og tilbake midt i elva
+      swinglog(d, R) {
+        d += 10;
+        const L = bL(d), Rr = bR(d), W = Rr - L, lg = 90 + 40 * R();
+        const amp = Math.max(20, (W - lg) / 2 - 6);
+        const c = (L + Rr) / 2;
+        log({ d, x1: c - lg / 2, x2: c + lg / 2, swing: [amp, vAt(d) * (1.4 + 0.8 * R()), R() * TAU] });
+        return d + 10;
+      },
+      // steiner som glir fram og tilbake
+      swingrock(d, R, sp) {
+        const n = 1 + Math.floor(R() * (1 + 2 * h));
+        for (let k = 0; k < n; k++) {
+          const r = 16 + 5 * R(); d += r;
+          const L = bL(d), Rr = bR(d), W = Rr - L;
+          const amp = Math.max(30, W / 2 - r - 10);
+          rock(d, (L + Rr) / 2, r, [amp, vAt(d) * (1.3 + 0.8 * R()), R() * TAU]);
+          d += r + sp * 0.6;
+        }
+        return d - sp * 0.6;
+      },
+      // virvel ved en smal åpning: steiner stenger resten av elva, og
+      // virvelen ligger rett ved siden av åpningen og drar i båten
+      whirl(d, R, sp, side) {
+        const r = lerp(58, 70, h) + 10 * R(); d += r;
+        const L = bL(d), Rr = bR(d), c = (L + Rr) / 2;
+        const g = lerp(54, 40, h) + 10 * R();             // åpningen
+        let lc = pickLane(R, L + 34, Rr - 34);              // midt i åpningen
+        const s = side || (lc < c ? 1 : -1);                // virvelen på den største siden
+        if (side) lc = s > 0 ? Math.min(lc, Rr - g / 2 - 2 * r + 10) : Math.max(lc, L + g / 2 + 2 * r - 10);
+        lane = lc;
+        const x = lc + s * (g / 2 + r);
+        lv.whirls.push({ d, x, r, dir: R() < 0.5 ? 1 : -1 });
+        // steiner fra virvelen ut til bredden (hvis den ikke rekker helt)
+        const rr = 16 + 4 * R();
+        for (let xx = x + s * (r + rr - 4); s > 0 ? xx < Rr + 4 : xx > L - 4; xx += s * 30) rock(d + (R() - 0.5) * 10, xx, rr);
+        // og fra den andre siden av åpningen ut til den andre bredden
+        for (let xx = lc - s * (g / 2 + rr); s > 0 ? xx > L - 4 : xx < Rr + 4; xx -= s * 30) rock(d + (R() - 0.5) * 10, xx, rr);
+        return d + r;
+      },
+      // to virvler, én på hver side
+      whirl2(d, R, sp) {
+        const s = R() < 0.5 ? -1 : 1;
+        d = P_.whirl(d, R, sp, s) + sp * 1.2;
+        return P_.whirl(d, R, sp, -s);
+      },
+      // tre virvler i sikksakk
+      whirlrow(d, R, sp) {
+        let s = R() < 0.5 ? -1 : 1;
+        for (let k = 0; k < 3; k++) { d = P_.whirl(d, R, sp, s) + sp * 0.9; s = -s; }
+        return d - sp * 0.9;
+      },
+      // sidestrøm med noen steiner
+      drift(d, R, sp) {
+        const ln = sp * 2.6, vx = (R() < 0.5 ? -1 : 1) * (55 + 25 * R());
+        lv.drifts.push({ d, len: ln, x1: 0, x2: 360, vx });
+        const n = 2 + Math.floor(R() * 2);
+        for (let k = 0; k < n; k++) {
+          const dd = d + ln * (k + 0.6) / (n + 0.4), r = 17 + 5 * R();
+          const L = bL(dd), Rr = bR(dd);
+          rock(dd, lerp(L + r + 30, Rr - r - 30, R()), r);
+        }
+        return d + ln;
+      },
+      // trang renne mellom bergene (av og til med en stein)
+      narrow(d, R, sp) {
+        const ln = sp * (2 + R()), w = 118 + 30 * R();
+        const W = width(d + 170), room = Math.max(0, (W - w) / 2 - 10);
+        const n = { d0: d + 170, d1: d + 170 + ln, w, off: (R() < 0.5 ? -1 : 1) * room * (0.5 + 0.5 * R()) };
+        narrows.push(n);
+        // en eller to steiner inne i renna, annenhver side
+        const k = ln > sp * 2.4 ? 2 : 1;
+        let s = R() < 0.5 ? -1 : 1;
+        for (let j = 0; j < k; j++) {
+          const dd = n.d0 + ln * (j + 1) / (k + 1);
+          rock(dd, center(dd) + s * w * 0.2, 14 + 4 * R());
+          s = -s;
+        }
+        return n.d1 + 170;
+      },
+      // steinvegg tvers over elva med én åpning
+      wallgap(d, R) {
+        const r = 16 + 3 * R(); d += r;
+        const L = bL(d), Rr = bR(d), g = lerp(104, 80, h) + 24 * R(), gx = pickLane(R, L + g / 2 + 24, Rr - g / 2 - 24);
+        for (let x = L + 6; x < gx - g / 2 - r * 0.6; x += 30) rock(d + (R() - 0.5) * 8, x, r);
+        for (let x = Rr - 6; x > gx + g / 2 + r * 0.6; x -= 30) rock(d + (R() - 0.5) * 8, x, r);
+        return d + r + 4;
+      },
+    };
+
+    // vekter → liste å trekke fra
+    const bag = [];
+    for (const k in def.mix) for (let i = 0; i < def.mix[k]; i++) bag.push(k);
+    const fix = def.fix || {};
+
+    let d = 650, i = 0, lastPearl = 0;
+    lv.safe.push({ d: 0, x: 180 });
+    while (true) {
+      const p = P(d);
+      const T = lerp(def.tf[0], def.tf[1], p), sp = vAt(d) * T;
+      const R = rng(mix(def.seed, i, fix[i] || 0));
+      h = p;
+      // de tre første bitene er av det første slaget i oppskriften (oppvarming)
+      const pick = bag[Math.floor(R() * bag.length)];
+      const kind = i < 3 ? Object.keys(def.mix)[0] : pick;
+      // ikke start en bit som ikke rekker å bli ferdig før havna
+      if (d > len - 900) break;
+      const start = d;
+      d = P_[kind](d, R, sp);
+      lv.parts.push({ i, kind, d0: start, d1: d });
+      i++;
+      // rolig stykke etter biten
+      const gap = vAt(d) * lerp(def.gap[0], def.gap[1], P(d));
+      const mid = d + gap / 2;
+      lv.safe.push({ d: Math.round(mid), x: Math.round((bL(mid) + bR(mid)) / 2) });
+      if (i - lastPearl >= (def.pearlEvery || 5) && R() < 0.7) {
+        lastPearl = i;
+        lv.pearls.push({ d: Math.round(mid + gap * 0.2), x: Math.round(lerp(bL(mid) + 34, bR(mid) - 34, R())) });
+      }
+      d += gap;
+    }
+
+    // elvebredden som punkter
+    for (let dd = -200; dd <= len + 800; dd += 40) lv.banks.push([dd, Math.round(bL(dd) * 10) / 10, Math.round(bR(dd) * 10) / 10]);
+    // havna ligger midt i elva
+    lv.dockX = Math.round((bL(len) + bR(len)) / 2);
+    for (const k of ['rocks', 'logs', 'whirls', 'pearls']) lv[k].sort((a, b) => a.d - b.d);
+    for (const r of lv.rocks) { r.d = Math.round(r.d); r.x = Math.round(r.x); r.r = Math.round(r.r); }
+    return lv;
+  }
+
+  /* ---------- banene (oppskrifter) ----------
+   * v:   fart ved start og ved havna
+   * gap: sekunder med rolig vann mellom hindrene (ved start → ved havna)
+   * tf:  hvor tett ting kommer inne i et hinder (sekunder, start → slutt)
+   * w:   elvas bredde (start → slutt), bend: [hvor mye den svinger, bølgelengde]
+   * mix: hvilke hindre, og hvor ofte
+   * fix: biter som er byttet ut fordi roboten ikke klarte dem (lages av tools/stryk.js --fix)
+   */
+  const DEFS = [
+    {
+      id: 'S-1', name: { no: 'Første stryk', en: 'First rapids' }, seed: 101,
+      tip: { no: 'Trykk ved siden av båten for å styre. Trykk til venstre, så glir den mot høyre. Du tåler tre krasj.', en: 'Tap beside the boat to steer. Tap on its left and it glides right. You can crash three times.' },
+      len: 26000, v: [115, 220], gap: [1.50, 0.88], tf: [0.95, 0.65], w: [300, 270],
+      mix: { rock: 3, pair: 2, wall: 2, gate: 2 },
+      fix: {}, // S-1
+    },
+    {
+      id: 'S-2', name: { no: 'Strie strømmer', en: 'Fierce waters' }, seed: 202,
+      tip: { no: 'Sidestrømmer drar båten med seg, og noen stokker flytter på seg.', en: 'Side currents pull the boat along, and some logs move.' },
+      len: 28400, v: [121, 255], gap: [1.47, 0.78], tf: [0.94, 0.64], w: [290, 260],
+      mix: { rock: 2, wall: 2, gate: 2, drift: 2, swinglog: 2, whirl: 1 },
+      fix: {}, // S-2
+    },
+    {
+      id: 'S-3', name: { no: 'Svingete elv', en: 'Winding river' }, seed: 606,
+      tip: { no: 'Elva svinger. Følg den, og pass deg for steinene i svingene.', en: 'The river winds. Follow it and mind the rocks in the bends.' },
+      len: 30800, v: [121, 232], gap: [1.44, 0.85], tf: [0.93, 0.63], w: [240, 220], bend: [50, 2600],
+      mix: { rock: 3, wall: 2, gate: 2, pair: 1, slalom: 1 },
+      fix: {}, // S-3
+    },
+    {
+      id: 'S-4', name: { no: 'Virvelvannet', en: 'Whirlpool water' }, seed: 505,
+      tip: { no: 'Virvlene suger båten inn. Hold deg unna midten av dem.', en: 'Whirlpools suck the boat in. Stay away from their middle.' },
+      len: 33200, v: [140, 295], gap: [1.3, 0.7], tf: [0.92, 0.62], w: [300, 275],
+      mix: { whirl: 2, whirl2: 2, whirlrow: 2, slalom: 2, stagger: 1 },
+      fix: {}, // S-4
+    },
+    {
+      id: 'S-5', name: { no: 'Juvet', en: 'The gorge' }, seed: 707,
+      tip: { no: 'Bergveggene kommer tett. I de trange rennene er det lite plass.', en: 'The rock walls close in. The narrow chutes leave little room.' },
+      len: 35600, v: [127, 244], gap: [1.38, 0.81], tf: [0.91, 0.61], w: [280, 250],
+      mix: { narrow: 3, swingrock: 2, wallgap: 2, slalom: 1 },
+      fix: {}, // S-5
+    },
+    {
+      id: 'S-6', name: { no: 'Trange svinger', en: 'Tight bends' }, seed: 1111,
+      tip: { no: 'Smal elv som svinger, med stokker som glir fram og tilbake.', en: 'A narrow, winding river with logs sliding back and forth.' },
+      len: 38000, v: [150, 310], gap: [1.15, 0.62], tf: [0.90, 0.60], w: [235, 215], bend: [55, 2300],
+      mix: { narrow: 2, swinglog: 2, rock: 2, wall: 2, stagger: 1 },
+      fix: {}, // S-6
+    },
+    {
+      id: 'S-7', name: { no: 'Malstrømmen', en: 'The maelstrom' }, seed: 1212,
+      tip: { no: 'Virvler på rad, og strøm som drar sidelengs.', en: 'Whirlpools in a row, and currents that drag you sideways.' },
+      len: 40400, v: [133, 256], gap: [1.32, 0.78], tf: [0.89, 0.60], w: [300, 275],
+      mix: { whirl2: 2, whirlrow: 2, drift: 2, swingrock: 1, stagger: 1, slalom: 1 },
+      fix: {}, // S-7
+    },
+    {
+      id: 'S-8', name: { no: 'Steinrøysa', en: 'Boulder run' }, seed: 303,
+      tip: { no: 'Her ligger steinene tett. Se etter den åpne veien.', en: 'The rocks are packed tight here. Look for the open way.' },
+      len: 42800, v: [136, 262], gap: [1.29, 0.76], tf: [0.88, 0.59], w: [300, 270],
+      mix: { field: 3, slalom: 2, wall: 2, rock: 1, pair: 1 },
+      fix: { 65: 1 }, // S-8
+    },
+    {
+      id: 'S-9', name: { no: 'Steinsprang', en: 'Rockfall' }, seed: 1313,
+      tip: { no: 'Steinvegger med smale åpninger, og trange renner.', en: 'Rock walls with narrow openings, and tight chutes.' },
+      len: 45200, v: [139, 268], gap: [1.26, 0.74], tf: [0.87, 0.58], w: [285, 260],
+      mix: { field: 2, wallgap: 3, narrow: 2, slalom: 1 },
+      fix: {}, // S-9
+    },
+    {
+      id: 'S-10', name: { no: 'Sidestrømmer', en: 'Crosscurrents' }, seed: 808,
+      tip: { no: 'Strømmen drar båten sidelengs. Styr i mot før det er for sent.', en: 'The current drags the boat sideways. Steer against it early.' },
+      len: 50000, v: [145, 280], gap: [1.20, 0.71], tf: [0.85, 0.56], w: [290, 265],
+      mix: { drift: 4, wall: 2, stagger: 2, rock: 1 },
+      fix: {}, // S-10
+    },
+    {
+      id: 'S-11', name: { no: 'Tømmerfløting', en: 'Log drive' }, seed: 404,
+      tip: { no: 'Stokkene ligger fra bredden. Styr gjennom åpningene.', en: 'Logs reach out from the banks. Steer through the gaps.' },
+      len: 47600, v: [118, 228], gap: [1.7, 0.95], tf: [0.86, 0.57], w: [300, 270],
+      mix: { gate: 3, stagger: 1, diag: 2, swinglog: 2 },
+      fix: {}, // S-11
+    },
+    {
+      id: 'S-12', name: { no: 'Vandrende steiner', en: 'Wandering rocks' }, seed: 909,
+      tip: { no: 'Noen steiner og stokker glir fram og tilbake. Vent på åpningen.', en: 'Some rocks and logs slide back and forth. Wait for the opening.' },
+      len: 52400, v: [148, 286], gap: [1.17, 0.69], tf: [0.84, 0.55], w: [290, 265],
+      mix: { swingrock: 3, swinglog: 3, stagger: 1, wall: 1 },
+      fix: {}, // S-12
+    },
+    {
+      id: 'S-13', name: { no: 'Stokk og stein', en: 'Logs and rocks' }, seed: 1010,
+      tip: { no: 'Alt på en gang: stokker, steinvegger og steinrøyser.', en: 'Everything at once: logs, rock walls and boulder fields.' },
+      len: 54800, v: [140, 270], gap: [1.45, 0.8], tf: [0.83, 0.54], w: [290, 260],
+      mix: { stagger: 2, slalom: 2, diag: 2, field: 2, gate: 1 },
+      fix: { 103: 1 }, // S-13
+    },
+    {
+      id: 'S-14', name: { no: 'Flomstryket', en: 'Flood rapids' }, seed: 1414,
+      tip: { no: 'Flom i elva. Alt kan komme, og det går fort.', en: 'The river is in flood. Anything can come, and it is fast.' },
+      len: 57200, v: [154, 298], gap: [1.11, 0.66], tf: [0.82, 0.53], w: [280, 255], bend: [30, 2800],
+      mix: { rock: 1, pair: 1, wall: 1, slalom: 1, field: 1, gate: 1, stagger: 1, diag: 1, swinglog: 1, swingrock: 1, whirl: 1, drift: 1, narrow: 1, wallgap: 1 },
+      fix: { 79: 1 }, // S-14
+    },
+    {
+      id: 'S-15', name: { no: 'Villmarka', en: 'The wilderness' }, seed: 1515,
+      tip: { no: 'Det lengste og villeste stryket. Klarer noen hele?', en: 'The longest and wildest rapids. Can anyone make it all the way?' },
+      len: 59600, v: [165, 330], gap: [1.0, 0.58], tf: [0.81, 0.52], w: [270, 245], bend: [40, 2500],
+      mix: { rock: 1, pair: 1, wall: 1, slalom: 1, field: 1, gate: 1, stagger: 1, diag: 1, swinglog: 1, swingrock: 1, whirl: 1, whirl2: 1, whirlrow: 1, drift: 1, narrow: 1, wallgap: 1 },
+      fix: { 109: 1 }, // S-15
+    },
+  ];
+
+  const LEVELS = DEFS.map(build);
+
+  root.Stryket = {
+    K, DEFS, LEVELS, build, create, step, tap, clone, sy, boatD, logEnds, rockX, progress, starsFor, meters,
+    speedAt, bankL, bankR, falloff,
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* =====================================================================
  * Krusning – tegning (Canvas 2D)
  * ---------------------------------------------------------------------
  * Alt som tegnes på skjermen, i lag nedenfra og opp:
@@ -7010,6 +7805,247 @@ svg { fill: currentColor; }
     }
   }
 
+
+  /* ---------- Stryket (elvestryk) ---------- */
+  // Egen tegning for elva: bredder, skum og hindringer ruller nedover,
+  // mens båten ligger fast. Gjenbruker stein, stokk, virvel og båt.
+
+  function hash(n) { let x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+
+  R.drawStryk = function (st, view) {
+    const Sx = root.Stryket, K = Sx.K, lv = st.lv;
+    const ctx = R.ctx, t = view.time;
+    const Y = (d) => Sx.sy(st, d);
+    // synlig område i dam-enheter (elva går over hele skjermen)
+    const vy0 = -R.oy / R.s - 12, vy1 = (R.cssH - R.oy) / R.s + 12;
+    const vx0 = -R.ox / R.s - 12, vx1 = (R.cssW - R.ox) / R.s + 12;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    worldTransform(ctx);
+    const gg = ctx.createLinearGradient(0, vy0, 0, vy1);
+    gg.addColorStop(0, PAL.grassA); gg.addColorStop(1, PAL.grassB);
+    ctx.fillStyle = gg; ctx.fillRect(vx0, vy0, vx1 - vx0, vy1 - vy0);
+    drawStrykLand(ctx, st, lv, Y, vy0, vy1);
+    // sandkant og vann mellom breddene
+    const wob = (d, k) => Math.sin(d * 0.05 + k) * 1.4 + Math.sin(d * 0.013 + k) * 1.8;
+    const riverPath = (off, wk) => {
+      ctx.beginPath();
+      for (let y = vy0; y <= vy1 + 8; y += 8) { const d = st.dist + (K.BOAT_Y - y); ctx.lineTo(Sx.bankL(lv, d) - off - wob(d, 1) * wk, y); }
+      for (let y = vy1 + 8; y >= vy0; y -= 8) { const d = st.dist + (K.BOAT_Y - y); ctx.lineTo(Sx.bankR(lv, d) + off + wob(d, 2) * wk, y); }
+      ctx.closePath();
+    };
+    ctx.fillStyle = PAL.sandEdge; riverPath(12, 1); ctx.fill();
+    ctx.fillStyle = PAL.sand; riverPath(9, 0.8); ctx.fill();
+    ctx.save();
+    riverPath(0, 0); ctx.clip();
+    const wg = ctx.createLinearGradient(0, vy0, 0, vy1);
+    wg.addColorStop(0, PAL.waterTop); wg.addColorStop(0.5, PAL.waterMid); wg.addColorStop(1, PAL.waterBot);
+    ctx.fillStyle = wg; ctx.fillRect(vx0, vy0, vx1 - vx0, vy1 - vy0);
+    // grunt vann langs bredden
+    for (let i = 5; i >= 0; i--) {
+      ctx.globalAlpha = 0.08; ctx.strokeStyle = PAL.shallow; ctx.lineWidth = 4 + i * 5;
+      riverPath(0, 0); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    // lysmønster som ruller med elva
+    if (R.causticPat) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.09;
+      ctx.fillStyle = R.causticPat;
+      ctx.scale(2.1, 2.1);
+      ctx.translate((t * 2) % 96, (st.dist / 2.1) % 96);
+      ctx.fillRect(-150, -300, C.W / 2.1 + 300, C.H / 2.1 + 500);
+      ctx.restore();
+    }
+    // skumstriper i strømmen
+    const top = st.dist + K.BOAT_Y - vy0, bot = st.dist + K.BOAT_Y - vy1; // synlig strekning (d)
+    ctx.lineCap = 'round';
+    const gap = 38;
+    for (let j = Math.floor(bot / gap); j <= Math.ceil(top / gap); j++) {
+      for (let k = 0; k < 2; k++) {
+        const h = hash(j * 3 + k * 17);
+        const d = j * gap + h * gap;
+        const L = Sx.bankL(lv, d) + 14, Rr = Sx.bankR(lv, d) - 14;
+        const x = L + hash(j * 7 + k * 5 + 1) * (Rr - L), y = Y(d);
+        const len = 10 + h * 18;
+        ctx.strokeStyle = `rgba(255,255,255,${0.12 + 0.12 * hash(j + k * 9)})`;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + len); ctx.stroke();
+      }
+    }
+    // sidestrømmer: piler som glir sidelengs
+    for (const c of (lv.drifts || [])) {
+      const y1 = Y(c.d + c.len), y2 = Y(c.d);
+      if (y2 < -20 || y1 > C.H + 20) continue;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(c.x1, y1, c.x2 - c.x1, y2 - y1); ctx.clip();
+      ctx.fillStyle = 'rgba(215,250,255,0.07)';
+      ctx.fillRect(c.x1, y1, c.x2 - c.x1, y2 - y1);
+      const dir = Math.sign(c.vx), s = 6, sp = 34;
+      const shift = ((t * Math.abs(c.vx) * 0.8) % sp) * dir;
+      ctx.lineWidth = 2.2; ctx.lineJoin = 'round';
+      for (let yy = y1 + 20; yy < y2; yy += 40) {
+        for (let xx = c.x1 - sp; xx < c.x2 + sp; xx += sp) {
+          const x = xx + shift + ((yy - y1) / 40 % 2) * sp / 2;
+          const edge = Math.min(yy - y1, y2 - yy);
+          ctx.strokeStyle = `rgba(255,255,255,${Math.max(0, Math.min(1, edge / 30)) * 0.45})`;
+          ctx.beginPath(); ctx.moveTo(x - dir * s, yy - s); ctx.lineTo(x, yy); ctx.lineTo(x - dir * s, yy + s); ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+    for (const w of (lv.whirls || [])) {
+      const y = Y(w.d);
+      if (y < -w.r || y > C.H + w.r) continue;
+      drawWhirl(ctx, { x: w.x, y, r: w.r, power: 1.3, dir: w.dir || 1 }, t);
+    }
+    // havna i mål
+    const fy = Y(lv.length);
+    if (fy > -60 && fy < C.H + 60) drawStrykDock(ctx, lv, fy, t, st.done);
+    // bøyer ved en tredel og to tredeler (stjerner)
+    (lv.marks || []).forEach((cp, i) => {
+      const y = Y(cp.d);
+      if (y < -20 || y > C.H + 20) return;
+      const L = Sx.bankL(lv, cp.d), Rr = Sx.bankR(lv, cp.d), passed = st.mark > i;
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1.1; ctx.setLineDash([3, 4]);
+      ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(Rr, y); ctx.stroke(); ctx.setLineDash([]);
+      const n = Math.max(3, Math.round((Rr - L) / 34));
+      for (let k = 0; k <= n; k++) {
+        const x = L + 6 + (Rr - L - 12) * (k / n), bob = Math.sin(t * 2.4 + k) * 0.8;
+        ctx.fillStyle = 'rgba(10,50,75,0.2)';
+        ctx.beginPath(); ctx.arc(x + 1, y + 1.6 + bob, 3.4, 0, TAU); ctx.fill();
+        ctx.fillStyle = k % 2 ? '#ffffff' : passed ? '#7fe0b5' : '#ffd25e';
+        ctx.beginPath(); ctx.arc(x, y + bob, 3.4, 0, TAU); ctx.fill();
+      }
+    });
+    // perler
+    (lv.pearls || []).forEach((p, i) => {
+      if (st.got[i]) return;
+      const y = Y(p.d);
+      if (y < -20 || y > C.H + 20) return;
+      drawPearl(ctx, p.x, y + Math.sin(t * 2 + i) * 1.2, t + i);
+    });
+    // krusninger
+    for (const rp of st.ripples) if (rp.r > 1) drawRing(ctx, { x: rp.x, y: rp.y, range: K.RIPPLE_RANGE, p: 1 }, rp.r);
+    drawParticles(ctx, view.particles, 'under');
+    ctx.restore();
+    // skumkant langs bredden
+    ctx.strokeStyle = PAL.foam; ctx.lineWidth = 1.6;
+    riverPath(0.8, 0); ctx.stroke();
+    (lv.rocks || []).forEach((r, i) => {
+      const y = Y(r.d);
+      if (y < -40 || y > C.H + 40) return;
+      drawRock(ctx, { x: Sx.rockX(st, r), y, r: r.r, seed: i * 7 + 3 }, t);
+    });
+    (lv.logs || []).forEach((g, i) => {
+      const e = Sx.logEnds(st, g);
+      if (Math.max(e.y1, e.y2) < -30 || Math.min(e.y1, e.y2) > C.H + 30) return;
+      drawLog(ctx, { x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, r: K.LOG_R }, i * 13 + 5);
+    });
+    // flagg ved bredden der rekorden din er
+    if (view.bestD > 0 && view.bestD < lv.length) {
+      const y = Y(view.bestD);
+      if (y > -40 && y < C.H + 40) drawStrykFlag(ctx, Sx.bankR(lv, view.bestD) + 6, y, t);
+    }
+    const fx = view.boatFx || {};
+    const sinkU = st.sink > 0 ? 1 - st.sink / K.SINK_TIME : 0;
+    drawBoat(ctx, {
+      id: 0, x: st.x, y: st.y, vx: st.vx, vy: st.done ? 0 : -60, color: view.color || 0,
+      dock: st.done ? 0 : -1, sink: sinkU > 0 ? Math.min(1, sinkU * 1.4) * C.SINK_TIME : 0,
+    }, t, fx, null);
+    drawParticles(ctx, view.particles, 'over');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  };
+
+  // Lite rødt flagg på en stang (rekorden din).
+  function drawStrykFlag(ctx, x, y, t) {
+    ctx.fillStyle = 'rgba(10,50,40,0.25)';
+    ctx.beginPath(); ctx.ellipse(x + 3, y + 2, 6, 2.5, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#6b4a2e'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 30); ctx.stroke();
+    const w = Math.sin(t * 5) * 2;
+    ctx.fillStyle = '#ff6b5e';
+    ctx.beginPath(); ctx.moveTo(x, y - 30); ctx.quadraticCurveTo(x + 9, y - 27 + w, x + 18, y - 25); ctx.lineTo(x, y - 19); ctx.closePath(); ctx.fill();
+  }
+
+  function drawPearl(ctx, x, y, t) {
+    ctx.fillStyle = 'rgba(10,50,75,0.22)';
+    ctx.beginPath(); ctx.arc(x + 1.2, y + 2, 7, 0, TAU); ctx.fill();
+    ctx.strokeStyle = `rgba(255,255,255,${0.35 + 0.2 * Math.sin(t * 3)})`; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y, 10 + Math.sin(t * 3) * 1.5, 0, TAU); ctx.stroke();
+    const g = ctx.createRadialGradient(x - 2.5, y - 2.5, 0.5, x, y, 7.5);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(0.55, '#f3eefc'); g.addColorStop(1, '#c9bfe6');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, 7, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.beginPath(); ctx.arc(x - 2.4, y - 2.6, 1.7, 0, TAU); ctx.fill();
+  }
+
+  // Land langs elva: gresstrå, siv, småstein og blomster (fast plass langs elva).
+  function drawStrykLand(ctx, st, lv, Y, vy0, vy1) {
+    const Sx = root.Stryket, K = Sx.K;
+    const top = st.dist + K.BOAT_Y - vy0 + 40, bot = st.dist + K.BOAT_Y - vy1 - 40;
+    ctx.lineCap = 'round';
+    for (const side of [-1, 1]) {
+      const edge = (d) => side < 0 ? Sx.bankL(lv, d) : Sx.bankR(lv, d);
+      // gresstrå
+      const bs = 9;
+      for (let j = Math.floor(bot / bs); j <= Math.ceil(top / bs); j++) {
+        for (let k = 0; k < 3; k++) {
+          const h = hash(j * 5 + k * 31 + (side > 0 ? 900 : 0));
+          const d = j * bs + h * bs, e = edge(d);
+          const x = e + side * (16 + hash(j * 3 + k + side * 7) * 150), y = Y(d);
+          ctx.strokeStyle = PAL.blade[(j + k) % 3]; ctx.lineWidth = 1.1;
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (h - 0.5) * 3, y - 3 - h * 4); ctx.stroke();
+        }
+      }
+      const step = 40;
+      for (let j = Math.floor(bot / step); j <= Math.ceil(top / step); j++) {
+        const h = hash(j * 11 + (side > 0 ? 500 : 0));
+        const d = j * step + h * step, y = Y(d), e = edge(d);
+        const x = e + side * (17 + hash(j * 5 + side) * 60);
+        if (h < 0.35) drawReeds(ctx, x, y, rng(j * 13 + (side > 0 ? 7 : 3)));
+        else if (h < 0.55) {
+          ctx.fillStyle = 'rgba(150,130,90,0.5)';
+          ctx.beginPath(); ctx.ellipse(x, y, 3.2, 2.2, 0, 0, TAU); ctx.fill();
+        } else if (h < 0.8) {
+          const col = j % 3 === 0 ? '#fff6e0' : j % 3 === 1 ? '#ffd1e3' : '#fff2a6';
+          for (let p = 0; p < 5; p++) { const a = (p / 5) * TAU; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x + Math.cos(a) * 1.7, y + Math.sin(a) * 1.7, 1.25, 0, TAU); ctx.fill(); }
+          ctx.fillStyle = '#f5b83d'; ctx.beginPath(); ctx.arc(x, y, 0.9, 0, TAU); ctx.fill();
+        }
+      }
+    }
+  }
+
+  // Målet: en brygge tvers over elva med en åpning og bøyer rundt havna.
+  function drawStrykDock(ctx, lv, y, t, done) {
+    const Sx = root.Stryket;
+    const L = Sx.bankL(lv, lv.length), Rr = Sx.bankR(lv, lv.length), x = lv.dockX;
+    // rolig vann i havna
+    const g = ctx.createRadialGradient(x, y - 30, 4, x, y - 30, 70);
+    g.addColorStop(0, 'rgba(255,240,180,0.35)'); g.addColorStop(1, 'rgba(255,240,180,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y - 30, 70, 0, TAU); ctx.fill();
+    // brygger fra hver side
+    for (const [a, b] of [[L - 10, x - 38], [x + 38, Rr + 10]]) {
+      ctx.fillStyle = 'rgba(10,50,75,0.22)'; ctx.fillRect(a, y - 7 + 3, b - a, 16);
+      ctx.fillStyle = PAL.log; ctx.fillRect(a, y - 7, b - a, 16);
+      ctx.fillStyle = PAL.logLight;
+      for (let px = a; px < b; px += 9) ctx.fillRect(px + 1, y - 6, 7, 14);
+      ctx.fillStyle = PAL.log;
+      ctx.fillRect(a, y - 8, b - a, 2.5);
+    }
+    for (const px of [x - 38, x + 38]) {
+      ctx.fillStyle = '#7a4f2a'; ctx.beginPath(); ctx.arc(px, y + 1, 5.5, 0, TAU); ctx.fill();
+      ctx.fillStyle = PAL.logEnd; ctx.beginPath(); ctx.arc(px, y + 1, 3.6, 0, TAU); ctx.fill();
+    }
+    // flagg
+    ctx.strokeStyle = '#6b4a2e'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(x - 38, y); ctx.lineTo(x - 38, y - 26); ctx.stroke();
+    const wave = Math.sin(t * 4) * 2;
+    ctx.fillStyle = done ? '#7fe0b5' : '#ffd166';
+    ctx.beginPath(); ctx.moveTo(x - 38, y - 26); ctx.quadraticCurveTo(x - 28, y - 24 + wave, x - 20, y - 21); ctx.lineTo(x - 38, y - 15); ctx.closePath(); ctx.fill();
+  }
+
   root.Render = R;
 })(typeof window !== 'undefined' ? window : globalThis);
 
@@ -7339,13 +8375,16 @@ svg { fill: currentColor; }
     for (const tr of TIERS) q[tr] = { i: 0, played: 0, three: 0, pearls: 0, streak: 0, best: 0 };
     return q;
   }
-  function defaults() { return { v: 2, lang: 'no', sfx: true, music: true, light: false, levels: {}, last: null, quick: quickDefaults(), daily: {} }; }
+  // stryk: rekorder i Stryket (elvestryk), lagt til nov. 2026 uten ny versjon
+  // fordi gamle lagringer bare mangler feltet.
+  function defaults() { return { v: 2, lang: 'no', sfx: true, music: true, light: false, levels: {}, last: null, quick: quickDefaults(), daily: {}, stryk: {} }; }
   function upgrade(s) {
     const out = Object.assign(defaults(), s, { v: 2 });
     out.quick = quickDefaults();
     for (const tr of TIERS) Object.assign(out.quick[tr], (s.quick && s.quick[tr]) || {});
     out.daily = s.daily || {};
     out.levels = s.levels || {};
+    out.stryk = s.stryk || {};
     return out;
   }
   function load() {
@@ -7409,6 +8448,7 @@ svg { fill: currentColor; }
     hint: null, hintToken: 0, hintBusy: false, hintUsed: false,
     shownStars: 3, handOn: false, tipOn: false,
     mapWorld: 0, nextAmbient: 3,
+    sk: null, skI: 0, skFx: null, // Stryket
   };
 
   // Dammen bak tittelskjermen: noen båter å leke med.
@@ -7427,9 +8467,13 @@ svg { fill: currentColor; }
     G.screen = name;
     $('title').hidden = name !== 'title';
     $('map').hidden = name !== 'map';
-    $('hud').hidden = name !== 'play';
+    $('hud').hidden = name !== 'play' && name !== 'stryk';
+    $('hud').classList.toggle('stryk', name === 'stryk');
+    $('hudProg').hidden = $('hudPearls').hidden = name !== 'stryk';
+    // i elvestryket viser toppmenyen liv (hjerter) i stedet for stjerner
+    for (const u of $('hudStars').querySelectorAll('use')) u.setAttribute('href', name === 'stryk' ? '#i-heart' : '#i-star');
     $('win').hidden = true;
-    if (name !== 'play') { hideTip(true); hideHand(); $('banner').hidden = true; G.aim = null; G.hint = null; }
+    if (name !== 'play' && name !== 'stryk') { hideTip(true); hideHand(); $('banner').hidden = true; G.aim = null; G.hint = null; }
   }
 
   function transition(fn) {
@@ -7490,6 +8534,15 @@ svg { fill: currentColor; }
   canvas.addEventListener('pointerdown', (e) => {
     S.unlock();
     const p = toWorld(e);
+    if (G.screen === 'stryk') {
+      // trykk hvor som helst på vannet (elva går over hele skjermen)
+      if (G.sk && !G.completed) {
+        const d = G.sk.dist + (SK.K.BOAT_Y - p.y);
+        if (p.x > SK.bankL(G.sk.lv, d) - 8 && p.x < SK.bankR(G.sk.lv, d) + 8) SK.tap(G.sk, p.x, p.y);
+      }
+      e.preventDefault();
+      return;
+    }
     if (G.screen === 'title') {
       if (E.insidePond(p.x, p.y, 2)) E.tap(G.world, p.x, p.y);
       return;
@@ -7540,11 +8593,13 @@ svg { fill: currentColor; }
       }
       if (n >= 10) G.acc = 0;
     }
+    if (G.screen === 'stryk' && G.sk) strykFrame(dt);
     updateFx(dt);
     if (G.screen === 'title') titleAmbience(dt);
     if (G.screen === 'play') { liveStars(); advanceHint(); }
-    if (G.winAt > 0 && G.time >= G.winAt) { G.winAt = -1; showWin(); }
-    R.draw({
+    if (G.winAt > 0 && G.time >= G.winAt) { G.winAt = -1; if (G.screen === 'stryk') showStrykWin(); else showWin(); }
+    if (G.screen === 'stryk' && G.sk) R.drawStryk(G.sk, { time: G.time, particles: G.particles, boatFx: G.skFx, bestD: G.skBest });
+    else R.draw({
       world: G.world, time: G.time,
       particles: G.particles, fish: G.fish, leaves: G.leaves,
       boatFx: G.boatFx, dockFx: G.dockFx,
@@ -7602,7 +8657,7 @@ svg { fill: currentColor; }
       const a = Math.random() * TAU, sp = 20 + Math.random() * 60 * k;
       addP({ type: 'drop', x: ev.x, y: ev.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, drag: 5, size: 1 + Math.random(), life: 0.3 + Math.random() * 0.2 });
     }
-    for (const b of G.world.boats) {
+    if (G.world) for (const b of G.world.boats) { // i elvestryket er G.world tom
       if (Math.hypot(b.x - ev.x, b.y - ev.y) < b.r + 6) { const f = G.boatFx[b.id]; if (f) f.squash = Math.max(f.squash, 0.6 * k); }
     }
   }
@@ -7840,9 +8895,9 @@ svg { fill: currentColor; }
     $('btnRestart').classList.toggle('nudge', !G.completed && possible < 3);
   }
 
-  function showBanner(lv) {
+  function showBanner(lv, id) {
     const b = $('banner');
-    $('bannerId').textContent = entryLabel(G.entry);
+    $('bannerId').textContent = id || entryLabel(G.entry);
     $('bannerName').textContent = I.pick(lv.name);
     b.hidden = false;
     b.style.animation = 'none'; void b.offsetWidth; b.style.animation = '';
@@ -8198,6 +9253,215 @@ svg { fill: currentColor; }
     });
   }
 
+
+  /* ---------- Stryket (elvestryk) ---------- */
+  // Egen modus: elva renner av seg selv, og båten styres med krusninger.
+  // Simuleringen og banene ligger i stryket.js, tegningen i render.js.
+  const SK = window.Stryket;
+  // Rekord per bane: { best: lengste strekning, stars, pearls, plays, done }.
+  // (Rekorder fra første versjon av modusen, uten best, regnes som ikke spilt.)
+  const strykRec = (id) => { const r = save.stryk[id]; return r && r.best != null ? r : null; };
+  // Neste bane åpnes når du har kommet en tredel av den forrige (én stjerne).
+  const strykOpen = (i) => i === 0 || DEV_JUMP || ((strykRec(SK.LEVELS[i - 1].id) || {}).stars || 0) >= 1;
+
+  function openStryk() { renderStryk(); $('stryk').hidden = false; }
+  function renderStryk() {
+    $('strykTitle').textContent = t('strykWorld');
+    $('strykSub').textContent = t('strykSub');
+    const box = $('strykList');
+    box.innerHTML = '';
+    SK.LEVELS.forEach((lv, i) => {
+      const r = strykRec(lv.id), ok = strykOpen(i);
+      const b = document.createElement('button');
+      b.className = 'tier-btn stryk-lvl' + (ok ? '' : ' locked');
+      const sub = !ok ? t('strykNeed', { id: SK.LEVELS[i - 1].id })
+        : r ? t('strykStats', { m: SK.meters(r.best), M: SK.meters(lv.length), p: r.pearls, n: lv.pearls.length }) : t('strykNew');
+      b.innerHTML = `<span class="tier-dots">${starRow(r ? r.stars : 0)}</span><span class="tier-text"><b>${lv.id} · ${I.pick(lv.name)}</b><span>${sub}</span></span>`;
+      b.addEventListener('click', () => {
+        S.click();
+        if (!ok) { toast(sub); return; }
+        $('stryk').hidden = true;
+        transition(() => startStryk(i));
+      });
+      box.appendChild(b);
+    });
+  }
+
+  function startStryk(i, again) {
+    const lv = SK.LEVELS[i];
+    G.skI = i;
+    G.sk = SK.create(lv);
+    G.world = null; G.entry = null;
+    G.particles = []; G.acc = 0;
+    G.completed = false; G.winAt = -1; G.result = null;
+    G.skFx = { squash: 0, blink: 0, nextBlink: 2, angle: -Math.PI / 2, pop: again ? 1 : 0, wake: 0 };
+    G.skBest = (strykRec(lv.id) || {}).best || 0;
+    G.shownStars = SK.K.LIVES;
+    setScreen('stryk');
+    strykHud(true);
+    paintHudStars(SK.K.LIVES, -1);
+    $('btnRestart').classList.remove('nudge');
+    if (!again) showBanner(lv, lv.id);
+    // tips første gang (forsvinner ved første trykk)
+    hideTip(true);
+    if (lv.tip && !strykRec(lv.id)) {
+      clearTimeout(showTip.tm);
+      showTip.tm = setTimeout(() => {
+        if (G.screen !== 'stryk' || G.sk.lv !== lv || G.sk.taps > 0) return;
+        $('tipText').textContent = I.pick(lv.tip);
+        $('tip').classList.remove('out');
+        $('tip').hidden = false;
+        G.tipOn = true;
+      }, again ? 100 : 900);
+    }
+  }
+  function restartStryk() { S.click(); startStryk(G.skI, true); }
+  function leaveStryk() { transition(() => { toTitle(); openStryk(); }); }
+  function strykNext() {
+    S.click();
+    const n = G.skI + 1;
+    if (n < SK.LEVELS.length && strykOpen(n)) transition(() => startStryk(n));
+    else leaveStryk();
+  }
+
+  function strykFrame(dt) {
+    const st = G.sk;
+    G.acc += dt;
+    let n = 0;
+    while (G.acc >= SK.K.DT && n < 10) {
+      SK.step(st);
+      G.acc -= SK.K.DT; n++;
+      if (st.events.length) strykEvents();
+    }
+    if (n >= 10) G.acc = 0;
+    // båten: blunk, klem og litt skrått når den glir sidelengs
+    const f = G.skFx;
+    f.squash = Math.max(0, f.squash - dt * 3.2);
+    f.pop = Math.max(0, f.pop - dt * 2.6);
+    f.nextBlink -= dt;
+    if (f.nextBlink <= 0) { f.blink = 0.13; f.nextBlink = 2 + Math.random() * 4; }
+    f.blink = Math.max(0, f.blink - dt);
+    const target = -Math.PI / 2 + Math.max(-0.6, Math.min(0.6, st.vx * 0.0035));
+    f.angle += (target - f.angle) * Math.min(1, dt * 8);
+    // kjølvann bak båten som driver nedover med elva
+    if (st.sink <= 0) {
+      f.wake += dt;
+      if (f.wake > 0.07) {
+        f.wake = 0;
+        const v = st.done ? 0 : SK.speedAt(st.lv, st.dist);
+        addP({ type: 'wake', layer: 'under', x: st.x - Math.cos(f.angle) * 13, y: st.y - Math.sin(f.angle) * 13, vx: 0, vy: v, drag: 0, size: 5, angle: f.angle, life: 0.9 });
+      }
+    }
+    if (G.tipOn && st.dist > 380) hideTip();
+    strykHud(false);
+  }
+
+  function strykHud(all) {
+    const st = G.sk, lv = st.lv;
+    if (all) {
+      $('hudId').textContent = lv.id;
+      $('hudName').textContent = I.pick(lv.name);
+    }
+    $('hudProgFill').style.width = (SK.progress(st) * 100).toFixed(1) + '%';
+    const pn = st.pearls + '/' + lv.pearls.length;
+    if ($('hudPearlN').textContent !== pn) $('hudPearlN').textContent = pn;
+    // hjerter: ett forsvinner ved hvert krasj
+    const lives = Math.max(0, st.lives);
+    if (lives !== G.shownStars) {
+      const lost = lives < G.shownStars ? lives : -1;
+      if (lost >= 0) S.lose();
+      G.shownStars = lives;
+      paintHudStars(lives, lost);
+    }
+  }
+
+  function strykEvents() {
+    const st = G.sk;
+    for (const ev of st.events) {
+      switch (ev.type) {
+        case 'tap': splash(ev.x, ev.y); S.plip(ev.x / C.W); hideTip(); break;
+        case 'hit': G.skFx.squash = Math.max(G.skFx.squash, 0.5 + ev.f * 0.5); S.hit(ev.f); break;
+        case 'bump': bumpFx(ev); S.bump(ev.v, 'shore'); break;
+        case 'crash':
+          if (ev.why === 'whirl') { sinkFx(ev); S.sink(); } else { crashFx(ev); S.bump(400, ev.why === 'log' ? 'log' : 'rock'); S.crash(); }
+          G.skFx.squash = 1;
+          break;
+        case 'respawn': respawnFx(ev); G.skFx.pop = 1; S.pop(); break;
+        case 'pearl':
+          addP({ type: 'ringfx', x: ev.x, y: ev.y, r0: 6, size: 26, life: 0.5, rgb: '255,250,255' });
+          for (let i = 0; i < 8; i++) {
+            const a = (i / 8) * TAU;
+            addP({ type: 'spark', x: ev.x, y: ev.y, vx: Math.cos(a) * 70, vy: Math.sin(a) * 70, drag: 4, size: 4, angle: a, life: 0.5, color: '#fff' });
+          }
+          S.dock(Math.min(6, st.pearls - 1));
+          break;
+        case 'mark': toast(t(ev.n === 1 ? 'strykMark1' : 'strykMark2')); S.star(ev.n - 1); break;
+        case 'complete': onStrykEnd(true); break;
+        case 'over': onStrykEnd(false); break;
+      }
+    }
+    st.events.length = 0;
+  }
+
+  // Løpet er slutt: enten i havn, eller båten tålte ikke flere krasj.
+  function onStrykEnd(home) {
+    G.completed = true;
+    hideTip(true);
+    const st = G.sk, lv = st.lv, n = lv.pearls.length;
+    const far = home ? lv.length : st.far;
+    const stars = SK.starsFor(far, lv.length);
+    const prev = strykRec(lv.id) ? Object.assign({}, strykRec(lv.id)) : null;
+    const r = strykRec(lv.id) || (save.stryk[lv.id] = { best: 0, stars: 0, pearls: 0, plays: 0, done: false });
+    r.best = Math.max(r.best, Math.round(far));
+    r.stars = Math.max(r.stars, stars);
+    r.pearls = Math.max(r.pearls, st.pearls);
+    r.plays = (r.plays || 0) + 1;
+    r.done = r.done || home;
+    persist();
+    const opened = G.skI + 1 < SK.LEVELS.length && !(prev && prev.stars >= 1) && stars >= 1;
+    G.result = {
+      home, stars, far, len: lv.length, pearls: st.pearls, n, rec: r, opened,
+      firstAll: st.pearls === n && !(prev && prev.pearls === n),
+      newBest: !prev || far > prev.best,
+    };
+    G.winAt = G.time + (home ? 1.5 : 1.0);
+    if (home) setTimeout(() => { if (G.completed && G.screen === 'stryk') { S.win(); confetti(); } }, 450);
+  }
+
+  function showStrykWin() {
+    const res = G.result;
+    if (!res || G.screen !== 'stryk') return;
+    $('winTitle').textContent = t('strykEnd' + res.stars);
+    const stars = $('winStars').children;
+    for (let i = 0; i < 3; i++) stars[i].classList.remove('on');
+    $('winStats').textContent = t('strykDist', { m: SK.meters(res.far), M: SK.meters(res.len), pct: Math.floor(res.far / res.len * 100) });
+    $('winBest').hidden = false;
+    $('winBest').textContent = res.newBest ? t('strykRecord') : t('strykBest', { m: SK.meters(res.rec.best) });
+    const box = $('pearlBox');
+    box.className = 'pearl-box';
+    if (res.firstAll) {
+      box.classList.add('found');
+      $('pearlTitle').textContent = t('strykPearlsAll');
+      $('pearlSub').textContent = t('strykPearlsAllSub');
+    } else {
+      box.classList.add(res.rec.pearls === res.n ? 'have' : 'missing');
+      $('pearlTitle').textContent = t('strykPearls', { p: res.pearls, n: res.n });
+      $('pearlSub').textContent = res.rec.pearls === res.n ? t('strykPearlsHave')
+        : t('strykPearlsSub') + (res.rec.pearls > res.pearls ? ' ' + t('strykPearlsBest', { b: res.rec.pearls, n: res.n }) : '');
+    }
+    $('btnRetryTxt').textContent = res.stars < 3 ? t('strykRetry') : t('retry');
+    const nextOk = G.skI + 1 < SK.LEVELS.length && strykOpen(G.skI + 1);
+    $('btnNextTxt').textContent = nextOk ? t('strykNext') : t('menu');
+    $('btnNext').querySelector('use').setAttribute('href', '#i-next');
+    $('btnWinMap').textContent = t('stryk');
+    $('win').hidden = false;
+    for (let i = 0; i < res.stars; i++) {
+      setTimeout(() => { if (!$('win').hidden) { stars[i].classList.add('on'); S.star(i); } }, 380 + i * 300);
+    }
+    if (res.firstAll) setTimeout(() => { if (!$('win').hidden) S.pearl(); }, 480 + res.stars * 300);
+    if (res.opened) setTimeout(() => toast(t('strykOpened', { id: SK.LEVELS[G.skI + 1].id })), 1400);
+  }
+
   /* ---------- MIDLERTIDIG: hopp til bane (testing) ---------- */
   function openJump() {
     $('jumpTitle').textContent = t('jumpTitle');
@@ -8474,6 +9738,8 @@ svg { fill: currentColor; }
     $('btnJump').hidden = !DEV_JUMP;
     $('btnJump').textContent = t('jumpOpen');
     $('btnQuickTxt').textContent = t('quick');
+    $('btnStrykTxt').textContent = t('stryk');
+    $('strykClose').setAttribute('aria-label', t('close'));
     $('dailyDot').hidden = !!save.daily[todayKey()];
     $('dailyClose').setAttribute('aria-label', t('close'));
     $('quickClose').setAttribute('aria-label', t('close'));
@@ -8501,18 +9767,21 @@ svg { fill: currentColor; }
     transition(() => startLevel(anyProgress() ? nextToPlay() : ALL[0]));
   });
   $('btnLevels').addEventListener('click', () => { S.unlock(); S.click(); openMap(); });
-  $('btnLevels2').addEventListener('click', () => { S.click(); if (G.entry && G.entry.mode) leaveMode(); else openMap(G.entry ? G.entry.wi : 0); });
+  $('btnLevels2').addEventListener('click', () => { S.click(); if (G.screen === 'stryk') leaveStryk(); else if (G.entry && G.entry.mode) leaveMode(); else openMap(G.entry ? G.entry.wi : 0); });
   $('btnSettings').addEventListener('click', openSettings);
-  $('btnRestart').addEventListener('click', restart);
+  $('btnRestart').addEventListener('click', () => { if (G.screen === 'stryk') restartStryk(); else restart(); });
   $('btnHint').addEventListener('click', requestHint);
-  $('btnRetry').addEventListener('click', () => { $('win').hidden = true; restart(); });
-  $('btnNext').addEventListener('click', goNext);
-  $('btnWinMap').addEventListener('click', () => { S.click(); if (G.entry && G.entry.mode) leaveMode(); else transition(() => openMap(G.entry ? G.entry.wi : 0)); });
+  $('btnRetry').addEventListener('click', () => { $('win').hidden = true; if (G.screen === 'stryk') restartStryk(); else restart(); });
+  $('btnNext').addEventListener('click', () => { if (G.screen === 'stryk') strykNext(); else goNext(); });
+  $('btnWinMap').addEventListener('click', () => { S.click(); if (G.screen === 'stryk') leaveStryk(); else if (G.entry && G.entry.mode) leaveMode(); else transition(() => openMap(G.entry ? G.entry.wi : 0)); });
   $('btnJump').addEventListener('click', () => { S.unlock(); S.click(); openJump(); });
   $('jumpClose').addEventListener('click', () => { S.click(); $('jump').hidden = true; });
   $('jump').addEventListener('click', (e) => { if (e.target === $('jump')) $('jump').hidden = true; });
   $('btnDaily').addEventListener('click', () => { S.unlock(); S.click(); openDaily(); });
   $('btnQuick').addEventListener('click', () => { S.unlock(); S.click(); openQuick(); });
+  $('btnStryk').addEventListener('click', () => { S.unlock(); S.click(); openStryk(); });
+  $('strykClose').addEventListener('click', () => { S.click(); $('stryk').hidden = true; });
+  $('stryk').addEventListener('click', (e) => { if (e.target === $('stryk')) $('stryk').hidden = true; });
   $('dailyClose').addEventListener('click', () => { S.click(); $('daily').hidden = true; });
   $('quickClose').addEventListener('click', () => { S.click(); $('quick').hidden = true; });
   $('daily').addEventListener('click', (e) => { if (e.target === $('daily')) $('daily').hidden = true; });
@@ -8534,6 +9803,8 @@ svg { fill: currentColor; }
       if (G.screen === 'map') renderMap();
       if (!$('daily').hidden) renderDaily();
       if (!$('quick').hidden) renderQuick();
+      if (!$('stryk').hidden) renderStryk();
+      if (G.screen === 'stryk') strykHud(true);
       S.click();
     });
   }
@@ -8546,6 +9817,7 @@ svg { fill: currentColor; }
     toTitle();
   });
   document.addEventListener('keydown', (e) => {
+    if (G.screen === 'stryk' && (e.key === 'r' || e.key === 'R')) restartStryk();
     if (G.screen !== 'play') return;
     if (e.key === 'r' || e.key === 'R') restart();
     if (e.key === 'h' || e.key === 'H') requestHint();
@@ -8593,6 +9865,7 @@ svg { fill: currentColor; }
     G, startLevel: (id) => startLevel(byId(id)), save: () => save, playerTap, openMap,
     startQuick: (tr) => startLevel(quickEntry(tr)), startDaily: (key) => startLevel(dailyEntry(key || todayKey())),
     openDaily, openQuick, todayKey,
+    startStryk: (i) => startStryk(i || 0), openStryk, sk: () => G.sk,
   };
 })();
 

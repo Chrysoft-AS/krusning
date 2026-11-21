@@ -113,11 +113,20 @@ Verdenene vises som en svingete sti langs en bekk fra dammen til fjorden, med en
 | **Stien** | Hovedløpet med verdener, stjerner og perler | Verden 1–2 | Finnes (285 baner) |
 | **Dagens dam** | Én bane per dag, lik for alle, delbart resultat | Ja | **Laget** (fase 1) |
 | **Rask runde** | Tilfeldig testet brett, velg Lett / Middels / Vrien | Lett er gratis | **Laget** (fase 1) |
+| **Elvestryk** | Elva renner av seg selv og går stadig fortere. Styr båten til sidene med krusninger, tre liv, kom så langt du kan. 15 lange baner | Ja (foreløpig) | **Laget** (nov. 2026) |
 | **Bare vann** | Ingen mål. Trykk og lag musikk mens båtene flyter. For barn og for å slappe av | Ja | Liten, når det passer |
 | **Perlebukta** | Mesterbaner for perlejegere | Fullversjon | Fase 4 |
 | **Baneverkstedet** | Lag egne baner med dra og slipp, del dem som en kort kode | Fullversjon | Senere |
 
 Vi lager **ikke** tidsløp eller modus med «game over». Det bryter med roen som er hele poenget.
+
+### Elvestryk (i koden: Stryket)
+
+- Elva renner av seg selv og går fortere og fortere. Trykk ved siden av båten for å dytte den til siden. Elvebredden spretter bare; steiner, stokker og virvler gir krasj.
+- Tre liv. Etter krasj starter du litt bak der det skjedde, og elva tar seg rolig opp igjen. Tre krasj, og løpet er over.
+- Hvert stryk er langt (2,6–6 km, 2,5–5 minutter helt ned). De fleste blir slått ut på veien; målet er å komme lengst mulig. Stjerner ved en tredel, to tredeler og i havn. Rekorden vises som et flagg ved bredden.
+- 15 baner: Første stryk, Strie strømmer, Svingete elv, Virvelvannet, Juvet, Trange svinger, Malstrømmen, Steinrøysa, Steinsprang, Sidestrømmer, Tømmerfløting, Vandrende steiner, Stokk og stein, Flomstryket og Villmarka. Hver bane har sitt utvalg av hindre, og Flomstryket og Villmarka har alle.
+- Banene bygges av oppskrifter med frø, så de er like for alle. En robot sjekker at hver bane går an å klare helt ned.
 
 ### Rask runde – hvordan tilfeldige brett blir gode
 

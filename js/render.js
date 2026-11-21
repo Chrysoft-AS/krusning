@@ -1538,5 +1538,246 @@
     }
   }
 
+
+  /* ---------- Stryket (elvestryk) ---------- */
+  // Egen tegning for elva: bredder, skum og hindringer ruller nedover,
+  // mens båten ligger fast. Gjenbruker stein, stokk, virvel og båt.
+
+  function hash(n) { let x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+
+  R.drawStryk = function (st, view) {
+    const Sx = root.Stryket, K = Sx.K, lv = st.lv;
+    const ctx = R.ctx, t = view.time;
+    const Y = (d) => Sx.sy(st, d);
+    // synlig område i dam-enheter (elva går over hele skjermen)
+    const vy0 = -R.oy / R.s - 12, vy1 = (R.cssH - R.oy) / R.s + 12;
+    const vx0 = -R.ox / R.s - 12, vx1 = (R.cssW - R.ox) / R.s + 12;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    worldTransform(ctx);
+    const gg = ctx.createLinearGradient(0, vy0, 0, vy1);
+    gg.addColorStop(0, PAL.grassA); gg.addColorStop(1, PAL.grassB);
+    ctx.fillStyle = gg; ctx.fillRect(vx0, vy0, vx1 - vx0, vy1 - vy0);
+    drawStrykLand(ctx, st, lv, Y, vy0, vy1);
+    // sandkant og vann mellom breddene
+    const wob = (d, k) => Math.sin(d * 0.05 + k) * 1.4 + Math.sin(d * 0.013 + k) * 1.8;
+    const riverPath = (off, wk) => {
+      ctx.beginPath();
+      for (let y = vy0; y <= vy1 + 8; y += 8) { const d = st.dist + (K.BOAT_Y - y); ctx.lineTo(Sx.bankL(lv, d) - off - wob(d, 1) * wk, y); }
+      for (let y = vy1 + 8; y >= vy0; y -= 8) { const d = st.dist + (K.BOAT_Y - y); ctx.lineTo(Sx.bankR(lv, d) + off + wob(d, 2) * wk, y); }
+      ctx.closePath();
+    };
+    ctx.fillStyle = PAL.sandEdge; riverPath(12, 1); ctx.fill();
+    ctx.fillStyle = PAL.sand; riverPath(9, 0.8); ctx.fill();
+    ctx.save();
+    riverPath(0, 0); ctx.clip();
+    const wg = ctx.createLinearGradient(0, vy0, 0, vy1);
+    wg.addColorStop(0, PAL.waterTop); wg.addColorStop(0.5, PAL.waterMid); wg.addColorStop(1, PAL.waterBot);
+    ctx.fillStyle = wg; ctx.fillRect(vx0, vy0, vx1 - vx0, vy1 - vy0);
+    // grunt vann langs bredden
+    for (let i = 5; i >= 0; i--) {
+      ctx.globalAlpha = 0.08; ctx.strokeStyle = PAL.shallow; ctx.lineWidth = 4 + i * 5;
+      riverPath(0, 0); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    // lysmønster som ruller med elva
+    if (R.causticPat) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.09;
+      ctx.fillStyle = R.causticPat;
+      ctx.scale(2.1, 2.1);
+      ctx.translate((t * 2) % 96, (st.dist / 2.1) % 96);
+      ctx.fillRect(-150, -300, C.W / 2.1 + 300, C.H / 2.1 + 500);
+      ctx.restore();
+    }
+    // skumstriper i strømmen
+    const top = st.dist + K.BOAT_Y - vy0, bot = st.dist + K.BOAT_Y - vy1; // synlig strekning (d)
+    ctx.lineCap = 'round';
+    const gap = 38;
+    for (let j = Math.floor(bot / gap); j <= Math.ceil(top / gap); j++) {
+      for (let k = 0; k < 2; k++) {
+        const h = hash(j * 3 + k * 17);
+        const d = j * gap + h * gap;
+        const L = Sx.bankL(lv, d) + 14, Rr = Sx.bankR(lv, d) - 14;
+        const x = L + hash(j * 7 + k * 5 + 1) * (Rr - L), y = Y(d);
+        const len = 10 + h * 18;
+        ctx.strokeStyle = `rgba(255,255,255,${0.12 + 0.12 * hash(j + k * 9)})`;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + len); ctx.stroke();
+      }
+    }
+    // sidestrømmer: piler som glir sidelengs
+    for (const c of (lv.drifts || [])) {
+      const y1 = Y(c.d + c.len), y2 = Y(c.d);
+      if (y2 < -20 || y1 > C.H + 20) continue;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(c.x1, y1, c.x2 - c.x1, y2 - y1); ctx.clip();
+      ctx.fillStyle = 'rgba(215,250,255,0.07)';
+      ctx.fillRect(c.x1, y1, c.x2 - c.x1, y2 - y1);
+      const dir = Math.sign(c.vx), s = 6, sp = 34;
+      const shift = ((t * Math.abs(c.vx) * 0.8) % sp) * dir;
+      ctx.lineWidth = 2.2; ctx.lineJoin = 'round';
+      for (let yy = y1 + 20; yy < y2; yy += 40) {
+        for (let xx = c.x1 - sp; xx < c.x2 + sp; xx += sp) {
+          const x = xx + shift + ((yy - y1) / 40 % 2) * sp / 2;
+          const edge = Math.min(yy - y1, y2 - yy);
+          ctx.strokeStyle = `rgba(255,255,255,${Math.max(0, Math.min(1, edge / 30)) * 0.45})`;
+          ctx.beginPath(); ctx.moveTo(x - dir * s, yy - s); ctx.lineTo(x, yy); ctx.lineTo(x - dir * s, yy + s); ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+    for (const w of (lv.whirls || [])) {
+      const y = Y(w.d);
+      if (y < -w.r || y > C.H + w.r) continue;
+      drawWhirl(ctx, { x: w.x, y, r: w.r, power: 1.3, dir: w.dir || 1 }, t);
+    }
+    // havna i mål
+    const fy = Y(lv.length);
+    if (fy > -60 && fy < C.H + 60) drawStrykDock(ctx, lv, fy, t, st.done);
+    // bøyer ved en tredel og to tredeler (stjerner)
+    (lv.marks || []).forEach((cp, i) => {
+      const y = Y(cp.d);
+      if (y < -20 || y > C.H + 20) return;
+      const L = Sx.bankL(lv, cp.d), Rr = Sx.bankR(lv, cp.d), passed = st.mark > i;
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1.1; ctx.setLineDash([3, 4]);
+      ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(Rr, y); ctx.stroke(); ctx.setLineDash([]);
+      const n = Math.max(3, Math.round((Rr - L) / 34));
+      for (let k = 0; k <= n; k++) {
+        const x = L + 6 + (Rr - L - 12) * (k / n), bob = Math.sin(t * 2.4 + k) * 0.8;
+        ctx.fillStyle = 'rgba(10,50,75,0.2)';
+        ctx.beginPath(); ctx.arc(x + 1, y + 1.6 + bob, 3.4, 0, TAU); ctx.fill();
+        ctx.fillStyle = k % 2 ? '#ffffff' : passed ? '#7fe0b5' : '#ffd25e';
+        ctx.beginPath(); ctx.arc(x, y + bob, 3.4, 0, TAU); ctx.fill();
+      }
+    });
+    // perler
+    (lv.pearls || []).forEach((p, i) => {
+      if (st.got[i]) return;
+      const y = Y(p.d);
+      if (y < -20 || y > C.H + 20) return;
+      drawPearl(ctx, p.x, y + Math.sin(t * 2 + i) * 1.2, t + i);
+    });
+    // krusninger
+    for (const rp of st.ripples) if (rp.r > 1) drawRing(ctx, { x: rp.x, y: rp.y, range: K.RIPPLE_RANGE, p: 1 }, rp.r);
+    drawParticles(ctx, view.particles, 'under');
+    ctx.restore();
+    // skumkant langs bredden
+    ctx.strokeStyle = PAL.foam; ctx.lineWidth = 1.6;
+    riverPath(0.8, 0); ctx.stroke();
+    (lv.rocks || []).forEach((r, i) => {
+      const y = Y(r.d);
+      if (y < -40 || y > C.H + 40) return;
+      drawRock(ctx, { x: Sx.rockX(st, r), y, r: r.r, seed: i * 7 + 3 }, t);
+    });
+    (lv.logs || []).forEach((g, i) => {
+      const e = Sx.logEnds(st, g);
+      if (Math.max(e.y1, e.y2) < -30 || Math.min(e.y1, e.y2) > C.H + 30) return;
+      drawLog(ctx, { x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, r: K.LOG_R }, i * 13 + 5);
+    });
+    // flagg ved bredden der rekorden din er
+    if (view.bestD > 0 && view.bestD < lv.length) {
+      const y = Y(view.bestD);
+      if (y > -40 && y < C.H + 40) drawStrykFlag(ctx, Sx.bankR(lv, view.bestD) + 6, y, t);
+    }
+    const fx = view.boatFx || {};
+    const sinkU = st.sink > 0 ? 1 - st.sink / K.SINK_TIME : 0;
+    drawBoat(ctx, {
+      id: 0, x: st.x, y: st.y, vx: st.vx, vy: st.done ? 0 : -60, color: view.color || 0,
+      dock: st.done ? 0 : -1, sink: sinkU > 0 ? Math.min(1, sinkU * 1.4) * C.SINK_TIME : 0,
+    }, t, fx, null);
+    drawParticles(ctx, view.particles, 'over');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  };
+
+  // Lite rødt flagg på en stang (rekorden din).
+  function drawStrykFlag(ctx, x, y, t) {
+    ctx.fillStyle = 'rgba(10,50,40,0.25)';
+    ctx.beginPath(); ctx.ellipse(x + 3, y + 2, 6, 2.5, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#6b4a2e'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 30); ctx.stroke();
+    const w = Math.sin(t * 5) * 2;
+    ctx.fillStyle = '#ff6b5e';
+    ctx.beginPath(); ctx.moveTo(x, y - 30); ctx.quadraticCurveTo(x + 9, y - 27 + w, x + 18, y - 25); ctx.lineTo(x, y - 19); ctx.closePath(); ctx.fill();
+  }
+
+  function drawPearl(ctx, x, y, t) {
+    ctx.fillStyle = 'rgba(10,50,75,0.22)';
+    ctx.beginPath(); ctx.arc(x + 1.2, y + 2, 7, 0, TAU); ctx.fill();
+    ctx.strokeStyle = `rgba(255,255,255,${0.35 + 0.2 * Math.sin(t * 3)})`; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y, 10 + Math.sin(t * 3) * 1.5, 0, TAU); ctx.stroke();
+    const g = ctx.createRadialGradient(x - 2.5, y - 2.5, 0.5, x, y, 7.5);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(0.55, '#f3eefc'); g.addColorStop(1, '#c9bfe6');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, 7, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.beginPath(); ctx.arc(x - 2.4, y - 2.6, 1.7, 0, TAU); ctx.fill();
+  }
+
+  // Land langs elva: gresstrå, siv, småstein og blomster (fast plass langs elva).
+  function drawStrykLand(ctx, st, lv, Y, vy0, vy1) {
+    const Sx = root.Stryket, K = Sx.K;
+    const top = st.dist + K.BOAT_Y - vy0 + 40, bot = st.dist + K.BOAT_Y - vy1 - 40;
+    ctx.lineCap = 'round';
+    for (const side of [-1, 1]) {
+      const edge = (d) => side < 0 ? Sx.bankL(lv, d) : Sx.bankR(lv, d);
+      // gresstrå
+      const bs = 9;
+      for (let j = Math.floor(bot / bs); j <= Math.ceil(top / bs); j++) {
+        for (let k = 0; k < 3; k++) {
+          const h = hash(j * 5 + k * 31 + (side > 0 ? 900 : 0));
+          const d = j * bs + h * bs, e = edge(d);
+          const x = e + side * (16 + hash(j * 3 + k + side * 7) * 150), y = Y(d);
+          ctx.strokeStyle = PAL.blade[(j + k) % 3]; ctx.lineWidth = 1.1;
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (h - 0.5) * 3, y - 3 - h * 4); ctx.stroke();
+        }
+      }
+      const step = 40;
+      for (let j = Math.floor(bot / step); j <= Math.ceil(top / step); j++) {
+        const h = hash(j * 11 + (side > 0 ? 500 : 0));
+        const d = j * step + h * step, y = Y(d), e = edge(d);
+        const x = e + side * (17 + hash(j * 5 + side) * 60);
+        if (h < 0.35) drawReeds(ctx, x, y, rng(j * 13 + (side > 0 ? 7 : 3)));
+        else if (h < 0.55) {
+          ctx.fillStyle = 'rgba(150,130,90,0.5)';
+          ctx.beginPath(); ctx.ellipse(x, y, 3.2, 2.2, 0, 0, TAU); ctx.fill();
+        } else if (h < 0.8) {
+          const col = j % 3 === 0 ? '#fff6e0' : j % 3 === 1 ? '#ffd1e3' : '#fff2a6';
+          for (let p = 0; p < 5; p++) { const a = (p / 5) * TAU; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x + Math.cos(a) * 1.7, y + Math.sin(a) * 1.7, 1.25, 0, TAU); ctx.fill(); }
+          ctx.fillStyle = '#f5b83d'; ctx.beginPath(); ctx.arc(x, y, 0.9, 0, TAU); ctx.fill();
+        }
+      }
+    }
+  }
+
+  // Målet: en brygge tvers over elva med en åpning og bøyer rundt havna.
+  function drawStrykDock(ctx, lv, y, t, done) {
+    const Sx = root.Stryket;
+    const L = Sx.bankL(lv, lv.length), Rr = Sx.bankR(lv, lv.length), x = lv.dockX;
+    // rolig vann i havna
+    const g = ctx.createRadialGradient(x, y - 30, 4, x, y - 30, 70);
+    g.addColorStop(0, 'rgba(255,240,180,0.35)'); g.addColorStop(1, 'rgba(255,240,180,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y - 30, 70, 0, TAU); ctx.fill();
+    // brygger fra hver side
+    for (const [a, b] of [[L - 10, x - 38], [x + 38, Rr + 10]]) {
+      ctx.fillStyle = 'rgba(10,50,75,0.22)'; ctx.fillRect(a, y - 7 + 3, b - a, 16);
+      ctx.fillStyle = PAL.log; ctx.fillRect(a, y - 7, b - a, 16);
+      ctx.fillStyle = PAL.logLight;
+      for (let px = a; px < b; px += 9) ctx.fillRect(px + 1, y - 6, 7, 14);
+      ctx.fillStyle = PAL.log;
+      ctx.fillRect(a, y - 8, b - a, 2.5);
+    }
+    for (const px of [x - 38, x + 38]) {
+      ctx.fillStyle = '#7a4f2a'; ctx.beginPath(); ctx.arc(px, y + 1, 5.5, 0, TAU); ctx.fill();
+      ctx.fillStyle = PAL.logEnd; ctx.beginPath(); ctx.arc(px, y + 1, 3.6, 0, TAU); ctx.fill();
+    }
+    // flagg
+    ctx.strokeStyle = '#6b4a2e'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(x - 38, y); ctx.lineTo(x - 38, y - 26); ctx.stroke();
+    const wave = Math.sin(t * 4) * 2;
+    ctx.fillStyle = done ? '#7fe0b5' : '#ffd166';
+    ctx.beginPath(); ctx.moveTo(x - 38, y - 26); ctx.quadraticCurveTo(x - 28, y - 24 + wave, x - 20, y - 21); ctx.lineTo(x - 38, y - 15); ctx.closePath(); ctx.fill();
+  }
+
   root.Render = R;
 })(typeof window !== 'undefined' ? window : globalThis);
