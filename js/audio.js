@@ -123,6 +123,12 @@
     tone({ f: f * 0.8, f2: f * 1.4, glide: 0.05, dur: 0.1, vol: 0.09, send: 0.5 });
     noise({ dur: 0.04, freq: 4200, q: 0.8, vol: 0.025, filter: 'highpass' });
   };
+  // Tidevannet skifter: et mykt sus.
+  S.tide = function () {
+    if (!ready()) return;
+    noise({ dur: 0.7, freq: 600, q: 0.6, vol: 0.05 });
+    tone({ f: 110, f2: 90, glide: 0.5, dur: 0.6, vol: 0.04, send: 0.6 });
+  };
   // Frosk som hopper: lite «kvekk».
   S.frog = function () {
     if (!ready()) return;
@@ -154,7 +160,7 @@
     if (!ready()) return;
     const k = Math.min(1, v / 320);
     if (k < 0.08) return;
-    if (what === 'rock' || what === 'shore') {
+    if (what === 'rock' || what === 'shore' || what === 'sand') {
       tone({ f: 150, f2: 90, dur: 0.09, vol: 0.22 * k, type: 'triangle' });
       noise({ dur: 0.05, freq: 900, q: 1.2, vol: 0.12 * k });
     } else if (what === 'log') {

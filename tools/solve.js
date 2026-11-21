@@ -44,6 +44,7 @@ function settle(w, maxT) {
 
 function play(level, taps) {
   const w = Engine.createWorld(level);
+  if (level.noTimber) w.noTimber = true;
   for (const [x, y] of taps) {
     Engine.tap(w, x, y);
     if (settle(w)) return { w, done: true };
@@ -127,8 +128,9 @@ function makeSolver(threads) {
   async function analyze(level, o) {
     o = Object.assign({ grid: 9, beam: 24, maxDepth: 4, stopDepth: 1 }, o || {});
     // Tømmer i elva: søket regner uten stokkene (som om du alltid treffer et
-    // godt øyeblikk). timingCheck() sjekker etterpå at øyeblikkene finnes.
-    if (level.timber) level = Object.assign({}, level, { timber: undefined });
+    // godt øyeblikk), men en båt som blir liggende i elva, blir fortsatt tatt.
+    // timingCheck() sjekker etterpå at de gode øyeblikkene finnes.
+    if (level.timber) level = Object.assign({}, level, { noTimber: true });
     const fine = gridPoints(Math.max(3, o.grid / 2));
     const r1 = await evaluate(level, [], fine);
     const wins1 = r1.filter((r) => r.done);

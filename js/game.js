@@ -269,6 +269,7 @@
         case 'fall': fallFx(ev); S.fall(); break;
         case 'respawn': respawnFx(ev); S.pop(); break;
         case 'drop': dropFx(ev); S.drop(ev.x / C.W); break;
+        case 'tide': S.tide(); break;
         case 'frog': S.frog(); break;
         case 'land': splash(ev.x, ev.y); S.land(); break;
         case 'switch': switchFx(ev); if (ev.opened) S.gate(); break;

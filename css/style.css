@@ -262,8 +262,9 @@ svg { fill: currentColor; }
 .lock-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--sun), #ffdf7e); border-radius: 8px; transition: width 0.6s ease; }
 
 .world-nav { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
-.world-dots { display: flex; gap: 8px; }
-.world-dots i { width: 9px; height: 9px; border-radius: 50%; background: rgba(255, 255, 255, 0.45); }
+/* mange verdener: små prikker som brytes til to rader om det trengs */
+.world-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; max-width: 230px; }
+.world-dots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.45); }
 .world-dots i.on { background: #fff; transform: scale(1.25); }
 
 /* ---------- kort ---------- */

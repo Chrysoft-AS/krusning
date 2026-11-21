@@ -269,8 +269,9 @@ svg { fill: currentColor; }
 .lock-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--sun), #ffdf7e); border-radius: 8px; transition: width 0.6s ease; }
 
 .world-nav { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
-.world-dots { display: flex; gap: 8px; }
-.world-dots i { width: 9px; height: 9px; border-radius: 50%; background: rgba(255, 255, 255, 0.45); }
+/* mange verdener: små prikker som brytes til to rader om det trengs */
+.world-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; max-width: 230px; }
+.world-dots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.45); }
 .world-dots i.on { background: #fff; transform: scale(1.25); }
 
 /* ---------- kort ---------- */
@@ -807,6 +808,10 @@ svg { fill: currentColor; }
     SINK_R: 9,
     SINK_TIME: 1.1,
     TIMBER_R: 9,                  // tømmerstokk i elva: tykkelse (radius)
+    MAEL_SWIRL: 420,              // malstrøm: kraftig sirkelbevegelse…
+    MAEL_PULL: 120,               // …og svakere sug inn mot midten
+    MAEL_CORE: 16,                // malstrøm: midt i blir båten dratt ned
+    MAEL_MAX: 6,                  // malstrøm: høyst så mange sekunder rundt før den drar båten ned
 
     FALL_KICK: 70,                // fart nedover når en båt går utfor en foss
     FALL_LIP: 2,                  // båter under fossen kommer ikke opp igjen
@@ -911,6 +916,7 @@ svg { fill: currentColor; }
       bodies: [], boats: [], pads: [],
       docks: [], rocks: [], logs: [], whirls: [], currents: [], falls: [], cascades: [],
       rains: [], walls: [], gates: [], switches: [], frogs: [], ice: [], winds: [], timber: [],
+      banks: [], maels: [], tide: null, tideI: 0, tideT: -9,
       ripples: [], events: [], rippleSeq: 0, tapStep: 0,
       dark: !!level.dark,
       done: false, doneAt: -1,
@@ -976,6 +982,14 @@ svg { fill: currentColor; }
     // mellomrom. Mellomrommene lages fra et frø, så de er like hver gang du
     // spiller banen. Treffer en stokk båten, blir den knust og starter på nytt.
     (level.timber || []).forEach((t, i) => w.timber.push(makeTimber(t, i)));
+    // Tidevann: vannstanden skifter for hvert trykk etter et fast mønster
+    // (2 = flo, 1 = middels, 0 = fjære). Sandbanker med høyde h stikker opp
+    // når vannstanden er lavere enn h, og er da land som stopper båter.
+    if (level.tide) w.tide = level.tide.slice();
+    (level.banks || []).forEach((k) => w.banks.push({ x1: k.x1, y1: k.y1, x2: k.x2 != null ? k.x2 : k.x1, y2: k.y2 != null ? k.y2 : k.y1, r: k.r || 20, h: k.h || 1 }));
+    // Malstrøm: en stor virvel som slynger båten rundt og ut igjen. Havner den
+    // midt i (eller går rundt for lenge), blir den dratt ned og starter på nytt.
+    (level.maels || []).forEach((m) => w.maels.push({ x: m.x, y: m.y, r: m.r || 110, dir: m.dir || 1, power: m.power || 1 }));
     // Molo: en mur som stopper båter og krusninger (skygge bak).
     (level.walls || []).forEach((l) => w.walls.push({ x1: l.x1, y1: l.y1, x2: l.x2, y2: l.y2, r: C.WALL_R }));
     // Sluseport: som en molo, men åpnes for godt når en båt treffer bryteren.
@@ -1037,8 +1051,13 @@ svg { fill: currentColor; }
     t = t < 0 ? 0 : t > 1 ? 1 : t;
     return Math.hypot(px - (s.x1 + abx * t), py - (s.y1 + aby * t));
   }
+  // Vannstanden nå, og om en sandbank stikker opp.
+  function tideLevel(w) { return w.tide ? w.tide[w.tideI % w.tide.length] : 2; }
+  function bankUp(w, k) { return tideLevel(w) < k.h; }
+
   function onWall(w, x, y, m) {
     for (const s of w.walls) if (segDist(x, y, s) < s.r + m) return true;
+    for (const k of w.banks) if (bankUp(w, k) && segDist(x, y, k) < k.r + m) return true;
     for (const g of w.gates) if (!g.open && segDist(x, y, g) < g.r + m) return true;
     return false;
   }
@@ -1064,6 +1083,7 @@ svg { fill: currentColor; }
 
   function tap(w, x, y) {
     if (!canTap(w, x, y)) return false;
+    if (w.tide) { w.tideI++; w.tideT = w.t; w.events.push({ type: 'tide', level: tideLevel(w) }); }
     addRipple(w, x, y, 1, C.RIPPLE_RANGE, false, [], 'tap');
     w.tapStep = w.steps;
     w.taps++;
@@ -1213,6 +1233,24 @@ svg { fill: currentColor; }
       }
       if (b.sink > 0) continue;
 
+      // malstrømmer: sterk sirkelbevegelse, svakt sug, og ned i midten
+      let inMael = false;
+      for (const m of w.maels) {
+        const dx = m.x - b.x, dy = m.y - b.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d >= m.r || d < 1e-6) continue;
+        inMael = true;
+        if (b.kind === 'boat' && (d < C.MAEL_CORE || b.mt > C.MAEL_MAX)) { startSink(w, b, m); break; }
+        const s = 1 - d / m.r;
+        const swirl = C.MAEL_SWIRL * m.power * Math.sin(Math.PI * Math.min(1, s * 1.4)) * m.dir;
+        const pull = C.MAEL_PULL * m.power * s;
+        const ux = dx / d, uy = dy / d;
+        b.vx += (ux * pull - uy * swirl) * dt / b.mass;
+        b.vy += (uy * pull + ux * swirl) * dt / b.mass;
+      }
+      b.mt = inMael ? (b.mt || 0) + dt : 0;
+      if (b.sink > 0) continue;
+
       // fosser ovenfra: dytter bort, og midt i krasjer båten
       for (const c of w.cascades) {
         const dx = b.x - c.x, dy = b.y - c.y;
@@ -1272,6 +1310,7 @@ svg { fill: currentColor; }
           collideStatic(w, b, l.x1 + abx * t, l.y1 + aby * t, l.r, C.REST_STATIC, report, 'log');
         }
         for (const s of w.walls) collideSeg(w, b, s, report, 'rock');
+        for (const k of w.banks) if (bankUp(w, k)) collideSeg(w, b, k, report, 'sand');
         for (const g of w.gates) if (!g.open) collideSeg(w, b, g, report, 'log');
         collideBounds(w, b, report);
         collideFalls(w, b, report);
@@ -1560,7 +1599,7 @@ svg { fill: currentColor; }
 
   const Engine = {
     C, createWorld, step, tap, canTap, preview, previewFrogs, falloff, insidePond, isSettled, isCalm, clone,
-    levelAt, eachTimber, fallSide, blocked, nextDrop, pathDist,
+    levelAt, eachTimber, tideLevel, bankUp, fallSide, blocked, nextDrop, pathDist,
   };
   root.Engine = Engine;
   if (typeof module !== 'undefined' && module.exports) module.exports = Engine;
@@ -1573,7 +1612,7 @@ svg { fill: currentColor; }
  * ---------------------------------------------------------------------
  * Dette er fila du (eller AI) oftest endrer. Hver bane er bare data.
  *
- * Dammen er 360 bred og 600 høy. (0,0) er øverst til venstre.
+ * Dammen er 360 bred og 600 høy. (0, 0) er øverst til venstre.
  *   boats:  båter            { x, y }            (color: valgfri farge-indeks)
  *   docks:  havner           { x, y }            (color: kun båt med samme farge)
  *   rocks:  steiner          { x, y, r }
@@ -1603,9 +1642,20 @@ svg { fill: currentColor; }
  *                             Legg alltid en strøm (currents) under. Treffer en
  *                             stokk båten, eller blir den liggende fast i elva,
  *                             blir den knust og starter på nytt)
+ *   tide:   tidevann         [2, 1, 0, 1]        (vannstanden skifter for hvert trykk:
+ *                                                 2 = flo, 1 = middels, 0 = fjære.
+ *                                                 Første tall gjelder før første trykk)
+ *   banks:  sandbanke        { x1, y1, x2, y2, r, h } (land når vannstanden er lavere
+ *                                                 enn h; uten x2/y2 blir det en rund holme.
+ *                                                 Stopper båter, men ikke krusninger)
+ *   maels:  malstrøm         { x, y, r, dir }    (slynger båter rundt og ut igjen;
+ *                                                 midt i, eller etter for lang tid, drar
+ *                                                 den båten ned)
  *   par:    antall krusninger for ★★★
  *   pearl:  beste løsning vi kjenner (gir perle)
  *   hand:   viser en animert hånd (kun i første bane)
+ *
+ * Baner med «// frø N» foran er laget med tools/worldgen.js (se CLAUDE.md).
  *
  * Etter endringer: kjør `node tools/solve.js <bane-id>` for å sjekke
  * at banen kan løses og at par/perle/hint stemmer.
@@ -2672,9 +2722,2260 @@ svg { fill: currentColor; }
             { x1: 420, y1: 365, x2: -60, y2: 365, speed: 60, len: 60, gap: [0.9, 2.6], seed: 18 },
           ],
         },
+        // frø 800028
+        {
+          id: '8-4',
+          name: { no: 'Fløterstanga', en: 'The rafter\'s pole' },
+          par: 3, pearl: 2,
+          boats: [{ x: 193, y: 487 }],
+          docks: [{ x: 139, y: 96 }],
+          rocks: [{ x: 135, y: 318, r: 21 }],
+          currents: [{ x: 0, y: 217, w: 360, h: 71, vx: 41, vy: 0 }],
+          timber: [{ x1: -60, y1: 253, x2: 420, y2: 253, speed: 41, len: 57, gap: [0.8, 2.1], seed: 966 }],
+        },
+        // frø 800052
+        {
+          id: '8-5',
+          name: { no: 'Elvebredden', en: 'The riverbank' },
+          par: 3, pearl: 2,
+          boats: [{ x: 84, y: 72 }],
+          docks: [{ x: 254, y: 470 }],
+          rocks: [{ x: 115, y: 228, r: 27 }],
+          logs: [{ x1: 168, y1: 116, x2: 260, y2: 160, r: 8 }],
+          currents: [{ x: 0, y: 315, w: 360, h: 83, vx: -55, vy: 0 }],
+          timber: [{ x1: 420, y1: 356, x2: -60, y2: 356, speed: 55, len: 55, gap: [0.7, 2.3], seed: 261 }],
+        },
+        // frø 800022
+        {
+          id: '8-6',
+          name: { no: 'Tømmer og stein', en: 'Logs and stones' },
+          par: 3, pearl: 2,
+          boats: [{ x: 201, y: 143 }],
+          docks: [{ x: 60, y: 504 }],
+          rocks: [{ x: 162, y: 477, r: 27 }, { x: 295, y: 160, r: 27 }],
+          logs: [{ x1: 76, y1: 161, x2: 156, y2: 183, r: 8 }],
+          currents: [{ x: 0, y: 200, w: 360, h: 85, vx: -57, vy: 0 }, { x: 0, y: 324, w: 360, h: 74, vx: -49, vy: 0 }],
+          timber: [{ x1: 420, y1: 242, x2: -60, y2: 242, speed: 57, len: 52, gap: [0.6, 1.8], seed: 935 }, { x1: 420, y1: 361, x2: -60, y2: 361, speed: 49, len: 63, gap: [0.9, 2.2], seed: 49 }],
+        },
+        // frø 800043
+        {
+          id: '8-7',
+          name: { no: 'Stokkevakta', en: 'Log watch' },
+          par: 3, pearl: 2,
+          boats: [{ x: 120, y: 301 }, { x: 159, y: 516 }],
+          docks: [{ x: 175, y: 93 }, { x: 211, y: 280 }],
+          currents: [{ x: 0, y: 336, w: 360, h: 80, vx: 51, vy: 0 }, { x: 0, y: 167, w: 360, h: 76, vx: 42, vy: 0 }],
+          timber: [{ x1: -60, y1: 376, x2: 420, y2: 376, speed: 51, len: 64, gap: [0.7, 1.9], seed: 384 }, { x1: -60, y1: 205, x2: 420, y2: 205, speed: 42, len: 55, gap: [0.6, 2.6], seed: 917 }],
+        },
+        // frø 800029
+        {
+          id: '8-8',
+          name: { no: 'Brua', en: 'The bridge' },
+          par: 4, pearl: 3,
+          boats: [{ x: 259, y: 440 }, { x: 129, y: 507 }],
+          docks: [{ x: 296, y: 58 }, { x: 83, y: 112 }],
+          rocks: [{ x: 54, y: 240, r: 29 }],
+          currents: [{ x: 0, y: 286, w: 360, h: 80, vx: 55, vy: 0 }],
+          timber: [{ x1: -60, y1: 326, x2: 420, y2: 326, speed: 55, len: 64, gap: [1, 2], seed: 224 }],
+        },
+        // frø 800034
+        {
+          id: '8-9',
+          name: { no: 'To elver', en: 'Two rivers' },
+          par: 4, pearl: 3,
+          boats: [{ x: 180, y: 451 }, { x: 71, y: 467 }],
+          docks: [{ x: 79, y: 97 }, { x: 194, y: 124 }],
+          rocks: [{ x: 123, y: 399, r: 21 }],
+          currents: [{ x: 0, y: 206, w: 360, h: 70, vx: -57, vy: 0 }],
+          timber: [{ x1: 420, y1: 241, x2: -60, y2: 241, speed: 57, len: 66, gap: [0.7, 1.7], seed: 318 }],
+        },
+        // frø 800031
+        {
+          id: '8-10',
+          name: { no: 'Strie strømmer', en: 'Strong currents' },
+          par: 4, pearl: 3,
+          boats: [{ x: 256, y: 84 }, { x: 107, y: 127 }],
+          docks: [{ x: 311, y: 409 }, { x: 68, y: 375 }],
+          rocks: [{ x: 316, y: 329, r: 22 }],
+          logs: [{ x1: 163, y1: 422, x2: 83, y2: 462, r: 8 }],
+          currents: [{ x: 0, y: 217, w: 360, h: 79, vx: 53, vy: 0 }],
+          timber: [{ x1: -60, y1: 256, x2: 420, y2: 256, speed: 53, len: 59, gap: [0.8, 2.5], seed: 487 }],
+        },
+        // frø 800013
+        {
+          id: '8-11',
+          name: { no: 'Hurtig tømmer', en: 'Fast timber' },
+          par: 4, pearl: 3,
+          boats: [{ x: 205, y: 511 }, { x: 193, y: 403 }],
+          docks: [{ x: 249, y: 181 }, { x: 89, y: 62 }],
+          rocks: [{ x: 150, y: 178, r: 28 }],
+          currents: [{ x: 0, y: 252, w: 360, h: 73, vx: -41, vy: 0 }],
+          timber: [{ x1: 420, y1: 289, x2: -60, y2: 289, speed: 41, len: 53, gap: [0.7, 2.2], seed: 934 }],
+        },
+        // frø 800039
+        {
+          id: '8-12',
+          name: { no: 'Elvekrysset', en: 'River crossing' },
+          par: 4, pearl: 3,
+          boats: [{ x: 251, y: 491 }, { x: 97, y: 479 }],
+          docks: [{ x: 138, y: 95 }, { x: 228, y: 301 }],
+          rocks: [{ x: 289, y: 113, r: 27 }, { x: 167, y: 456, r: 23 }],
+          currents: [{ x: 0, y: 343, w: 360, h: 79, vx: -57, vy: 0 }, { x: 0, y: 158, w: 360, h: 79, vx: -48, vy: 0 }],
+          timber: [{ x1: 420, y1: 383, x2: -60, y2: 383, speed: 57, len: 68, gap: [0.9, 2], seed: 243 }, { x1: 420, y1: 198, x2: -60, y2: 198, speed: 48, len: 62, gap: [0.7, 2.2], seed: 237 }],
+        },
+        // frø 800001
+        {
+          id: '8-13',
+          name: { no: 'Flom', en: 'Flood' },
+          par: 4, pearl: 3,
+          boats: [{ x: 108, y: 112 }, { x: 241, y: 129 }],
+          docks: [{ x: 192, y: 456 }, { x: 240, y: 521 }],
+          rocks: [{ x: 277, y: 392, r: 18 }],
+          whirls: [{ x: 95, y: 468, r: 52, power: 1 }],
+          currents: [{ x: 0, y: 280, w: 360, h: 75, vx: -57, vy: 0 }],
+          timber: [{ x1: 420, y1: 317, x2: -60, y2: 317, speed: 57, len: 65, gap: [1, 2.3], seed: 561 }],
+        },
+        // frø 800054
+        {
+          id: '8-14',
+          name: { no: 'Stille elv', en: 'Quiet river' },
+          par: 3, pearl: 2,
+          boats: [{ x: 305, y: 489 }],
+          docks: [{ x: 96, y: 78 }],
+          rocks: [{ x: 182, y: 305, r: 25 }],
+          logs: [{ x1: 262, y1: 162, x2: 290, y2: 78, r: 8 }],
+          currents: [{ x: 0, y: 337, w: 360, h: 70, vx: -51, vy: 0 }, { x: 0, y: 196, w: 360, h: 71, vx: 40, vy: 0 }],
+          timber: [{ x1: 420, y1: 372, x2: -60, y2: 372, speed: 51, len: 55, gap: [1, 1.8], seed: 79 }, { x1: -60, y1: 232, x2: 420, y2: 232, speed: 40, len: 53, gap: [1, 2], seed: 334 }],
+        },
+        // frø 800009
+        {
+          id: '8-15',
+          name: { no: 'Ut mot fjorden', en: 'Out to the fjord' },
+          par: 4, pearl: 3,
+          boats: [{ x: 119, y: 112 }, { x: 295, y: 85 }],
+          docks: [{ x: 267, y: 416 }, { x: 252, y: 545 }],
+          rocks: [{ x: 269, y: 153, r: 25 }],
+          currents: [{ x: 0, y: 226, w: 360, h: 81, vx: 51, vy: 0 }],
+          timber: [{ x1: -60, y1: 266, x2: 420, y2: 266, speed: 51, len: 57, gap: [0.8, 2.4], seed: 566 }],
+        },
       ],
     },
-    { id: 9, name: { no: 'Perlebukta', en: 'Pearl Bay' }, blurb: { no: 'Hemmelige baner for perlejegere.', en: 'Secret levels for pearl hunters.' }, soon: true, unlockPearls: 30, levels: [] },
+    {
+      id: 9,
+      name: { no: 'Fjorden', en: 'The Fjord' },
+      blurb: { no: 'Tidevannet stiger og synker. Sandbanker og malstrømmer.', en: 'The tide rises and falls. Sandbanks and maelstroms.' },
+      unlockStars: 216,
+      levels: [
+        {
+          id: '9-1',
+          name: { no: 'Flo og fjære', en: 'High and low tide' },
+          tip: { no: 'Vannet stiger og synker for hvert trykk. Ved flo er sandbanken under vann', en: 'The tide rises and falls with every tap. At high tide the sandbank is under water' },
+          par: 2, pearl: 1,
+          tide: [0, 2],
+          boats: [{ x: 180, y: 430 }],
+          docks: [{ x: 180, y: 170 }],
+          banks: [{ x1: -10, y1: 300, x2: 370, y2: 300, r: 16, h: 1 }],
+        },
+        {
+          id: '9-2',
+          name: { no: 'Vent på flo', en: 'Wait for the tide' },
+          tip: { no: 'Stanga øverst viser vannet nå, og ringen viser hvor høyt det blir etter neste trykk', en: 'The pole shows the water now. The ring shows how high it will be after your next tap' },
+          par: 3, pearl: 2,
+          tide: [2, 0],
+          boats: [{ x: 70, y: 470 }],
+          docks: [{ x: 280, y: 150 }],
+          banks: [{ x1: -10, y1: 330, x2: 370, y2: 330, r: 16, h: 1 }],
+        },
+        {
+          id: '9-3',
+          name: { no: 'Sandøyene', en: 'Sand islands' },
+          par: 3, pearl: 2,
+          tide: [2, 1, 0, 1],
+          boats: [{ x: 180, y: 500 }],
+          docks: [{ x: 180, y: 110 }],
+          banks: [{ x1: 40, y1: 380, r: 30, h: 2 }, { x1: 180, y1: 300, r: 34, h: 1 }, { x1: 300, y1: 220, r: 30, h: 2 }, { x1: 110, y1: 200, r: 26, h: 2 }],
+        },
+        {
+          id: '9-4',
+          name: { no: 'Malstrømmen', en: 'The maelstrom' },
+          tip: { no: 'Malstrømmen slynger båten rundt og ut igjen. Havner den midt i, blir den dratt ned', en: 'The maelstrom whirls the boat around and flings it out. In the middle, it gets pulled under' },
+          par: 2, pearl: 1,
+          boats: [{ x: 180, y: 480 }],
+          docks: [{ x: 180, y: 120 }],
+          maels: [{ x: 180, y: 300, r: 110, dir: -1 }],
+        },
+        // frø 900008
+        {
+          id: '9-5',
+          name: { no: 'Holmene', en: 'The islets' },
+          par: 3, pearl: 2,
+          tide: [2, 0],
+          boats: [{ x: 230, y: 389 }],
+          docks: [{ x: 188, y: 143 }],
+          banks: [{ x1: -10, y1: 271, x2: 67.5, y2: 258, r: 18, h: 1 }, { x1: 166.5, y1: 258, x2: 370, y2: 245, r: 18, h: 1 }],
+        },
+        // frø 900019
+        {
+          id: '9-6',
+          name: { no: 'Fjæra', en: 'The foreshore' },
+          par: 3, pearl: 2,
+          tide: [2, 1, 0],
+          boats: [{ x: 59, y: 502 }, { x: 95, y: 356 }],
+          docks: [{ x: 129, y: 65 }, { x: 87, y: 157 }],
+          banks: [{ x1: -10, y1: 275, x2: 229, y2: 243, r: 14, h: 1 }],
+          maels: [{ x: 285, y: 222, r: 107 }],
+        },
+        // frø 900057
+        {
+          id: '9-7',
+          name: { no: 'Grunna', en: 'The shallows' },
+          par: 3, pearl: 2,
+          tide: [2, 0],
+          boats: [{ x: 262, y: 196, color: 0 }, { x: 153, y: 161, color: 1 }],
+          docks: [{ x: 82, y: 491, color: 0 }, { x: 249, y: 396, color: 1 }],
+          whirls: [{ x: 288, y: 317, r: 48, power: 1 }],
+          banks: [{ x1: 158, y1: 331, r: 33, h: 2 }],
+          maels: [{ x: 91, y: 293, r: 106 }],
+        },
+        // frø 900059
+        {
+          id: '9-8',
+          name: { no: 'Virvelsundet', en: 'Whirl sound' },
+          par: 3, pearl: 2,
+          boats: [{ x: 77, y: 139 }, { x: 315, y: 103 }, { x: 174, y: 197 }],
+          docks: [{ x: 134, y: 398 }, { x: 267, y: 460 }, { x: 148, y: 488 }],
+          rocks: [{ x: 79, y: 245, r: 21 }, { x: 80, y: 339, r: 22 }],
+          logs: [{ x1: 119, y1: 104, x2: 199, y2: 122, r: 8 }],
+          maels: [{ x: 275, y: 293, r: 104 }],
+        },
+        // frø 900003
+        {
+          id: '9-9',
+          name: { no: 'Tidevannsrenna', en: 'Tidal channel' },
+          par: 4, pearl: 3,
+          tide: [2, 1, 0],
+          boats: [{ x: 155, y: 523 }, { x: 194, y: 437 }],
+          docks: [{ x: 298, y: 149 }, { x: 221, y: 170 }],
+          logs: [{ x1: 72, y1: 521, x2: 86, y2: 383, r: 8 }],
+          banks: [{ x1: -10, y1: 292, x2: 53, y2: 312, r: 14, h: 2 }, { x1: 135, y1: 312, x2: 370, y2: 332, r: 14, h: 2 }],
+        },
+        // frø 900046
+        {
+          id: '9-10',
+          name: { no: 'Månens flo', en: 'Moon tide' },
+          par: 4, pearl: 3,
+          tide: [2, 1, 0, 1],
+          boats: [{ x: 75, y: 502, color: 0 }, { x: 171, y: 435, color: 1 }],
+          docks: [{ x: 111, y: 89, color: 0 }, { x: 138, y: 185, color: 1 }],
+          rocks: [{ x: 79, y: 393, r: 24 }],
+          logs: [{ x1: 241, y1: 194, x2: 193, y2: 102, r: 8 }],
+          banks: [{ x1: -10, y1: 312, x2: 250, y2: 272, r: 18, h: 1 }],
+        },
+        // frø 900035
+        {
+          id: '9-11',
+          name: { no: 'Naustet', en: 'The boathouse' },
+          par: 4, pearl: 3,
+          tide: [2, 2, 1, 0, 0, 1],
+          boats: [{ x: 83, y: 191 }, { x: 276, y: 186 }, { x: 308, y: 107 }],
+          docks: [{ x: 96, y: 483 }, { x: 298, y: 493 }, { x: 207, y: 427 }],
+          rocks: [{ x: 223, y: 235, r: 26 }, { x: 70, y: 411, r: 21 }],
+          logs: [{ x1: 142, y1: 163, x2: 148, y2: 253, r: 8 }],
+          banks: [{ x1: -10, y1: 313, x2: 80, y2: 324, r: 17, h: 2 }, { x1: 168, y1: 324, x2: 370, y2: 335, r: 17, h: 2 }],
+        },
+        // frø 900066
+        {
+          id: '9-12',
+          name: { no: 'Fjordarmen', en: 'The fjord arm' },
+          par: 4, pearl: 3,
+          tide: [2, 1, 0],
+          boats: [{ x: 299, y: 433 }, { x: 180, y: 465 }],
+          docks: [{ x: 199, y: 193 }, { x: 54, y: 89 }],
+          rocks: [{ x: 41, y: 416, r: 18 }, { x: 47, y: 199, r: 23 }],
+          logs: [{ x1: 141, y1: 140, x2: 249, y2: 88, r: 8 }],
+          banks: [{ x1: -10, y1: 333, x2: 241, y2: 313, r: 18, h: 2 }, { x1: 315, y1: 313, x2: 370, y2: 293, r: 18, h: 2 }],
+        },
+        // frø 900031
+        {
+          id: '9-13',
+          name: { no: 'Strømsundet', en: 'The strait' },
+          par: 4, pearl: 3,
+          tide: [2, 1, 0],
+          boats: [{ x: 111, y: 482 }, { x: 54, y: 352 }, { x: 273, y: 520 }],
+          docks: [{ x: 293, y: 182 }, { x: 238, y: 117 }, { x: 188, y: 57 }],
+          logs: [{ x1: 206, y1: 492, x2: 180, y2: 388, r: 8 }],
+          banks: [{ x1: 370, y1: 237, x2: 127, y2: 287, r: 17, h: 1 }],
+          maels: [{ x: 105, y: 215, r: 96 }],
+        },
+        // frø 900039
+        {
+          id: '9-14',
+          name: { no: 'Blikkstille', en: 'Dead calm' },
+          par: 3, pearl: 2,
+          boats: [{ x: 163, y: 205 }, { x: 142, y: 125 }, { x: 46, y: 180 }],
+          docks: [{ x: 117, y: 517 }, { x: 277, y: 485 }, { x: 167, y: 457 }],
+          rocks: [{ x: 253, y: 393, r: 19 }, { x: 269, y: 161, r: 26 }],
+          maels: [{ x: 129, y: 337, r: 92 }],
+        },
+        // frø 900062
+        {
+          id: '9-15',
+          name: { no: 'Fjordens dyp', en: 'Fjord depths' },
+          par: 5, pearl: 4,
+          tide: [2, 1, 0, 1],
+          boats: [{ x: 60, y: 469 }, { x: 298, y: 424 }],
+          docks: [{ x: 241, y: 202 }, { x: 179, y: 157 }],
+          banks: [{ x1: 370, y1: 297, x2: 96, y2: 337, r: 16, h: 2 }],
+        },
+      ],
+    },
+    {
+      id: 10,
+      name: { no: 'Stryket', en: 'The Rapids' },
+      blurb: { no: 'Strøm og fosser sammen. Les vannet før du trykker.', en: 'Currents and falls together. Read the water before you tap.' },
+      unlockStars: 243,
+      levels: [
+        // frø 1000024
+        {
+          id: '10-1',
+          name: { no: 'Stryket begynner', en: 'Into the rapids' },
+          tip: { no: 'Strøm og fosser sammen. Båten kommer aldri opp en foss igjen', en: 'Currents and falls together. A boat can never go back up a fall' },
+          par: 3, pearl: 2,
+          boats: [{ x: 277, y: 93 }],
+          docks: [{ x: 128, y: 437 }],
+          rocks: [{ x: 129, y: 137, r: 21 }],
+          currents: [{ x: 0, y: 173, w: 360, h: 86, vx: 70, vy: 0 }],
+          falls: [{ x1: 0, y1: 327, x2: 360, y2: 385 }],
+        },
+        // frø 1000028
+        {
+          id: '10-2',
+          name: { no: 'Over kanten', en: 'Over the edge' },
+          par: 3, pearl: 2,
+          boats: [{ x: 314, y: 478 }],
+          docks: [{ x: 57, y: 98 }],
+          logs: [{ x1: 243, y1: 136, x2: 145, y2: 116, r: 8 }],
+          currents: [{ x: 152, y: 194, w: 94, h: 342, vx: 0, vy: -60 }],
+          cascades: [{ x: 171, y: 308, r: 52 }],
+        },
+        // frø 1000029
+        {
+          id: '10-3',
+          name: { no: 'Strøm under fossen', en: 'Current below the falls' },
+          par: 3, pearl: 2,
+          boats: [{ x: 212, y: 198 }, { x: 206, y: 69 }],
+          docks: [{ x: 143, y: 495 }, { x: 300, y: 470 }],
+          currents: [{ x: 102, y: 122, w: 70, h: 335, vx: 0, vy: 70 }],
+          falls: [{ x1: 0, y1: 306, x2: 360, y2: 270 }],
+          cascades: [{ x: 240, y: 280, r: 51 }],
+        },
+        // frø 1000014
+        {
+          id: '10-4',
+          name: { no: 'Laksetrappa', en: 'The salmon ladder' },
+          par: 3, pearl: 2,
+          boats: [{ x: 169, y: 470 }, { x: 68, y: 491 }],
+          docks: [{ x: 158, y: 79 }, { x: 48, y: 107 }],
+          rocks: [{ x: 285, y: 133, r: 27 }, { x: 45, y: 301, r: 20 }],
+          currents: [{ x: 0, y: 187, w: 360, h: 74, vx: -66, vy: 0 }],
+          falls: [{ x1: 360, y1: 351, x2: 0, y2: 393 }],
+        },
+        // frø 1000043
+        {
+          id: '10-5',
+          name: { no: 'Kvernhuset', en: 'The mill house' },
+          par: 3, pearl: 2,
+          boats: [{ x: 232, y: 138 }, { x: 312, y: 179 }, { x: 264, y: 64 }],
+          docks: [{ x: 298, y: 531 }, { x: 229, y: 400 }, { x: 52, y: 411 }],
+          rocks: [{ x: 272, y: 244, r: 21 }],
+          currents: [{ x: 121, y: 113, w: 70, h: 359, vx: 0, vy: 49 }],
+          falls: [{ x1: 0, y1: 331, x2: 360, y2: 327 }],
+        },
+        // frø 1000006
+        {
+          id: '10-6',
+          name: { no: 'Glatte steiner', en: 'Slippery stones' },
+          par: 3, pearl: 2,
+          boats: [{ x: 312, y: 78, color: 0 }, { x: 239, y: 101, color: 1 }],
+          docks: [{ x: 310, y: 494, color: 0 }, { x: 240, y: 537, color: 1 }],
+          logs: [{ x1: 179, y1: 57, x2: 93, y2: 165, r: 8 }],
+          currents: [{ x: 0, y: 182, w: 360, h: 92, vx: 67, vy: 0 }],
+          falls: [{ x1: 0, y1: 390, x2: 360, y2: 408 }],
+          cascades: [{ x: 128, y: 228, r: 52 }],
+        },
+        // frø 1000025
+        {
+          id: '10-7',
+          name: { no: 'Fossesprut', en: 'Spray' },
+          par: 4, pearl: 3,
+          boats: [{ x: 64, y: 451, color: 0 }, { x: 307, y: 520, color: 1 }],
+          docks: [{ x: 115, y: 55, color: 0 }, { x: 305, y: 93, color: 1 }],
+          logs: [{ x1: 66, y1: 213, x2: 166, y2: 187, r: 8 }],
+          currents: [{ x: 190, y: 121, w: 94, h: 286, vx: 0, vy: -49 }],
+          falls: [{ x1: 360, y1: 271, x2: 0, y2: 259 }],
+        },
+        // frø 1000027
+        {
+          id: '10-8',
+          name: { no: 'Elvekneet', en: 'River bend' },
+          par: 4, pearl: 3,
+          boats: [{ x: 140, y: 101, color: 0 }, { x: 233, y: 65, color: 1 }],
+          docks: [{ x: 45, y: 529, color: 0 }, { x: 277, y: 488, color: 1 }],
+          logs: [{ x1: 125, y1: 427, x2: 131, y2: 515, r: 8 }],
+          currents: [{ x: 0, y: 330, w: 360, h: 73, vx: -51, vy: 0 }],
+          falls: [{ x1: 0, y1: 193, x2: 360, y2: 233 }],
+        },
+        // frø 1000033
+        {
+          id: '10-9',
+          name: { no: 'Trappetrinn', en: 'Stepping down' },
+          par: 4, pearl: 3,
+          boats: [{ x: 72, y: 467 }, { x: 227, y: 493 }],
+          docks: [{ x: 162, y: 182 }, { x: 68, y: 95 }],
+          currents: [{ x: 0, y: 300, w: 360, h: 92, vx: 57, vy: 0 }],
+          cascades: [{ x: 192, y: 353, r: 55 }],
+        },
+        // frø 1000041
+        {
+          id: '10-10',
+          name: { no: 'Kulpen under', en: 'The pool below' },
+          par: 4, pearl: 3,
+          boats: [{ x: 180, y: 512 }, { x: 118, y: 536 }],
+          docks: [{ x: 298, y: 176 }, { x: 213, y: 95 }],
+          rocks: [{ x: 165, y: 243, r: 25 }],
+          whirls: [{ x: 75, y: 217, r: 52, power: 1 }],
+          currents: [{ x: 0, y: 301, w: 360, h: 82, vx: 47, vy: 0 }],
+          cascades: [{ x: 210, y: 327, r: 56 }],
+        },
+        // frø 1000013
+        {
+          id: '10-11',
+          name: { no: 'Brusende vann', en: 'Rushing water' },
+          par: 4, pearl: 3,
+          boats: [{ x: 299, y: 481 }, { x: 291, y: 337 }],
+          docks: [{ x: 85, y: 142 }, { x: 145, y: 81 }],
+          rocks: [{ x: 216, y: 398, r: 27 }],
+          currents: [{ x: 0, y: 195, w: 360, h: 93, vx: 58, vy: 0 }],
+          cascades: [{ x: 108, y: 244, r: 49 }],
+        },
+        // frø 1000011
+        {
+          id: '10-12',
+          name: { no: 'Tvers over', en: 'Straight across' },
+          par: 4, pearl: 3,
+          boats: [{ x: 316, y: 188, color: 0 }, { x: 198, y: 64, color: 1 }, { x: 138, y: 67, color: 2 }],
+          docks: [{ x: 118, y: 535, color: 0 }, { x: 98, y: 370, color: 1 }, { x: 281, y: 448, color: 2 }],
+          logs: [{ x1: 36, y1: 448, x2: 120, y2: 448, r: 8 }],
+          currents: [{ x: 153, y: 143, w: 93, h: 375, vx: 0, vy: 55 }],
+          falls: [{ x1: 0, y1: 252, x2: 360, y2: 314 }],
+        },
+        // frø 1000049
+        {
+          id: '10-13',
+          name: { no: 'Villstryket', en: 'Wild rapids' },
+          par: 5, pearl: 4,
+          boats: [{ x: 222, y: 520 }, { x: 49, y: 532 }],
+          docks: [{ x: 194, y: 121 }, { x: 102, y: 84 }],
+          rocks: [{ x: 221, y: 293, r: 25 }],
+          logs: [{ x1: 140, y1: 471, x2: 214, y2: 433, r: 8 }],
+          currents: [{ x: 0, y: 329, w: 360, h: 78, vx: 64, vy: 0 }],
+          falls: [{ x1: 360, y1: 195, x2: 0, y2: 211 }],
+        },
+        // frø 1000010
+        {
+          id: '10-14',
+          name: { no: 'Rolig kulp', en: 'Quiet pool' },
+          par: 3, pearl: 2,
+          boats: [{ x: 309, y: 350 }, { x: 71, y: 475 }],
+          docks: [{ x: 102, y: 112 }, { x: 48, y: 215 }],
+          logs: [{ x1: 227, y1: 154, x2: 231, y2: 52, r: 8 }],
+          currents: [{ x: 104, y: 164, w: 95, h: 367, vx: 0, vy: -57 }],
+          falls: [{ x1: 360, y1: 300, x2: 0, y2: 248 }],
+        },
+        // frø 1000015
+        {
+          id: '10-15',
+          name: { no: 'Storfossen', en: 'The great falls' },
+          par: 5, pearl: 4,
+          boats: [{ x: 76, y: 535 }, { x: 260, y: 460 }, { x: 139, y: 455 }],
+          docks: [{ x: 243, y: 73 }, { x: 45, y: 143 }, { x: 143, y: 117 }],
+          rocks: [{ x: 91, y: 290, r: 19 }],
+          logs: [{ x1: 300, y1: 298, x2: 218, y2: 284, r: 8 }],
+          currents: [{ x: 0, y: 322, w: 360, h: 78, vx: -48, vy: 0 }],
+          falls: [{ x1: 360, y1: 244, x2: 0, y2: 182 }],
+        },
+      ],
+    },
+    {
+      id: 11,
+      name: { no: 'Regnkanalen', en: 'Rain Canal' },
+      blurb: { no: 'Regnet faller over slusene. Dråpene kan hjelpe deg.', en: 'Rain falls over the locks. The drops can help you.' },
+      unlockStars: 270, mood: 'rain',
+      levels: [
+        // frø 1100052
+        {
+          id: '11-1',
+          name: { no: 'Våt kanal', en: 'Wet canal' },
+          tip: { no: 'Regndråpene lager krusninger også der dine egne ikke når fram', en: 'Raindrops make ripples even where yours can\'t reach' },
+          par: 3, pearl: 2,
+          boats: [{ x: 156, y: 184, heavy: true }],
+          docks: [{ x: 312, y: 418 }],
+          rain: [{ x: 144, y: 545 }],
+          walls: [{ x1: -10, y1: 310, x2: 211, y2: 304 }],
+        },
+        // frø 1100012
+        {
+          id: '11-2',
+          name: { no: 'Dryppende port', en: 'Dripping gate' },
+          par: 3, pearl: 2,
+          boats: [{ x: 190, y: 381 }],
+          docks: [{ x: 66, y: 96 }],
+          rocks: [{ x: 87, y: 235, r: 22 }],
+          logs: [{ x1: 292, y1: 450, x2: 204, y2: 430, r: 8 }],
+          rain: [{ x: 90, y: 165, every: 1 }],
+          walls: [{ x1: 370, y1: 294, x2: 143, y2: 334 }],
+        },
+        // frø 1100010
+        {
+          id: '11-3',
+          name: { no: 'Regn på moloen', en: 'Rain on the pier' },
+          par: 3, pearl: 2,
+          boats: [{ x: 77, y: 108, heavy: true }],
+          docks: [{ x: 97, y: 394 }],
+          logs: [{ x1: 247, y1: 83, x2: 279, y2: 183, r: 8 }],
+          whirls: [{ x: 238, y: 391, r: 46, power: 1 }],
+          rain: [{ x: 315, y: 387, every: 0.9, delay: 0.6 }, { x: 178, y: 417, every: 0.9, delay: 0.8 }, { x: 201, y: 180, every: 1.3 }],
+          walls: [{ x1: 370, y1: 340, x2: 154, y2: 306 }],
+        },
+        // frø 1100073
+        {
+          id: '11-4',
+          name: { no: 'Slusevokteren', en: 'The lock keeper' },
+          par: 3, pearl: 2,
+          boats: [{ x: 133, y: 108 }],
+          docks: [{ x: 280, y: 426 }],
+          rocks: [{ x: 167, y: 221, r: 18 }],
+          rain: [{ x: 139, y: 402, every: 1 }, { x: 143, y: 547, every: 1.3, delay: 0.8 }],
+          walls: [{ x1: 370, y1: 271, x2: 119, y2: 305 }],
+        },
+        // frø 1100069
+        {
+          id: '11-5',
+          name: { no: 'Pøsregn', en: 'Downpour' },
+          par: 4, pearl: 3,
+          boats: [{ x: 84, y: 411, heavy: true }],
+          docks: [{ x: 84, y: 240 }],
+          whirls: [{ x: 215, y: 263, r: 56, power: 1 }],
+          rain: [{ x: 117, y: 57, every: 1, delay: 0.9 }],
+          gates: [{ x1: 370, y1: 344, x2: -10, y2: 344 }],
+          switches: [{ x: 230, y: 469, gate: 0 }],
+        },
+        // frø 1100024
+        {
+          id: '11-6',
+          name: { no: 'Lekk sluse', en: 'Leaky lock' },
+          par: 4, pearl: 3,
+          boats: [{ x: 223, y: 464, heavy: true }],
+          docks: [{ x: 116, y: 244 }],
+          rocks: [{ x: 199, y: 401, r: 18 }],
+          logs: [{ x1: 143, y1: 190, x2: 73, y2: 148, r: 8 }],
+          rain: [{ x: 55, y: 214, every: 1.1, delay: 0.5 }],
+          gates: [{ x1: 370, y1: 340, x2: -10, y2: 340 }],
+          switches: [{ x: 151, y: 524, gate: 0 }],
+        },
+        // frø 1100021
+        {
+          id: '11-7',
+          name: { no: 'Bak muren', en: 'Behind the wall' },
+          par: 4, pearl: 3,
+          boats: [{ x: 167, y: 517, heavy: true }],
+          docks: [{ x: 199, y: 61 }],
+          rocks: [{ x: 145, y: 414, r: 24 }],
+          logs: [{ x1: 260, y1: 232, x2: 266, y2: 124, r: 8 }],
+          rain: [{ x: 299, y: 250, every: 1 }, { x: 117, y: 161, every: 1.1 }],
+          gates: [{ x1: -10, y1: 303, x2: 370, y2: 303 }],
+          switches: [{ x: 230, y: 373, gate: 0 }],
+        },
+        // frø 1100023
+        {
+          id: '11-8',
+          name: { no: 'Takrenna', en: 'The gutter' },
+          par: 4, pearl: 3,
+          boats: [{ x: 169, y: 447 }, { x: 149, y: 339, heavy: true }],
+          docks: [{ x: 290, y: 142 }, { x: 215, y: 105 }],
+          whirls: [{ x: 75, y: 146, r: 57, power: 1 }],
+          rain: [{ x: 50, y: 236, every: 1.1 }, { x: 145, y: 63, every: 1.1, delay: 0.5 }, { x: 299, y: 55, every: 1.2 }],
+          walls: [{ x1: -10, y1: 274, x2: 195, y2: 226 }],
+        },
+        // frø 1100067
+        {
+          id: '11-9',
+          name: { no: 'Tunge lekter', en: 'Heavy barges' },
+          par: 4, pearl: 3,
+          boats: [{ x: 244, y: 460, color: 0 }, { x: 141, y: 458, color: 1, heavy: true }],
+          docks: [{ x: 110, y: 100, color: 0 }, { x: 229, y: 212, color: 1 }],
+          rocks: [{ x: 121, y: 190, r: 22 }, { x: 315, y: 200, r: 20 }],
+          rain: [{ x: 312, y: 94, every: 1 }, { x: 293, y: 269, every: 1.1, delay: 0.4 }],
+          gates: [{ x1: 370, y1: 344, x2: -10, y2: 344 }],
+          switches: [{ x: 60, y: 412, gate: 0 }],
+        },
+        // frø 1100029
+        {
+          id: '11-10',
+          name: { no: 'Grå ettermiddag', en: 'Grey afternoon' },
+          par: 4, pearl: 3,
+          boats: [{ x: 311, y: 460 }, { x: 243, y: 424 }],
+          docks: [{ x: 110, y: 130 }, { x: 46, y: 82 }],
+          rain: [{ x: 40, y: 269, every: 1.2 }],
+          walls: [{ x1: 370, y1: 304, x2: 130, y2: 314 }],
+        },
+        // frø 1100007
+        {
+          id: '11-11',
+          name: { no: 'Skybrudd', en: 'Cloudburst' },
+          par: 4, pearl: 3,
+          boats: [{ x: 258, y: 73 }, { x: 202, y: 157 }, { x: 176, y: 95 }],
+          docks: [{ x: 61, y: 425 }, { x: 134, y: 384 }, { x: 224, y: 332 }],
+          logs: [{ x1: 266, y1: 403, x2: 164, y2: 497, r: 8 }],
+          rain: [{ x: 288, y: 291, every: 1.1 }, { x: 141, y: 328, every: 1.2, delay: 0.7 }, { x: 205, y: 440, every: 1.3, delay: 1 }],
+          gates: [{ x1: -10, y1: 269, x2: 370, y2: 269 }],
+          switches: [{ x: 49, y: 204, gate: 0 }],
+        },
+        // frø 1100045
+        {
+          id: '11-12',
+          name: { no: 'Flomluka', en: 'Flood hatch' },
+          par: 4, pearl: 3,
+          boats: [{ x: 236, y: 67 }, { x: 82, y: 79 }],
+          docks: [{ x: 158, y: 540 }, { x: 263, y: 480 }],
+          rain: [{ x: 215, y: 315, every: 1.1 }],
+          gates: [{ x1: 370, y1: 345, x2: -10, y2: 345 }],
+          switches: [{ x: 189, y: 210, gate: 0 }],
+        },
+        // frø 1100008
+        {
+          id: '11-13',
+          name: { no: 'Kanalen stenger', en: 'Canal closing' },
+          par: 5, pearl: 4,
+          boats: [{ x: 205, y: 429, heavy: true }],
+          docks: [{ x: 236, y: 88 }],
+          rain: [{ x: 161, y: 288, delay: 0.3 }],
+          gates: [{ x1: 370, y1: 317, x2: -10, y2: 317 }],
+          switches: [{ x: 251, y: 512, gate: 0 }],
+        },
+        // frø 1100062
+        {
+          id: '11-14',
+          name: { no: 'Opphold', en: 'A dry spell' },
+          par: 3, pearl: 2,
+          boats: [{ x: 229, y: 501 }],
+          docks: [{ x: 154, y: 229 }],
+          rocks: [{ x: 234, y: 369, r: 23 }],
+          whirls: [{ x: 138, y: 376, r: 55, power: 1 }],
+          rain: [{ x: 75, y: 263, every: 1.2 }, { x: 124, y: 353, every: 1.1 }],
+          gates: [{ x1: -10, y1: 297, x2: 370, y2: 297 }],
+          switches: [{ x: 120, y: 420, gate: 0 }],
+        },
+        // frø 1100031
+        {
+          id: '11-15',
+          name: { no: 'Storsluka', en: 'The great lock' },
+          par: 4, pearl: 3,
+          boats: [{ x: 205, y: 161 }, { x: 268, y: 99 }, { x: 257, y: 194 }],
+          docks: [{ x: 198, y: 543 }, { x: 284, y: 517 }, { x: 289, y: 437 }],
+          rocks: [{ x: 171, y: 415, r: 29 }],
+          whirls: [{ x: 129, y: 213, r: 49, power: 1 }],
+          rain: [{ x: 82, y: 348, every: 0.9 }, { x: 191, y: 393, every: 1.2, delay: 0.9 }, { x: 243, y: 559, every: 1, delay: 0.6 }],
+          gates: [{ x1: 370, y1: 328, x2: -10, y2: 328 }],
+          switches: [{ x: 63, y: 203, gate: 0 }],
+        },
+      ],
+    },
+    {
+      id: 12,
+      name: { no: 'Polarnatta', en: 'Polar Night' },
+      blurb: { no: 'Frosker på isen i mørket. Vinden feier over flakene.', en: 'Frogs on the ice in the dark. The wind sweeps the floes.' },
+      unlockStars: 297, mood: 'dusk',
+      levels: [
+        // frø 1200108
+        {
+          id: '12-1',
+          name: { no: 'Kald kveld', en: 'Cold evening' },
+          tip: { no: 'Frosken lager en krusning der den lander. Vinden tar tak i båten', en: 'The frog makes a ripple where it lands. The wind catches the boat' },
+          par: 3, pearl: 2,
+          boats: [{ x: 124, y: 88 }],
+          docks: [{ x: 289, y: 505 }],
+          rocks: [{ x: 137, y: 179, r: 25 }],
+          frogs: [{ hops: [[242, 127], [74, 137]] }],
+          winds: [{ x: 0, y: 281, w: 360, h: 103, ax: -44, ay: 0 }],
+        },
+        // frø 1200122
+        {
+          id: '12-2',
+          name: { no: 'Frosk på flaket', en: 'Frog on the floe' },
+          par: 3, pearl: 2,
+          boats: [{ x: 168, y: 76 }],
+          docks: [{ x: 114, y: 471 }],
+          rocks: [{ x: 129, y: 179, r: 18 }, { x: 150, y: 373, r: 29 }],
+          frogs: [{ hops: [[315, 468], [219, 519]] }, { hops: [[269, 459], [181, 489]] }],
+          ice: [{ x: 27, y: 261, w: 277, h: 148 }],
+          winds: [{ x: 0, y: 228, w: 360, h: 108, ax: -54, ay: 0 }],
+        },
+        // frø 1200117
+        {
+          id: '12-3',
+          name: { no: 'Nordavind', en: 'North wind' },
+          par: 3, pearl: 2,
+          dark: true,
+          boats: [{ x: 280, y: 413, color: 0 }, { x: 61, y: 446, color: 1 }],
+          docks: [{ x: 65, y: 68, color: 0 }, { x: 104, y: 193, color: 1 }],
+          rocks: [{ x: 256, y: 192, r: 28 }],
+          frogs: [{ hops: [[56, 397], [160, 451]] }],
+          ice: [{ x: 61, y: 124, w: 244, h: 229 }],
+          winds: [{ x: 0, y: 270, w: 360, h: 87, ax: 57, ay: 0 }],
+        },
+        // frø 1200023
+        {
+          id: '12-4',
+          name: { no: 'Stjerneklart', en: 'Starry sky' },
+          par: 3, pearl: 2,
+          boats: [{ x: 273, y: 472 }, { x: 149, y: 503 }, { x: 215, y: 505 }],
+          docks: [{ x: 191, y: 212 }, { x: 283, y: 102 }, { x: 67, y: 192 }],
+          logs: [{ x1: 115, y1: 429, x2: 43, y2: 383, r: 8 }],
+          frogs: [{ hops: [[202, 425], [52, 484]] }],
+          ice: [{ x: 51, y: 196, w: 286, h: 154 }],
+          winds: [{ x: 0, y: 271, w: 360, h: 96, ax: 40, ay: 0 }],
+        },
+        // frø 1200143
+        {
+          id: '12-5',
+          name: { no: 'Isfrosken', en: 'Ice frog' },
+          par: 3, pearl: 2,
+          boats: [{ x: 52, y: 169, color: 0 }, { x: 176, y: 95, color: 1 }],
+          docks: [{ x: 138, y: 536, color: 0 }, { x: 67, y: 399, color: 1 }],
+          rocks: [{ x: 265, y: 520, r: 23 }],
+          logs: [{ x1: 229, y1: 440, x2: 317, y2: 476, r: 8 }],
+          frogs: [{ hops: [[108, 151], [277, 157]] }],
+          winds: [{ x: 0, y: 219, w: 360, h: 110, ax: 73, ay: 0 }],
+        },
+        // frø 1200077
+        {
+          id: '12-6',
+          name: { no: 'Snøfokk', en: 'Snow drift' },
+          par: 3, pearl: 2,
+          dark: true,
+          boats: [{ x: 199, y: 443 }, { x: 311, y: 404 }],
+          docks: [{ x: 192, y: 110 }, { x: 280, y: 97 }],
+          rocks: [{ x: 193, y: 194, r: 20 }],
+          logs: [{ x1: 144, y1: 150, x2: 24, y2: 80, r: 8 }],
+          frogs: [{ hops: [[215, 487], [257, 372]] }],
+          lamps: [{ x: 190, y: 366, r: 70 }],
+          ice: [{ x: 45, y: 190, w: 264, h: 139 }],
+          winds: [{ x: 0, y: 243, w: 360, h: 109, ax: -45, ay: 0 }],
+        },
+        // frø 1200147
+        {
+          id: '12-7',
+          name: { no: 'Månelys', en: 'Moonlight' },
+          par: 3, pearl: 2,
+          boats: [{ x: 140, y: 461 }, { x: 94, y: 405 }, { x: 86, y: 521 }],
+          docks: [{ x: 245, y: 107 }, { x: 175, y: 143 }, { x: 88, y: 57 }],
+          rocks: [{ x: 69, y: 339, r: 22 }],
+          logs: [{ x1: 303, y1: 498, x2: 221, y2: 452, r: 8 }],
+          frogs: [{ hops: [[119, 122], [174, 78]] }, { hops: [[198, 411], [316, 363]] }],
+          ice: [{ x: 38, y: 49, w: 278, h: 216 }],
+          winds: [{ x: 0, y: 196, w: 360, h: 98, ax: 61, ay: 0 }],
+        },
+        // frø 1200063
+        {
+          id: '12-8',
+          name: { no: 'Glatt som glass', en: 'Smooth as glass' },
+          par: 3, pearl: 2,
+          dark: true,
+          boats: [{ x: 190, y: 425 }, { x: 294, y: 506 }, { x: 60, y: 425 }],
+          docks: [{ x: 271, y: 190 }, { x: 69, y: 175 }, { x: 204, y: 125 }],
+          rocks: [{ x: 289, y: 377, r: 19 }],
+          logs: [{ x1: 210, y1: 472, x2: 100, y2: 462, r: 8 }],
+          frogs: [{ hops: [[280, 437], [173, 372]] }],
+          winds: [{ x: 0, y: 245, w: 360, h: 100, ax: -70, ay: 0 }],
+        },
+        // frø 1200111
+        {
+          id: '12-9',
+          name: { no: 'Polarfrosk', en: 'Polar frog' },
+          par: 4, pearl: 3,
+          dark: true,
+          boats: [{ x: 302, y: 166, color: 0 }, { x: 273, y: 89, color: 1 }, { x: 216, y: 239, color: 2 }],
+          docks: [{ x: 308, y: 499, color: 0 }, { x: 183, y: 473, color: 1 }, { x: 83, y: 509, color: 2 }],
+          rocks: [{ x: 269, y: 415, r: 23 }, { x: 195, y: 109, r: 18 }],
+          frogs: [{ hops: [[208, 173], [149, 253]] }],
+          winds: [{ x: 0, y: 294, w: 360, h: 92, ax: 48, ay: 0 }],
+        },
+        // frø 1200119
+        {
+          id: '12-10',
+          name: { no: 'Iskaldt hopp', en: 'Icy leap' },
+          par: 4, pearl: 3,
+          dark: true,
+          boats: [{ x: 315, y: 525, color: 0 }, { x: 312, y: 405, color: 1 }, { x: 71, y: 480, color: 2 }],
+          docks: [{ x: 290, y: 135, color: 0 }, { x: 122, y: 184, color: 1 }, { x: 63, y: 84, color: 2 }],
+          rocks: [{ x: 41, y: 187, r: 18 }],
+          frogs: [{ hops: [[69, 419], [148, 441]] }],
+          lamps: [{ x: 263, y: 309, r: 70 }],
+          winds: [{ x: 0, y: 247, w: 360, h: 100, ax: -72, ay: 0 }],
+        },
+        // frø 1200087
+        {
+          id: '12-11',
+          name: { no: 'Nordlyset', en: 'Northern lights' },
+          par: 4, pearl: 3,
+          boats: [{ x: 188, y: 168, color: 0 }, { x: 102, y: 189, color: 1 }, { x: 295, y: 79, color: 2 }],
+          docks: [{ x: 193, y: 484, color: 0 }, { x: 111, y: 441, color: 1 }, { x: 296, y: 542, color: 2 }],
+          logs: [{ x1: 56, y1: 243, x2: 194, y2: 245, r: 8 }],
+          frogs: [{ hops: [[274, 125], [292, 204]] }],
+          winds: [{ x: 0, y: 276, w: 360, h: 101, ax: -72, ay: 0 }],
+        },
+        // frø 1200047
+        {
+          id: '12-12',
+          name: { no: 'Kuldegrop', en: 'Cold hollow' },
+          par: 4, pearl: 3,
+          boats: [{ x: 161, y: 87, color: 0 }, { x: 109, y: 122, color: 1 }, { x: 99, y: 210, color: 2 }],
+          docks: [{ x: 137, y: 456, color: 0 }, { x: 209, y: 513, color: 1 }, { x: 187, y: 400, color: 2 }],
+          rocks: [{ x: 164, y: 168, r: 21 }, { x: 246, y: 242, r: 22 }],
+          logs: [{ x1: 194, y1: 309, x2: 294, y2: 321, r: 8 }],
+          frogs: [{ hops: [[76, 460], [153, 330]] }, { hops: [[56, 231], [167, 259], [74, 250]] }],
+          ice: [{ x: 46, y: 260, w: 287, h: 133 }],
+        },
+        // frø 1200091
+        {
+          id: '12-13',
+          name: { no: 'Lange natta', en: 'The long night' },
+          par: 4, pearl: 3,
+          boats: [{ x: 160, y: 493 }, { x: 244, y: 394 }, { x: 42, y: 536 }],
+          docks: [{ x: 133, y: 61 }, { x: 160, y: 160 }, { x: 252, y: 86 }],
+          logs: [{ x1: 39, y1: 431, x2: 109, y2: 363, r: 8 }],
+          frogs: [{ hops: [[310, 346], [262, 456]] }],
+          winds: [{ x: 0, y: 222, w: 360, h: 89, ax: 43, ay: 0 }],
+        },
+        // frø 1200157
+        {
+          id: '12-14',
+          name: { no: 'Stille snø', en: 'Quiet snow' },
+          par: 3, pearl: 2,
+          dark: true,
+          boats: [{ x: 71, y: 115 }, { x: 236, y: 201 }],
+          docks: [{ x: 59, y: 511 }, { x: 244, y: 516 }],
+          rocks: [{ x: 50, y: 191, r: 21 }],
+          logs: [{ x1: 193, y1: 407, x2: 87, y2: 441, r: 8 }],
+          frogs: [{ hops: [[120, 215], [158, 131]] }],
+          lamps: [{ x: 151, y: 291, r: 70 }],
+          ice: [{ x: 37, y: 265, w: 265, h: 172 }],
+          winds: [{ x: 0, y: 286, w: 360, h: 84, ax: -70, ay: 0 }],
+        },
+        // frø 1200159
+        {
+          id: '12-15',
+          name: { no: 'Midtvinter', en: 'Midwinter' },
+          par: 5, pearl: 4,
+          dark: true,
+          boats: [{ x: 236, y: 516 }, { x: 55, y: 522 }, { x: 136, y: 503 }],
+          docks: [{ x: 93, y: 61 }, { x: 96, y: 160 }, { x: 183, y: 114 }],
+          logs: [{ x1: 197, y1: 411, x2: 315, y2: 351, r: 8 }],
+          frogs: [{ hops: [[213, 347], [251, 468]] }],
+          winds: [{ x: 0, y: 235, w: 360, h: 94, ax: 47, ay: 0 }],
+        },
+      ],
+    },
+    {
+      id: 13,
+      name: { no: 'Tømmerfjorden', en: 'Timber Fjord' },
+      blurb: { no: 'Tømmeret flyter ut i fjorden. Tidevannet åpner og stenger veien.', en: 'Timber drifts into the fjord. The tide opens and closes the way.' },
+      unlockStars: 324,
+      levels: [
+        // frø 1300056
+        {
+          id: '13-1',
+          name: { no: 'Fløterens fjord', en: 'The rafter\'s fjord' },
+          tip: { no: 'Tømmeret flyter som før, men nå skifter tidevannet også', en: 'The logs drift as before, but now the tide changes too' },
+          par: 3, pearl: 2,
+          tide: [0, 1, 2, 1],
+          boats: [{ x: 128, y: 114 }],
+          docks: [{ x: 276, y: 470 }],
+          rocks: [{ x: 200, y: 122, r: 28 }],
+          logs: [{ x1: 121, y1: 441, x2: 39, y2: 485, r: 8 }],
+          currents: [{ x: 0, y: 181, w: 360, h: 75, vx: 46, vy: 0 }],
+          timber: [{ x1: -60, y1: 218, x2: 420, y2: 218, speed: 46, len: 52, gap: [0.6, 2], seed: 12 }],
+          banks: [{ x1: 370, y1: 364, x2: 156, y2: 396, r: 17, h: 2 }],
+        },
+        // frø 1300017
+        {
+          id: '13-2',
+          name: { no: 'Stokk og sand', en: 'Logs and sand' },
+          par: 3, pearl: 2,
+          tide: [2, 1, 0],
+          boats: [{ x: 221, y: 499 }],
+          docks: [{ x: 163, y: 89 }],
+          rocks: [{ x: 52, y: 488, r: 21 }],
+          logs: [{ x1: 167, y1: 151, x2: 285, y2: 129, r: 8 }],
+          currents: [{ x: 0, y: 354, w: 360, h: 78, vx: 46, vy: 0 }],
+          timber: [{ x1: -60, y1: 393, x2: 420, y2: 393, speed: 46, len: 67, gap: [0.7, 2.2], seed: 372 }],
+          banks: [{ x1: 370, y1: 250, x2: 302, y2: 228, r: 19, h: 1 }, { x1: 210, y1: 228, x2: -10, y2: 206, r: 19, h: 1 }],
+          maels: [{ x: 188, y: 304, r: 109 }],
+        },
+        // frø 1300077
+        {
+          id: '13-3',
+          name: { no: 'Utløpet', en: 'The river mouth' },
+          par: 3, pearl: 2,
+          boats: [{ x: 280, y: 440, color: 0 }, { x: 219, y: 420, color: 1 }],
+          docks: [{ x: 233, y: 153, color: 0 }, { x: 122, y: 58, color: 1 }],
+          currents: [{ x: 0, y: 212, w: 360, h: 83, vx: 55, vy: 0 }],
+          timber: [{ x1: -60, y1: 254, x2: 420, y2: 254, speed: 55, len: 65, gap: [0.9, 1.7], seed: 246 }],
+          maels: [{ x: 127, y: 249, r: 95 }],
+        },
+        // frø 1300079
+        {
+          id: '13-4',
+          name: { no: 'Lav vannstand', en: 'Low water' },
+          par: 3, pearl: 2,
+          boats: [{ x: 314, y: 370 }, { x: 51, y: 367 }],
+          docks: [{ x: 121, y: 178 }, { x: 125, y: 98 }],
+          currents: [{ x: 0, y: 237, w: 360, h: 80, vx: -45, vy: 0 }],
+          timber: [{ x1: 420, y1: 277, x2: -60, y2: 277, speed: 45, len: 60, gap: [0.9, 2.1], seed: 47 }],
+          maels: [{ x: 245, y: 243, r: 109 }],
+        },
+        // frø 1300023
+        {
+          id: '13-5',
+          name: { no: 'Tømmerlensa', en: 'The log boom' },
+          par: 3, pearl: 2,
+          tide: [2, 1, 0],
+          boats: [{ x: 186, y: 243 }, { x: 126, y: 217 }],
+          docks: [{ x: 121, y: 515 }, { x: 284, y: 518 }],
+          currents: [{ x: 0, y: 294, w: 360, h: 86, vx: -52, vy: 0 }],
+          timber: [{ x1: 420, y1: 337, x2: -60, y2: 337, speed: 52, len: 62, gap: [0.6, 2.4], seed: 516 }],
+          banks: [{ x1: 263, y1: 412, r: 24, h: 1 }],
+          maels: [{ x: 166, y: 380, r: 100 }],
+        },
+        // frø 1300001
+        {
+          id: '13-6',
+          name: { no: 'Sagbruksvika', en: 'Sawmill cove' },
+          par: 3, pearl: 2,
+          boats: [{ x: 190, y: 452 }, { x: 220, y: 524 }],
+          docks: [{ x: 309, y: 140 }, { x: 73, y: 91 }],
+          rocks: [{ x: 163, y: 332, r: 19 }],
+          logs: [{ x1: 91, y1: 522, x2: 125, y2: 412, r: 8 }],
+          currents: [{ x: 0, y: 216, w: 360, h: 82, vx: 43, vy: 0 }],
+          timber: [{ x1: -60, y1: 257, x2: 420, y2: 257, speed: 43, len: 65, gap: [0.8, 2.4], seed: 373 }],
+          maels: [{ x: 112, y: 224, r: 94 }],
+        },
+        // frø 1300086
+        {
+          id: '13-7',
+          name: { no: 'Springflo', en: 'Spring tide' },
+          par: 4, pearl: 3,
+          tide: [2, 1, 0],
+          boats: [{ x: 145, y: 78 }],
+          docks: [{ x: 207, y: 528 }],
+          rocks: [{ x: 199, y: 309, r: 19 }, { x: 134, y: 158, r: 26 }],
+          currents: [{ x: 0, y: 197, w: 360, h: 83, vx: -51, vy: 0 }],
+          timber: [{ x1: 420, y1: 238, x2: -60, y2: 238, speed: 51, len: 57, gap: [0.8, 2.6], seed: 250 }],
+          banks: [{ x1: -10, y1: 411, x2: 104.5, y2: 398, r: 15, h: 1 }, { x1: 183.5, y1: 398, x2: 370, y2: 385, r: 15, h: 2 }],
+        },
+        // frø 1300021
+        {
+          id: '13-8',
+          name: { no: 'Strandkanten', en: 'The shoreline' },
+          par: 4, pearl: 3,
+          boats: [{ x: 101, y: 532 }, { x: 296, y: 496 }],
+          docks: [{ x: 215, y: 62 }, { x: 48, y: 104 }],
+          logs: [{ x1: 215, y1: 150, x2: 289, y2: 102, r: 8 }],
+          currents: [{ x: 0, y: 203, w: 360, h: 78, vx: 57, vy: 0 }],
+          timber: [{ x1: -60, y1: 242, x2: 420, y2: 242, speed: 57, len: 61, gap: [0.6, 2.1], seed: 38 }],
+          maels: [{ x: 72, y: 230, r: 95 }],
+        },
+        // frø 1300066
+        {
+          id: '13-9',
+          name: { no: 'Virvel ved utløpet', en: 'Whirl at the mouth' },
+          par: 4, pearl: 3,
+          tide: [2, 1, 0, 1],
+          boats: [{ x: 47, y: 86 }, { x: 97, y: 125 }],
+          docks: [{ x: 98, y: 455 }, { x: 297, y: 450 }],
+          rocks: [{ x: 77, y: 204, r: 24 }, { x: 186, y: 191, r: 26 }],
+          whirls: [{ x: 276, y: 172, r: 47, power: 1 }],
+          currents: [{ x: 0, y: 240, w: 360, h: 77, vx: -54, vy: 0 }],
+          timber: [{ x1: 420, y1: 278, x2: -60, y2: 278, speed: 54, len: 60, gap: [0.7, 2.5], seed: 488 }],
+          banks: [{ x1: 139, y1: 353, r: 32, h: 1 }],
+        },
+        // frø 1300090
+        {
+          id: '13-10',
+          name: { no: 'Flomtømmer', en: 'Flood timber' },
+          par: 4, pearl: 3,
+          tide: [2, 0],
+          boats: [{ x: 83, y: 449, color: 0 }, { x: 223, y: 492, color: 1 }],
+          docks: [{ x: 231, y: 62, color: 0 }, { x: 310, y: 109, color: 1 }],
+          rocks: [{ x: 208, y: 188, r: 30 }, { x: 110, y: 374, r: 26 }],
+          logs: [{ x1: 97, y1: 156, x2: 155, y2: 66, r: 8 }],
+          currents: [{ x: 0, y: 255, w: 360, h: 74, vx: 45, vy: 0 }],
+          timber: [{ x1: -60, y1: 292, x2: 420, y2: 292, speed: 45, len: 56, gap: [0.7, 2.1], seed: 734 }],
+          banks: [{ x1: 288, y1: 259, r: 23, h: 1 }, { x1: 95, y1: 254, r: 29, h: 1 }],
+          maels: [{ x: 259, y: 325, r: 107 }],
+        },
+        // frø 1300059
+        {
+          id: '13-11',
+          name: { no: 'Sandrevet', en: 'The sandbar' },
+          par: 4, pearl: 3,
+          tide: [0, 1, 2, 1],
+          boats: [{ x: 93, y: 94 }, { x: 233, y: 170 }, { x: 237, y: 105 }],
+          docks: [{ x: 128, y: 505 }, { x: 46, y: 541 }, { x: 218, y: 533 }],
+          currents: [{ x: 0, y: 343, w: 360, h: 81, vx: -41, vy: 0 }],
+          timber: [{ x1: 420, y1: 383, x2: -60, y2: 383, speed: 41, len: 59, gap: [0.8, 2.2], seed: 992 }],
+          banks: [{ x1: -10, y1: 216, x2: 109.5, y2: 241, r: 16, h: 1 }, { x1: 208.5, y1: 241, x2: 370, y2: 266, r: 16, h: 1 }],
+          maels: [{ x: 206, y: 366, r: 108 }],
+        },
+        // frø 1300038
+        {
+          id: '13-12',
+          name: { no: 'Mellom stokkene', en: 'Between the logs' },
+          par: 4, pearl: 3,
+          tide: [2, 2, 1, 0, 0, 1],
+          boats: [{ x: 94, y: 512 }, { x: 136, y: 468 }],
+          docks: [{ x: 309, y: 71 }, { x: 104, y: 97 }],
+          logs: [{ x1: 159, y1: 165, x2: 243, y2: 95, r: 8 }],
+          currents: [{ x: 0, y: 188, w: 360, h: 75, vx: -47, vy: 0 }],
+          timber: [{ x1: 420, y1: 226, x2: -60, y2: 226, speed: 47, len: 62, gap: [0.9, 1.7], seed: 879 }],
+          banks: [{ x1: -10, y1: 369, x2: 95, y2: 380, r: 17, h: 1 }, { x1: 183, y1: 380, x2: 370, y2: 391, r: 17, h: 2 }],
+          maels: [{ x: 169, y: 316, r: 105 }],
+        },
+        // frø 1300014
+        {
+          id: '13-13',
+          name: { no: 'Fjordgapet', en: 'The fjord gap' },
+          par: 5, pearl: 4,
+          tide: [2, 0],
+          boats: [{ x: 269, y: 479 }, { x: 84, y: 485 }],
+          docks: [{ x: 265, y: 74 }, { x: 180, y: 55 }],
+          rocks: [{ x: 127, y: 111, r: 21 }],
+          currents: [{ x: 0, y: 349, w: 360, h: 84, vx: 56, vy: 0 }],
+          timber: [{ x1: -60, y1: 391, x2: 420, y2: 391, speed: 56, len: 51, gap: [0.7, 1.9], seed: 959 }],
+          banks: [{ x1: -10, y1: 239, x2: 60, y2: 220, r: 19, h: 1 }, { x1: 156, y1: 220, x2: 370, y2: 201, r: 19, h: 1 }],
+          maels: [{ x: 177, y: 391, r: 89 }],
+        },
+        // frø 1300073
+        {
+          id: '13-14',
+          name: { no: 'Slakk sjø', en: 'Slack water' },
+          par: 3, pearl: 2,
+          tide: [2, 2, 1, 0, 0, 1],
+          boats: [{ x: 174, y: 512 }, { x: 267, y: 505 }],
+          docks: [{ x: 312, y: 103 }, { x: 171, y: 146 }],
+          currents: [{ x: 0, y: 355, w: 360, h: 80, vx: 41, vy: 0 }],
+          timber: [{ x1: -60, y1: 395, x2: 420, y2: 395, speed: 41, len: 61, gap: [0.9, 1.8], seed: 93 }],
+          banks: [{ x1: -10, y1: 214, x2: 221, y2: 246, r: 19, h: 1 }],
+          maels: [{ x: 289, y: 292, r: 95 }],
+        },
+        // frø 1300075
+        {
+          id: '13-15',
+          name: { no: 'Store fløtingen', en: 'The great drive' },
+          par: 5, pearl: 4,
+          tide: [2, 1, 0, 1],
+          boats: [{ x: 103, y: 305 }, { x: 108, y: 92 }, { x: 319, y: 304 }],
+          docks: [{ x: 239, y: 477 }, { x: 58, y: 487 }, { x: 176, y: 534 }],
+          rocks: [{ x: 180, y: 130, r: 28 }],
+          currents: [{ x: 0, y: 171, w: 360, h: 85, vx: 41, vy: 0 }],
+          timber: [{ x1: -60, y1: 213, x2: 420, y2: 213, speed: 41, len: 66, gap: [0.7, 2.1], seed: 132 }],
+          banks: [{ x1: 370, y1: 385, x2: 104, y2: 365, r: 19, h: 1 }],
+        },
+      ],
+    },
+    {
+      id: 14,
+      name: { no: 'Isflakene', en: 'Ice Floes' },
+      blurb: { no: 'Strømmen tar isen med seg. Båtene glir dit vannet vil.', en: 'The current carries the ice. Boats slide where the water goes.' },
+      unlockStars: 351, mood: 'ice',
+      levels: [
+        // frø 1400066
+        {
+          id: '14-1',
+          name: { no: 'Isgang', en: 'Ice run' },
+          tip: { no: 'Strømmen og vinden tar båten med seg. Se hvor de drar', en: 'The current and the wind carry the boat. Watch where they pull' },
+          par: 3, pearl: 2,
+          boats: [{ x: 71, y: 119 }],
+          docks: [{ x: 235, y: 505 }],
+          currents: [{ x: 0, y: 181, w: 360, h: 73, vx: 80, vy: 0 }],
+          winds: [{ x: 0, y: 343, w: 360, h: 83, ax: 57, ay: 0 }],
+        },
+        // frø 1400048
+        {
+          id: '14-2',
+          name: { no: 'Glatt strøm', en: 'Slippery stream' },
+          par: 3, pearl: 2,
+          boats: [{ x: 205, y: 530 }],
+          docks: [{ x: 64, y: 92 }],
+          rocks: [{ x: 135, y: 424, r: 29 }],
+          logs: [{ x1: 166, y1: 135, x2: 270, y2: 119, r: 8 }],
+          currents: [{ x: 0, y: 303, w: 360, h: 85, vx: -74, vy: 0 }],
+          ice: [{ x: 20, y: 91, w: 319, h: 148 }],
+          winds: [{ x: 0, y: 157, w: 360, h: 84, ax: 48, ay: 0 }],
+        },
+        // frø 1400056
+        {
+          id: '14-3',
+          name: { no: 'Drivis', en: 'Drift ice' },
+          par: 3, pearl: 2,
+          boats: [{ x: 290, y: 133 }],
+          docks: [{ x: 232, y: 519 }],
+          currents: [{ x: 0, y: 350, w: 360, h: 92, vx: -65, vy: 0 }],
+          winds: [{ x: 0, y: 188, w: 360, h: 95, ax: -65, ay: 0 }],
+        },
+        // frø 1400041
+        {
+          id: '14-4',
+          name: { no: 'Kald bekk', en: 'Cold brook' },
+          par: 3, pearl: 2,
+          boats: [{ x: 184, y: 399 }, { x: 263, y: 457 }],
+          docks: [{ x: 275, y: 159 }, { x: 192, y: 62 }],
+          rocks: [{ x: 198, y: 191, r: 20 }],
+          currents: [{ x: 0, y: 227, w: 360, h: 84, vx: 45, vy: 0 }],
+          ice: [{ x: 33, y: 73, w: 268, h: 213 }],
+        },
+        // frø 1400057
+        {
+          id: '14-5',
+          name: { no: 'Vindkast', en: 'Gust' },
+          par: 3, pearl: 2,
+          boats: [{ x: 192, y: 74 }, { x: 313, y: 112 }],
+          docks: [{ x: 197, y: 459 }, { x: 67, y: 474 }],
+          rocks: [{ x: 98, y: 129, r: 23 }],
+          currents: [{ x: 0, y: 322, w: 360, h: 77, vx: 74, vy: 0 }],
+          winds: [{ x: 0, y: 183, w: 360, h: 106, ax: -43, ay: 0 }],
+        },
+        // frø 1400019
+        {
+          id: '14-6',
+          name: { no: 'Skøyteløpet', en: 'The skating lane' },
+          par: 3, pearl: 2,
+          boats: [{ x: 211, y: 104 }, { x: 315, y: 87 }, { x: 61, y: 84 }],
+          docks: [{ x: 175, y: 470 }, { x: 279, y: 486 }, { x: 58, y: 466 }],
+          currents: [{ x: 0, y: 313, w: 360, h: 89, vx: -68, vy: 0 }],
+          ice: [{ x: 13, y: 144, w: 241, h: 219 }],
+          winds: [{ x: 0, y: 161, w: 360, h: 108, ax: -46, ay: 0 }],
+        },
+        // frø 1400025
+        {
+          id: '14-7',
+          name: { no: 'Isrenna', en: 'The ice channel' },
+          par: 3, pearl: 2,
+          boats: [{ x: 229, y: 430, color: 0 }, { x: 247, y: 498, color: 1 }],
+          docks: [{ x: 196, y: 72, color: 0 }, { x: 306, y: 117, color: 1 }],
+          logs: [{ x1: 312, y1: 331, x2: 224, y2: 283, r: 8 }],
+          currents: [{ x: 97, y: 184, w: 86, h: 334, vx: 0, vy: 75 }],
+          ice: [{ x: 58, y: 179, w: 251, h: 162 }],
+        },
+        // frø 1400046
+        {
+          id: '14-8',
+          name: { no: 'Sidevind', en: 'Crosswind' },
+          par: 4, pearl: 3,
+          boats: [{ x: 96, y: 510 }, { x: 237, y: 520 }],
+          docks: [{ x: 146, y: 128 }, { x: 277, y: 111 }],
+          rocks: [{ x: 50, y: 293, r: 19 }],
+          logs: [{ x1: 315, y1: 487, x2: 197, y2: 441, r: 8 }],
+          currents: [{ x: 0, y: 189, w: 360, h: 76, vx: -75, vy: 0 }],
+          ice: [{ x: 58, y: 63, w: 247, h: 192 }],
+          winds: [{ x: 0, y: 343, w: 360, h: 82, ax: 46, ay: 0 }],
+        },
+        // frø 1400063
+        {
+          id: '14-9',
+          name: { no: 'Råka', en: 'The open lead' },
+          par: 4, pearl: 3,
+          boats: [{ x: 146, y: 93 }, { x: 240, y: 96 }],
+          docks: [{ x: 152, y: 500 }, { x: 77, y: 513 }],
+          rocks: [{ x: 262, y: 486, r: 26 }],
+          logs: [{ x1: 109, y1: 305, x2: 205, y2: 309, r: 8 }],
+          currents: [{ x: 0, y: 325, w: 360, h: 80, vx: 70, vy: 0 }],
+          winds: [{ x: 0, y: 168, w: 360, h: 102, ax: -59, ay: 0 }],
+        },
+        // frø 1400007
+        {
+          id: '14-10',
+          name: { no: 'Isbrua', en: 'The ice bridge' },
+          par: 4, pearl: 3,
+          boats: [{ x: 301, y: 179 }, { x: 83, y: 78 }, { x: 75, y: 152 }],
+          docks: [{ x: 234, y: 491 }, { x: 128, y: 536 }, { x: 50, y: 486 }],
+          rocks: [{ x: 290, y: 391, r: 23 }],
+          currents: [{ x: 130, y: 87, w: 87, h: 361, vx: 0, vy: 62 }],
+          winds: [{ x: 0, y: 254, w: 360, h: 94, ax: 52, ay: 0 }],
+        },
+        // frø 1400051
+        {
+          id: '14-11',
+          name: { no: 'Kuldestrøm', en: 'Cold current' },
+          par: 4, pearl: 3,
+          boats: [{ x: 229, y: 522 }, { x: 162, y: 518 }, { x: 64, y: 451 }],
+          docks: [{ x: 199, y: 85 }, { x: 308, y: 135 }, { x: 72, y: 136 }],
+          rocks: [{ x: 263, y: 420, r: 23 }],
+          currents: [{ x: 0, y: 197, w: 360, h: 80, vx: -53, vy: 0 }],
+          ice: [{ x: 89, y: 285, w: 242, h: 132 }],
+          winds: [{ x: 0, y: 302, w: 360, h: 86, ax: 63, ay: 0 }],
+        },
+        // frø 1400035
+        {
+          id: '14-12',
+          name: { no: 'Snøstorm', en: 'Blizzard' },
+          par: 4, pearl: 3,
+          boats: [{ x: 213, y: 487, color: 0 }, { x: 94, y: 513, color: 1 }],
+          docks: [{ x: 186, y: 64, color: 0 }, { x: 285, y: 57, color: 1 }],
+          rocks: [{ x: 171, y: 312, r: 20 }],
+          currents: [{ x: 0, y: 342, w: 360, h: 86, vx: 67, vy: 0 }],
+          winds: [{ x: 0, y: 171, w: 360, h: 81, ax: -65, ay: 0 }],
+        },
+        // frø 1400047
+        {
+          id: '14-13',
+          name: { no: 'Isløsning', en: 'Breakup' },
+          par: 4, pearl: 3,
+          boats: [{ x: 43, y: 489 }, { x: 195, y: 494 }],
+          docks: [{ x: 46, y: 111 }, { x: 284, y: 108 }],
+          rocks: [{ x: 73, y: 310, r: 23 }],
+          logs: [{ x1: 325, y1: 310, x2: 201, y2: 288, r: 8 }],
+          currents: [{ x: 0, y: 180, w: 360, h: 90, vx: 57, vy: 0 }],
+          winds: [{ x: 0, y: 344, w: 360, h: 82, ax: -52, ay: 0 }],
+        },
+        // frø 1400013
+        {
+          id: '14-14',
+          name: { no: 'Klart vær', en: 'Clear skies' },
+          par: 3, pearl: 2,
+          boats: [{ x: 45, y: 522 }, { x: 62, y: 422 }],
+          docks: [{ x: 303, y: 192 }, { x: 75, y: 142 }],
+          rocks: [{ x: 137, y: 393, r: 21 }],
+          logs: [{ x1: 135, y1: 187, x2: 195, y2: 97, r: 8 }],
+          currents: [{ x: 0, y: 246, w: 360, h: 91, vx: -65, vy: 0 }],
+          ice: [{ x: 58, y: 172, w: 269, h: 181 }],
+        },
+        // frø 1400015
+        {
+          id: '14-15',
+          name: { no: 'Vårløsningen', en: 'Spring thaw' },
+          par: 5, pearl: 4,
+          boats: [{ x: 318, y: 496 }, { x: 112, y: 488 }, { x: 263, y: 535 }],
+          docks: [{ x: 172, y: 78 }, { x: 73, y: 71 }, { x: 280, y: 294 }],
+          rocks: [{ x: 112, y: 307, r: 24 }],
+          currents: [{ x: 0, y: 160, w: 360, h: 95, vx: 53, vy: 0 }],
+          winds: [{ x: 0, y: 337, w: 360, h: 94, ax: 62, ay: 0 }],
+        },
+      ],
+    },
+    {
+      id: 15,
+      name: { no: 'Mølledammen', en: 'Mill Pond' },
+      blurb: { no: 'Kvernhjulet går i natt. Strøm, sluser og frosker.', en: 'The mill wheel turns at night. Currents, locks and frogs.' },
+      unlockStars: 378, mood: 'dusk',
+      levels: [
+        // frø 1500009
+        {
+          id: '15-1',
+          name: { no: 'Mølleveien', en: 'Mill road' },
+          tip: { no: 'Strøm og sluser først. Froskene kommer snart', en: 'Currents and locks first. The frogs are coming soon' },
+          par: 3, pearl: 2,
+          boats: [{ x: 295, y: 92 }],
+          docks: [{ x: 95, y: 528 }],
+          currents: [{ x: 0, y: 354, w: 360, h: 76, vx: 70, vy: 0 }],
+          walls: [{ x1: 370, y1: 242, x2: 140, y2: 254 }],
+        },
+        // frø 1500118
+        {
+          id: '15-2',
+          name: { no: 'Kvernbekken', en: 'Mill stream' },
+          par: 3, pearl: 2,
+          dark: true,
+          boats: [{ x: 95, y: 517 }],
+          docks: [{ x: 287, y: 82 }],
+          rocks: [{ x: 212, y: 108, r: 24 }],
+          logs: [{ x1: 86, y1: 299, x2: 178, y2: 271, r: 8 }],
+          currents: [{ x: 0, y: 175, w: 360, h: 79, vx: 81, vy: 0 }],
+          gates: [{ x1: -10, y1: 370, x2: 370, y2: 370 }],
+          switches: [{ x: 291, y: 503, gate: 0 }],
+          frogs: [{ hops: [[277, 456], [230, 321]] }],
+        },
+        // frø 1500117
+        {
+          id: '15-3',
+          name: { no: 'Froskeporten', en: 'Frog gate' },
+          par: 4, pearl: 3,
+          boats: [{ x: 226, y: 100 }],
+          docks: [{ x: 74, y: 544 }],
+          currents: [{ x: 0, y: 185, w: 360, h: 92, vx: 71, vy: 0 }],
+          gates: [{ x1: 370, y1: 374, x2: -10, y2: 374 }],
+          switches: [{ x: 316, y: 155, gate: 0 }],
+        },
+        // frø 1500053
+        {
+          id: '15-4',
+          name: { no: 'Demningen', en: 'The dam' },
+          par: 4, pearl: 3,
+          boats: [{ x: 220, y: 81 }],
+          docks: [{ x: 255, y: 528 }],
+          rocks: [{ x: 258, y: 347, r: 19 }],
+          currents: [{ x: 105, y: 195, w: 87, h: 303, vx: 0, vy: 64 }],
+          gates: [{ x1: -10, y1: 256, x2: 370, y2: 256 }],
+          switches: [{ x: 44, y: 196, gate: 0 }],
+          frogs: [{ hops: [[149, 171], [265, 139]] }],
+        },
+        // frø 1500113
+        {
+          id: '15-5',
+          name: { no: 'Møllerens frosk', en: 'The miller\'s frog' },
+          par: 4, pearl: 3,
+          dark: true,
+          boats: [{ x: 295, y: 524 }],
+          docks: [{ x: 247, y: 102 }],
+          logs: [{ x1: 26, y1: 404, x2: 134, y2: 366, r: 8 }],
+          currents: [{ x: 0, y: 179, w: 360, h: 87, vx: 57, vy: 0 }],
+          walls: [{ x1: 370, y1: 376, x2: 155, y2: 404 }],
+          frogs: [{ hops: [[274, 306], [183, 354]] }],
+        },
+        // frø 1500042
+        {
+          id: '15-6',
+          name: { no: 'Hjulet går', en: 'The wheel turns' },
+          par: 4, pearl: 3,
+          boats: [{ x: 66, y: 168 }, { x: 298, y: 109 }],
+          docks: [{ x: 237, y: 425 }, { x: 155, y: 470 }],
+          rocks: [{ x: 153, y: 371, r: 20 }],
+          currents: [{ x: 0, y: 240, w: 360, h: 77, vx: 62, vy: 0 }],
+          frogs: [{ hops: [[77, 114], [155, 133]] }],
+        },
+        // frø 1500082
+        {
+          id: '15-7',
+          name: { no: 'Luka', en: 'The hatch' },
+          par: 4, pearl: 3,
+          boats: [{ x: 267, y: 467, color: 0 }, { x: 89, y: 473, color: 1 }],
+          docks: [{ x: 143, y: 116, color: 0 }, { x: 270, y: 76, color: 1 }],
+          rocks: [{ x: 65, y: 145, r: 18 }],
+          whirls: [{ x: 85, y: 229, r: 48, power: 1 }],
+          currents: [{ x: 149, y: 188, w: 86, h: 322, vx: 0, vy: -59 }],
+          gates: [{ x1: 370, y1: 340, x2: -10, y2: 340 }],
+          switches: [{ x: 80, y: 400, gate: 0 }],
+          frogs: [{ hops: [[263, 373], [127, 437]] }],
+        },
+        // frø 1500127
+        {
+          id: '15-8',
+          name: { no: 'Nattskift', en: 'Night shift' },
+          par: 4, pearl: 3,
+          dark: true,
+          boats: [{ x: 259, y: 336 }, { x: 58, y: 488 }],
+          docks: [{ x: 93, y: 73 }, { x: 268, y: 132 }],
+          rocks: [{ x: 45, y: 203, r: 29 }],
+          currents: [{ x: 128, y: 70, w: 82, h: 469, vx: 0, vy: -48 }],
+          walls: [{ x1: -10, y1: 281, x2: 238, y2: 271 }],
+          frogs: [{ hops: [[276, 400], [270, 288]] }, { hops: [[316, 431], [313, 271]] }],
+        },
+        // frø 1500061
+        {
+          id: '15-9',
+          name: { no: 'Kvernsteinen', en: 'The millstone' },
+          par: 4, pearl: 3,
+          dark: true,
+          boats: [{ x: 131, y: 457 }, { x: 186, y: 430 }],
+          docks: [{ x: 174, y: 66 }, { x: 241, y: 112 }],
+          currents: [{ x: 0, y: 168, w: 360, h: 77, vx: -62, vy: 0 }],
+          gates: [{ x1: -10, y1: 368, x2: 370, y2: 368 }],
+          switches: [{ x: 263, y: 430, gate: 0 }],
+          frogs: [{ hops: [[310, 334], [246, 276]] }],
+        },
+        // frø 1500075
+        {
+          id: '15-10',
+          name: { no: 'Slusefrosken', en: 'Lock frog' },
+          par: 4, pearl: 3,
+          boats: [{ x: 95, y: 153, color: 0 }, { x: 58, y: 105, color: 1 }, { x: 131, y: 242, color: 2 }],
+          docks: [{ x: 94, y: 442, color: 0 }, { x: 163, y: 395, color: 1 }, { x: 301, y: 460, color: 2 }],
+          logs: [{ x1: 130, y1: 91, x2: 202, y2: 195, r: 8 }],
+          gates: [{ x1: 370, y1: 323, x2: -10, y2: 323 }],
+          switches: [{ x: 198, y: 95, gate: 0 }],
+          frogs: [{ hops: [[257, 230], [247, 364]] }],
+        },
+        // frø 1500111
+        {
+          id: '15-11',
+          name: { no: 'Dam ved midnatt', en: 'Midnight pond' },
+          par: 4, pearl: 3,
+          dark: true,
+          boats: [{ x: 172, y: 529 }, { x: 202, y: 353 }, { x: 278, y: 368 }],
+          docks: [{ x: 215, y: 216 }, { x: 220, y: 130 }, { x: 152, y: 166 }],
+          rocks: [{ x: 309, y: 168, r: 22 }],
+          gates: [{ x1: -10, y1: 287, x2: 370, y2: 287 }],
+          switches: [{ x: 54, y: 346, gate: 0 }],
+          frogs: [{ hops: [[145, 425], [244, 462], [110, 411]] }, { hops: [[48, 150], [154, 94]] }],
+          lamps: [{ x: 59, y: 411, r: 70 }],
+        },
+        // frø 1500021
+        {
+          id: '15-12',
+          name: { no: 'Renna', en: 'The race' },
+          par: 5, pearl: 4,
+          boats: [{ x: 311, y: 174 }, { x: 317, y: 114 }],
+          docks: [{ x: 268, y: 468 }, { x: 174, y: 506 }],
+          rocks: [{ x: 169, y: 95, r: 21 }],
+          currents: [{ x: 186, y: 128, w: 82, h: 275, vx: 0, vy: 61 }],
+          walls: [{ x1: 370, y1: 244, x2: 120, y2: 280 }],
+        },
+        // frø 1500023
+        {
+          id: '15-13',
+          name: { no: 'Mølledammen', en: 'The mill pond' },
+          par: 5, pearl: 4,
+          boats: [{ x: 225, y: 520 }, { x: 103, y: 437 }],
+          docks: [{ x: 313, y: 56 }, { x: 272, y: 129 }],
+          rocks: [{ x: 106, y: 276, r: 26 }],
+          logs: [{ x1: 123, y1: 158, x2: 115, y2: 70, r: 8 }],
+          currents: [{ x: 142, y: 65, w: 90, h: 394, vx: 0, vy: -59 }],
+          walls: [{ x1: -10, y1: 368, x2: 238, y2: 328 }],
+          gates: [{ x1: -10, y1: 204, x2: 370, y2: 204 }],
+          switches: [{ x: 307, y: 390, gate: 0 }],
+          frogs: [{ hops: [[282, 266], [264, 398]] }, { hops: [[279, 311], [319, 170]] }],
+        },
+        // frø 1500116
+        {
+          id: '15-14',
+          name: { no: 'Stille natt', en: 'Silent night' },
+          par: 4, pearl: 3,
+          boats: [{ x: 303, y: 391 }],
+          docks: [{ x: 241, y: 70 }],
+          logs: [{ x1: 321, y1: 199, x2: 209, y2: 185, r: 8 }],
+          currents: [{ x: 101, y: 72, w: 88, h: 430, vx: 0, vy: -49 }],
+          gates: [{ x1: -10, y1: 259, x2: 370, y2: 259 }],
+          switches: [{ x: 243, y: 487, gate: 0 }],
+          frogs: [{ hops: [[233, 472], [218, 323]] }],
+        },
+        // frø 1500050
+        {
+          id: '15-15',
+          name: { no: 'Storkverna', en: 'The great mill' },
+          par: 5, pearl: 4,
+          dark: true,
+          boats: [{ x: 60, y: 135 }, { x: 128, y: 103 }],
+          docks: [{ x: 210, y: 545 }, { x: 105, y: 485 }],
+          rocks: [{ x: 208, y: 452, r: 18 }],
+          logs: [{ x1: 173, y1: 145, x2: 307, y2: 157, r: 8 }],
+          currents: [{ x: 0, y: 345, w: 360, h: 74, vx: 54, vy: 0 }],
+          gates: [{ x1: -10, y1: 245, x2: 370, y2: 245 }],
+          switches: [{ x: 267, y: 127, gate: 0 }],
+          frogs: [{ hops: [[114, 309], [125, 439]] }],
+        },
+      ],
+    },
+    {
+      id: 16,
+      name: { no: 'Haglbygen', en: 'Hail Squall' },
+      blurb: { no: 'Haglet trommer, vinden river og fossen drar.', en: 'Hail drums, the wind tears and the falls pull.' },
+      unlockStars: 405, mood: 'rain',
+      levels: [
+        // frø 1600005
+        {
+          id: '16-1',
+          name: { no: 'Første hagl', en: 'First hail' },
+          tip: { no: 'Regn og vind først. Fossene kommer snart', en: 'Rain and wind first. The falls are coming soon' },
+          par: 3, pearl: 2,
+          boats: [{ x: 213, y: 445 }],
+          docks: [{ x: 98, y: 152 }],
+          rocks: [{ x: 209, y: 368, r: 20 }],
+          rain: [{ x: 58, y: 409, every: 0.9, delay: 0.6 }, { x: 108, y: 118, every: 1.2 }],
+          winds: [{ x: 0, y: 202, w: 360, h: 109, ax: -64, ay: 0 }],
+        },
+        // frø 1600054
+        {
+          id: '16-2',
+          name: { no: 'Glatt fall', en: 'Slippery drop' },
+          par: 3, pearl: 2,
+          boats: [{ x: 112, y: 514, heavy: true }],
+          docks: [{ x: 153, y: 138 }],
+          rocks: [{ x: 130, y: 418, r: 19 }],
+          cascades: [{ x: 168, y: 346, r: 54 }],
+          rain: [{ x: 137, y: 51, every: 1 }, { x: 256, y: 308, every: 1.2, delay: 0.7 }, { x: 93, y: 315, every: 1.1 }],
+          ice: [{ x: 34, y: 181, w: 288, h: 183 }],
+          winds: [{ x: 0, y: 278, w: 360, h: 82, ax: 65, ay: 0 }],
+        },
+        // frø 1600043
+        {
+          id: '16-3',
+          name: { no: 'Sludd', en: 'Sleet' },
+          par: 3, pearl: 2,
+          boats: [{ x: 97, y: 99, color: 0 }, { x: 115, y: 208, color: 1 }],
+          docks: [{ x: 279, y: 371, color: 0 }, { x: 208, y: 478, color: 1 }],
+          rocks: [{ x: 297, y: 155, r: 28 }],
+          logs: [{ x1: 165, y1: 370, x2: 113, y2: 446, r: 8 }],
+          falls: [{ x1: 0, y1: 343, x2: 360, y2: 279 }],
+          cascades: [{ x: 179, y: 293, r: 57 }],
+          rain: [{ x: 261, y: 302, every: 1.1, delay: 0.6 }, { x: 245, y: 400, every: 1, delay: 0.8 }],
+          ice: [{ x: 27, y: 260, w: 302, h: 205 }],
+        },
+        // frø 1600049
+        {
+          id: '16-4',
+          name: { no: 'Kald dusj', en: 'Cold shower' },
+          par: 3, pearl: 2,
+          boats: [{ x: 272, y: 499 }, { x: 290, y: 424, heavy: true }],
+          docks: [{ x: 279, y: 64 }, { x: 100, y: 104 }],
+          rocks: [{ x: 260, y: 153, r: 20 }],
+          whirls: [{ x: 98, y: 210, r: 52, power: 1 }],
+          falls: [{ x1: 360, y1: 322, x2: 0, y2: 376 }],
+          cascades: [{ x: 182, y: 358, r: 50 }],
+          rain: [{ x: 301, y: 204, every: 1, delay: 0.7 }],
+          ice: [{ x: 50, y: 255, w: 271, h: 144 }],
+        },
+        // frø 1600003
+        {
+          id: '16-5',
+          name: { no: 'Islagt foss', en: 'Frozen falls' },
+          par: 3, pearl: 2,
+          boats: [{ x: 100, y: 448, color: 0 }, { x: 222, y: 411, color: 1, heavy: true }, { x: 169, y: 454, color: 2 }],
+          docks: [{ x: 199, y: 189, color: 0 }, { x: 118, y: 259, color: 1 }, { x: 271, y: 109, color: 2 }],
+          rocks: [{ x: 267, y: 261, r: 25 }, { x: 53, y: 167, r: 24 }],
+          falls: [{ x1: 360, y1: 366, x2: 0, y2: 304 }],
+          rain: [{ x: 238, y: 48, every: 1.2, delay: 0.4 }, { x: 53, y: 210, every: 1.3, delay: 0.4 }, { x: 99, y: 55, every: 1 }],
+          ice: [{ x: 56, y: 188, w: 257, h: 196 }],
+        },
+        // frø 1600009
+        {
+          id: '16-6',
+          name: { no: 'Vindbyger', en: 'Squalls' },
+          par: 4, pearl: 3,
+          boats: [{ x: 70, y: 482, heavy: true }],
+          docks: [{ x: 303, y: 61 }],
+          logs: [{ x1: 287, y1: 458, x2: 245, y2: 384, r: 8 }],
+          cascades: [{ x: 110, y: 253, r: 50 }],
+          rain: [{ x: 167, y: 133, every: 1.1 }, { x: 169, y: 378, every: 0.9 }],
+          ice: [{ x: 39, y: 176, w: 271, h: 162 }],
+        },
+        // frø 1600026
+        {
+          id: '16-7',
+          name: { no: 'Haglkorn', en: 'Hailstones' },
+          par: 3, pearl: 2,
+          boats: [{ x: 231, y: 513 }, { x: 113, y: 509 }],
+          docks: [{ x: 297, y: 166 }, { x: 231, y: 121 }],
+          rocks: [{ x: 293, y: 371, r: 23 }, { x: 183, y: 396, r: 27 }],
+          logs: [{ x1: 171, y1: 184, x2: 99, y2: 124, r: 8 }],
+          falls: [{ x1: 360, y1: 275, x2: 0, y2: 245 }],
+          cascades: [{ x: 220, y: 264, r: 57 }],
+          rain: [{ x: 181, y: 286, every: 1.3 }, { x: 108, y: 82, every: 0.9 }, { x: 92, y: 209, every: 1.2 }],
+        },
+        // frø 1600006
+        {
+          id: '16-8',
+          name: { no: 'Stormkast', en: 'Storm gust' },
+          par: 4, pearl: 3,
+          boats: [{ x: 69, y: 146, heavy: true }, { x: 132, y: 67 }],
+          docks: [{ x: 123, y: 480 }, { x: 273, y: 518 }],
+          rocks: [{ x: 295, y: 98, r: 27 }],
+          falls: [{ x1: 0, y1: 233, x2: 360, y2: 207 }],
+          cascades: [{ x: 170, y: 234, r: 57 }],
+          rain: [{ x: 247, y: 361, every: 1.2, delay: 0.5 }, { x: 144, y: 533, every: 1, delay: 0.6 }, { x: 295, y: 557, every: 1 }],
+          winds: [{ x: 0, y: 313, w: 360, h: 88, ax: 70, ay: 0 }],
+        },
+        // frø 1600002
+        {
+          id: '16-9',
+          name: { no: 'Iskaldt regn', en: 'Freezing rain' },
+          par: 4, pearl: 3,
+          boats: [{ x: 250, y: 475, color: 0, heavy: true }, { x: 89, y: 388, color: 1 }],
+          docks: [{ x: 83, y: 159, color: 0 }, { x: 249, y: 214, color: 1 }],
+          rocks: [{ x: 201, y: 401, r: 21 }, { x: 305, y: 374, r: 23 }],
+          logs: [{ x1: 35, y1: 245, x2: 131, y2: 235, r: 8 }],
+          falls: [{ x1: 360, y1: 275, x2: 0, y2: 343 }],
+          rain: [{ x: 255, y: 130, every: 0.9, delay: 0.4 }, { x: 177, y: 61, every: 0.9 }, { x: 286, y: 281, every: 1.1, delay: 0.5 }],
+        },
+        // frø 1600015
+        {
+          id: '16-10',
+          name: { no: 'Tordenvær', en: 'Thunderstorm' },
+          par: 4, pearl: 3,
+          boats: [{ x: 89, y: 514 }, { x: 264, y: 429, heavy: true }],
+          docks: [{ x: 83, y: 167 }, { x: 183, y: 134 }],
+          logs: [{ x1: 162, y1: 503, x2: 144, y2: 391, r: 8 }],
+          cascades: [{ x: 99, y: 315, r: 52 }],
+          rain: [{ x: 285, y: 91, every: 1.1, delay: 0.6 }, { x: 247, y: 253, every: 1.3 }, { x: 79, y: 254, every: 1.2 }],
+          winds: [{ x: 0, y: 247, w: 360, h: 100, ax: -68, ay: 0 }],
+        },
+        // frø 1600019
+        {
+          id: '16-11',
+          name: { no: 'Fossefall', en: 'Waterfall' },
+          par: 4, pearl: 3,
+          boats: [{ x: 121, y: 125 }, { x: 315, y: 130 }, { x: 277, y: 62 }],
+          docks: [{ x: 122, y: 540 }, { x: 99, y: 467 }, { x: 196, y: 321 }],
+          falls: [{ x1: 0, y1: 355, x2: 360, y2: 423 }],
+          rain: [{ x: 66, y: 369, every: 1.2 }, { x: 256, y: 542, every: 1.2, delay: 0.4 }, { x: 312, y: 388, every: 1 }],
+          ice: [{ x: 96, y: 279, w: 249, h: 164 }],
+          winds: [{ x: 0, y: 172, w: 360, h: 107, ax: 65, ay: 0 }],
+        },
+        // frø 1600055
+        {
+          id: '16-12',
+          name: { no: 'Uværet', en: 'The tempest' },
+          par: 4, pearl: 3,
+          boats: [{ x: 250, y: 534, heavy: true }, { x: 107, y: 512 }, { x: 212, y: 461 }],
+          docks: [{ x: 88, y: 315 }, { x: 205, y: 102 }, { x: 127, y: 89 }],
+          falls: [{ x1: 360, y1: 411, x2: 0, y2: 377 }],
+          cascades: [{ x: 255, y: 321, r: 55 }],
+          rain: [{ x: 133, y: 266, every: 1, delay: 1.1 }, { x: 281, y: 296, every: 1.3, delay: 0.5 }],
+          winds: [{ x: 0, y: 191, w: 360, h: 81, ax: -65, ay: 0 }],
+        },
+        // frø 1600051
+        {
+          id: '16-13',
+          name: { no: 'Vinterstorm', en: 'Winter storm' },
+          par: 5, pearl: 4,
+          boats: [{ x: 246, y: 533, color: 0, heavy: true }, { x: 44, y: 404, color: 1 }],
+          docks: [{ x: 309, y: 116, color: 0 }, { x: 187, y: 169, color: 1 }],
+          cascades: [{ x: 274, y: 250, r: 49 }],
+          rain: [{ x: 171, y: 343, every: 1, delay: 0.8 }, { x: 216, y: 250, every: 1.3 }],
+          winds: [{ x: 0, y: 242, w: 360, h: 109, ax: 55, ay: 0 }],
+        },
+        // frø 1600046
+        {
+          id: '16-14',
+          name: { no: 'Etter bygen', en: 'After the squall' },
+          par: 3, pearl: 2,
+          boats: [{ x: 215, y: 480 }, { x: 110, y: 488 }],
+          docks: [{ x: 227, y: 143 }, { x: 311, y: 139 }],
+          rocks: [{ x: 262, y: 217, r: 21 }],
+          whirls: [{ x: 76, y: 139, r: 49, power: 1 }],
+          cascades: [{ x: 252, y: 313, r: 58 }],
+          rain: [{ x: 97, y: 141, every: 1 }, { x: 181, y: 196, every: 1.1 }, { x: 211, y: 45, every: 0.9, delay: 0.5 }],
+          winds: [{ x: 0, y: 283, w: 360, h: 92, ax: 52, ay: 0 }],
+        },
+        // frø 1600007
+        {
+          id: '16-15',
+          name: { no: 'Stormens øye', en: 'Eye of the storm' },
+          par: 5, pearl: 4,
+          boats: [{ x: 95, y: 528 }, { x: 243, y: 532, heavy: true }],
+          docks: [{ x: 268, y: 130 }, { x: 156, y: 99 }],
+          rocks: [{ x: 109, y: 430, r: 24 }],
+          falls: [{ x1: 360, y1: 214, x2: 0, y2: 192 }],
+          rain: [{ x: 242, y: 318, every: 1 }, { x: 203, y: 183, every: 0.9 }],
+          winds: [{ x: 0, y: 306, w: 360, h: 86, ax: -47, ay: 0 }],
+        },
+      ],
+    },
+    {
+      id: 17,
+      name: { no: 'Sagbruket', en: 'The Sawmill' },
+      blurb: { no: 'Tømmer, fosser og sluser. Sagbladet går hele dagen.', en: 'Timber, falls and locks. The saw runs all day.' },
+      unlockStars: 432,
+      levels: [
+        // frø 1700028
+        {
+          id: '17-1',
+          name: { no: 'Sagbruksveien', en: 'Sawmill lane' },
+          tip: { no: 'Fosser og sluser først. Tømmeret kommer snart', en: 'Falls and locks first. The logs are coming soon' },
+          par: 3, pearl: 2,
+          boats: [{ x: 183, y: 108 }],
+          docks: [{ x: 236, y: 536 }],
+          rocks: [{ x: 242, y: 273, r: 21 }],
+          falls: [{ x1: 0, y1: 374, x2: 360, y2: 352 }],
+          gates: [{ x1: 370, y1: 210, x2: -10, y2: 210 }],
+          switches: [{ x: 113, y: 157, gate: 0 }],
+        },
+        // frø 1700004
+        {
+          id: '17-2',
+          name: { no: 'Tømmerrenna', en: 'The log flume' },
+          par: 3, pearl: 2,
+          boats: [{ x: 208, y: 105 }],
+          docks: [{ x: 187, y: 456 }],
+          rocks: [{ x: 164, y: 303, r: 26 }],
+          falls: [{ x1: 0, y1: 399, x2: 360, y2: 395 }],
+          gates: [{ x1: -10, y1: 229, x2: 370, y2: 229 }],
+          switches: [{ x: 41, y: 151, gate: 0 }],
+        },
+        // frø 1700088
+        {
+          id: '17-3',
+          name: { no: 'Sluseporten', en: 'The lock gate' },
+          par: 3, pearl: 2,
+          boats: [{ x: 81, y: 80 }],
+          docks: [{ x: 77, y: 491 }],
+          whirls: [{ x: 101, y: 247, r: 48, power: 1 }],
+          cascades: [{ x: 218, y: 305, r: 50 }],
+          walls: [{ x1: 370, y1: 198, x2: 185, y2: 212 }, { x1: -10, y1: 369, x2: 188, y2: 401 }],
+        },
+        // frø 1700034
+        {
+          id: '17-4',
+          name: { no: 'Sagflis', en: 'Sawdust' },
+          par: 3, pearl: 2,
+          boats: [{ x: 259, y: 493 }],
+          docks: [{ x: 162, y: 105 }],
+          rocks: [{ x: 88, y: 315, r: 21 }, { x: 285, y: 422, r: 18 }],
+          currents: [{ x: 0, y: 158, w: 360, h: 84, vx: -53, vy: 0 }],
+          timber: [{ x1: 420, y1: 200, x2: -60, y2: 200, speed: 53, len: 55, gap: [0.6, 1.8], seed: 846 }],
+          walls: [{ x1: 370, y1: 347, x2: 145, y2: 387 }],
+        },
+        // frø 1700084
+        {
+          id: '17-5',
+          name: { no: 'Fløtingsdammen', en: 'The driving dam' },
+          par: 4, pearl: 3,
+          boats: [{ x: 246, y: 117 }],
+          docks: [{ x: 231, y: 510 }],
+          rocks: [{ x: 121, y: 490, r: 29 }],
+          currents: [{ x: 0, y: 326, w: 360, h: 77, vx: -44, vy: 0 }],
+          timber: [{ x1: 420, y1: 364, x2: -60, y2: 364, speed: 44, len: 55, gap: [0.8, 2.3], seed: 835 }],
+          cascades: [{ x: 80, y: 304, r: 54 }],
+          walls: [{ x1: 370, y1: 266, x2: 143, y2: 226 }],
+        },
+        // frø 1700024
+        {
+          id: '17-6',
+          name: { no: 'Bordstabelen', en: 'The plank stack' },
+          par: 4, pearl: 3,
+          boats: [{ x: 100, y: 468 }],
+          docks: [{ x: 87, y: 58 }],
+          whirls: [{ x: 172, y: 433, r: 47, power: 1 }],
+          currents: [{ x: 0, y: 171, w: 360, h: 70, vx: 53, vy: 0 }],
+          timber: [{ x1: -60, y1: 206, x2: 420, y2: 206, speed: 53, len: 54, gap: [1, 1.9], seed: 895 }],
+          cascades: [{ x: 130, y: 255, r: 47 }, { x: 264, y: 205, r: 53 }],
+          walls: [{ x1: -10, y1: 368, x2: 226, y2: 348 }],
+        },
+        // frø 1700069
+        {
+          id: '17-7',
+          name: { no: 'Fossekraft', en: 'Water power' },
+          par: 4, pearl: 3,
+          boats: [{ x: 277, y: 93, color: 0 }, { x: 301, y: 306, color: 1 }],
+          docks: [{ x: 150, y: 522, color: 0 }, { x: 276, y: 502, color: 1 }],
+          currents: [{ x: 0, y: 339, w: 360, h: 73, vx: 41, vy: 0 }],
+          timber: [{ x1: -60, y1: 375, x2: 420, y2: 375, speed: 41, len: 62, gap: [0.9, 2.4], seed: 542 }],
+          cascades: [{ x: 219, y: 362, r: 52 }],
+          walls: [{ x1: -10, y1: 212, x2: 172, y2: 216 }],
+        },
+        // frø 1700070
+        {
+          id: '17-8',
+          name: { no: 'Lunnen', en: 'The log pile' },
+          par: 4, pearl: 3,
+          boats: [{ x: 121, y: 537 }, { x: 71, y: 439 }],
+          docks: [{ x: 161, y: 86 }, { x: 279, y: 121 }],
+          rocks: [{ x: 124, y: 306, r: 18 }, { x: 154, y: 165, r: 21 }],
+          currents: [{ x: 0, y: 194, w: 360, h: 73, vx: -40, vy: 0 }],
+          timber: [{ x1: 420, y1: 231, x2: -60, y2: 231, speed: 40, len: 60, gap: [0.7, 2.4], seed: 275 }],
+          walls: [{ x1: 370, y1: 400, x2: 170, y2: 352 }],
+        },
+        // frø 1700047
+        {
+          id: '17-9',
+          name: { no: 'Sagbladet', en: 'The saw blade' },
+          par: 4, pearl: 3,
+          boats: [{ x: 216, y: 532 }, { x: 293, y: 534 }],
+          docks: [{ x: 257, y: 96 }, { x: 93, y: 62 }],
+          rocks: [{ x: 197, y: 141, r: 19 }, { x: 190, y: 290, r: 23 }],
+          currents: [{ x: 0, y: 344, w: 360, h: 72, vx: -53, vy: 0 }],
+          timber: [{ x1: 420, y1: 380, x2: -60, y2: 380, speed: 53, len: 52, gap: [0.8, 2.3], seed: 692 }],
+          cascades: [{ x: 261, y: 431, r: 48 }],
+          gates: [{ x1: 370, y1: 197, x2: -10, y2: 197 }],
+          switches: [{ x: 167, y: 254, gate: 0 }],
+        },
+        // frø 1700002
+        {
+          id: '17-10',
+          name: { no: 'Høvelen', en: 'The plane' },
+          par: 5, pearl: 4,
+          boats: [{ x: 141, y: 502 }, { x: 205, y: 500 }],
+          docks: [{ x: 303, y: 131 }, { x: 130, y: 65 }],
+          logs: [{ x1: 110, y1: 199, x2: 48, y2: 95, r: 8 }],
+          currents: [{ x: 0, y: 353, w: 360, h: 75, vx: -47, vy: 0 }],
+          timber: [{ x1: 420, y1: 391, x2: -60, y2: 391, speed: 47, len: 65, gap: [0.9, 1.9], seed: 531 }],
+          cascades: [{ x: 152, y: 340, r: 55 }],
+          gates: [{ x1: 370, y1: 242, x2: -10, y2: 242 }],
+          switches: [{ x: 43, y: 477, gate: 0 }],
+        },
+        // frø 1700106
+        {
+          id: '17-11',
+          name: { no: 'Tømmerfossen', en: 'Timber falls' },
+          par: 5, pearl: 4,
+          boats: [{ x: 164, y: 84, color: 0 }, { x: 258, y: 81, color: 1 }],
+          docks: [{ x: 127, y: 501, color: 0 }, { x: 192, y: 421, color: 1 }],
+          logs: [{ x1: 94, y1: 325, x2: 98, y2: 437, r: 8 }],
+          currents: [{ x: 0, y: 180, w: 360, h: 80, vx: -51, vy: 0 }],
+          timber: [{ x1: 420, y1: 220, x2: -60, y2: 220, speed: 51, len: 67, gap: [0.8, 1.8], seed: 625 }],
+          walls: [{ x1: 370, y1: 352, x2: 140, y2: 368 }],
+        },
+        // frø 1700043
+        {
+          id: '17-12',
+          name: { no: 'Skiftet', en: 'The shift' },
+          par: 5, pearl: 4,
+          boats: [{ x: 256, y: 299 }, { x: 90, y: 488 }],
+          docks: [{ x: 234, y: 129 }, { x: 145, y: 109 }],
+          logs: [{ x1: 175, y1: 464, x2: 299, y2: 458, r: 8 }],
+          falls: [{ x1: 360, y1: 368, x2: 0, y2: 368 }],
+          gates: [{ x1: 370, y1: 204, x2: -10, y2: 204 }],
+          switches: [{ x: 175, y: 518, gate: 0 }],
+        },
+        // frø 1700061
+        {
+          id: '17-13',
+          name: { no: 'Hovedsluka', en: 'The main sluice' },
+          par: 5, pearl: 4,
+          boats: [{ x: 69, y: 150 }, { x: 306, y: 76 }],
+          docks: [{ x: 177, y: 490 }, { x: 91, y: 513 }],
+          rocks: [{ x: 270, y: 166, r: 22 }],
+          logs: [{ x1: 198, y1: 228, x2: 304, y2: 300, r: 8 }],
+          currents: [{ x: 0, y: 318, w: 360, h: 74, vx: -45, vy: 0 }],
+          timber: [{ x1: 420, y1: 355, x2: -60, y2: 355, speed: 45, len: 62, gap: [0.9, 1.9], seed: 468 }],
+          cascades: [{ x: 118, y: 327, r: 52 }],
+        },
+        // frø 1700019
+        {
+          id: '17-14',
+          name: { no: 'Matpause', en: 'Lunch break' },
+          par: 3, pearl: 2,
+          boats: [{ x: 277, y: 129 }, { x: 85, y: 109 }],
+          docks: [{ x: 195, y: 536 }, { x: 63, y: 479 }],
+          rocks: [{ x: 216, y: 453, r: 24 }],
+          falls: [{ x1: 0, y1: 227, x2: 360, y2: 225 }],
+          gates: [{ x1: 370, y1: 358, x2: -10, y2: 358 }],
+          switches: [{ x: 189, y: 143, gate: 0 }],
+        },
+        // frø 1700083
+        {
+          id: '17-15',
+          name: { no: 'Store sagdagen', en: 'The big saw day' },
+          par: 5, pearl: 4,
+          boats: [{ x: 156, y: 81 }, { x: 52, y: 110 }],
+          docks: [{ x: 176, y: 500 }, { x: 306, y: 475 }],
+          logs: [{ x1: 217, y1: 50, x2: 201, y2: 178, r: 8 }],
+          currents: [{ x: 0, y: 339, w: 360, h: 78, vx: 54, vy: 0 }],
+          timber: [{ x1: -60, y1: 378, x2: 420, y2: 378, speed: 54, len: 60, gap: [1, 2.2], seed: 358 }],
+          cascades: [{ x: 277, y: 391, r: 48 }],
+          gates: [{ x1: -10, y1: 230, x2: 370, y2: 230 }],
+          switches: [{ x: 282, y: 93, gate: 0 }],
+        },
+      ],
+    },
+    {
+      id: 18,
+      name: { no: 'Stormnatta', en: 'Stormy Night' },
+      blurb: { no: 'Regn og mørke over fjorden. Froskene hopper, tidevannet snur.', en: 'Rain and darkness over the fjord. Frogs leap, the tide turns.' },
+      unlockStars: 459, mood: 'dusk',
+      levels: [
+        // frø 1800098
+        {
+          id: '18-1',
+          name: { no: 'Mørk fjord', en: 'Dark fjord' },
+          tip: { no: 'Regn, frosker og tidevann. Froskene og dråpene lager krusninger for deg', en: 'Rain, frogs and tides. Frogs and drops make ripples for you' },
+          par: 3, pearl: 2,
+          tide: [0, 1, 2, 1],
+          boats: [{ x: 92, y: 94, heavy: true }],
+          docks: [{ x: 238, y: 490 }],
+          whirls: [{ x: 74, y: 176, r: 49, power: 1 }],
+          rain: [{ x: 100, y: 331, every: 1.2, delay: 0.6 }, { x: 305, y: 546, every: 1.3 }, { x: 160, y: 460, every: 1.2 }],
+          frogs: [{ hops: [[203, 189], [307, 189]] }, { hops: [[298, 146], [160, 146]] }],
+          banks: [{ x1: -10, y1: 286, x2: 231, y2: 236, r: 17, h: 1 }],
+          maels: [{ x: 215, y: 303, r: 90 }],
+        },
+        // frø 1800090
+        {
+          id: '18-2',
+          name: { no: 'Fyrlykta', en: 'The lighthouse' },
+          par: 3, pearl: 2,
+          tide: [1, 0],
+          boats: [{ x: 170, y: 329, heavy: true }],
+          docks: [{ x: 97, y: 86 }],
+          logs: [{ x1: 177, y1: 539, x2: 191, y2: 411, r: 8 }],
+          whirls: [{ x: 205, y: 160, r: 48, power: 1 }],
+          rain: [{ x: 284, y: 75, every: 1.2, delay: 0.8 }, { x: 235, y: 188, every: 1 }, { x: 137, y: 184, every: 1.1, delay: 0.7 }],
+          banks: [{ x1: 370, y1: 272, x2: 123, y2: 252, r: 20, h: 2 }],
+        },
+        // frø 1800051
+        {
+          id: '18-3',
+          name: { no: 'Regn på sanden', en: 'Rain on the sand' },
+          par: 3, pearl: 2,
+          boats: [{ x: 67, y: 138, color: 0 }, { x: 182, y: 119, color: 1 }],
+          docks: [{ x: 198, y: 391, color: 0 }, { x: 245, y: 459, color: 1 }],
+          rocks: [{ x: 240, y: 321, r: 25 }],
+          logs: [{ x1: 83, y1: 444, x2: 151, y2: 488, r: 8 }],
+          rain: [{ x: 51, y: 372, every: 1.2, delay: 0.7 }, { x: 179, y: 267, every: 1 }, { x: 72, y: 537, every: 1.2 }],
+          frogs: [{ hops: [[320, 246], [176, 166]] }, { hops: [[41, 234], [67, 302], [207, 258]] }],
+        },
+        // frø 1800011
+        {
+          id: '18-4',
+          name: { no: 'Nattflo', en: 'Night tide' },
+          par: 3, pearl: 2,
+          dark: true,
+          boats: [{ x: 41, y: 204 }, { x: 294, y: 187 }, { x: 267, y: 126 }],
+          docks: [{ x: 58, y: 483 }, { x: 253, y: 515 }, { x: 277, y: 390 }],
+          rocks: [{ x: 278, y: 284, r: 28 }],
+          rain: [{ x: 233, y: 383, every: 1.1 }, { x: 168, y: 536, every: 1.2, delay: 1 }],
+          frogs: [{ hops: [[175, 488], [58, 429]] }, { hops: [[203, 151], [116, 166]] }],
+          maels: [{ x: 143, y: 344, r: 94 }],
+        },
+        // frø 1800031
+        {
+          id: '18-5',
+          name: { no: 'Fjordfrosk', en: 'Fjord frog' },
+          par: 3, pearl: 2,
+          dark: true,
+          boats: [{ x: 221, y: 163 }, { x: 268, y: 107 }, { x: 71, y: 193 }],
+          docks: [{ x: 92, y: 486 }, { x: 186, y: 483 }, { x: 76, y: 397 }],
+          rocks: [{ x: 140, y: 187, r: 23 }],
+          rain: [{ x: 315, y: 488, every: 1.1 }, { x: 219, y: 478, every: 1.3, delay: 0.8 }],
+          frogs: [{ hops: [[82, 248], [103, 338]] }, { hops: [[242, 470], [141, 443], [263, 497]] }],
+          lamps: [{ x: 166, y: 196, r: 70 }],
+          maels: [{ x: 225, y: 334, r: 101 }],
+        },
+        // frø 1800001
+        {
+          id: '18-6',
+          name: { no: 'Malstrøm i mørket', en: 'Maelstrom in the dark' },
+          par: 4, pearl: 3,
+          boats: [{ x: 264, y: 111 }, { x: 129, y: 81, heavy: true }],
+          docks: [{ x: 203, y: 445 }, { x: 253, y: 523 }],
+          rocks: [{ x: 110, y: 498, r: 29 }],
+          rain: [{ x: 169, y: 286, every: 1.2, delay: 1 }],
+          frogs: [{ hops: [[92, 286], [117, 426]] }],
+          maels: [{ x: 230, y: 268, r: 96 }],
+        },
+        // frø 1800077
+        {
+          id: '18-7',
+          name: { no: 'Bølgeslag', en: 'Breakers' },
+          par: 4, pearl: 3,
+          dark: true,
+          tide: [2, 1, 0, 1],
+          boats: [{ x: 58, y: 473 }, { x: 215, y: 437 }],
+          docks: [{ x: 160, y: 231 }, { x: 225, y: 79 }],
+          rain: [{ x: 115, y: 165, every: 1.3, delay: 1 }, { x: 304, y: 103, every: 0.9 }],
+          frogs: [{ hops: [[240, 175], [315, 151]] }],
+          banks: [{ x1: 370, y1: 352, x2: 232.5, y2: 334, r: 14, h: 2 }, { x1: 133.5, y1: 334, x2: -10, y2: 316, r: 14, h: 1 }],
+        },
+        // frø 1800049
+        {
+          id: '18-8',
+          name: { no: 'Lyktefjære', en: 'Lantern low tide' },
+          par: 4, pearl: 3,
+          tide: [2, 1, 0, 1],
+          boats: [{ x: 152, y: 131, heavy: true }, { x: 209, y: 80 }],
+          docks: [{ x: 77, y: 470 }, { x: 116, y: 542 }],
+          logs: [{ x1: 150, y1: 383, x2: 200, y2: 507, r: 8 }],
+          whirls: [{ x: 241, y: 166, r: 53, power: 1 }],
+          rain: [{ x: 145, y: 411, every: 1 }],
+          frogs: [{ hops: [[92, 240], [100, 165]] }],
+          banks: [{ x1: -10, y1: 335, x2: 201, y2: 303, r: 15, h: 1 }],
+          maels: [{ x: 261, y: 366, r: 89 }],
+        },
+        // frø 1800058
+        {
+          id: '18-9',
+          name: { no: 'Sjøsprøyt', en: 'Sea spray' },
+          par: 4, pearl: 3,
+          tide: [2, 1, 0],
+          boats: [{ x: 173, y: 359, color: 0 }, { x: 317, y: 371, color: 1 }],
+          docks: [{ x: 134, y: 143, color: 0 }, { x: 225, y: 169, color: 1 }],
+          rocks: [{ x: 66, y: 471, r: 26 }],
+          rain: [{ x: 65, y: 177, every: 1.2 }, { x: 226, y: 210, every: 1.2 }],
+          frogs: [{ hops: [[244, 470], [155, 425]] }],
+          banks: [{ x1: -10, y1: 278, x2: 155, y2: 283, r: 16, h: 1 }, { x1: 249, y1: 283, x2: 370, y2: 288, r: 16, h: 2 }],
+        },
+        // frø 1800061
+        {
+          id: '18-10',
+          name: { no: 'Nattevakt', en: 'Night watch' },
+          par: 4, pearl: 3,
+          tide: [2, 1, 0, 1],
+          boats: [{ x: 282, y: 521, color: 0 }, { x: 255, y: 446, color: 1 }],
+          docks: [{ x: 84, y: 93, color: 0 }, { x: 166, y: 64, color: 1 }],
+          rain: [{ x: 317, y: 186, every: 1, delay: 0.6 }, { x: 61, y: 159, every: 1.3 }],
+          frogs: [{ hops: [[226, 228], [284, 184]] }],
+          banks: [{ x1: 370, y1: 317, x2: 225, y2: 316, r: 18, h: 2 }, { x1: 151, y1: 316, x2: -10, y2: 315, r: 18, h: 2 }],
+        },
+        // frø 1800099
+        {
+          id: '18-11',
+          name: { no: 'Skjærgården', en: 'The skerries' },
+          par: 4, pearl: 3,
+          dark: true,
+          boats: [{ x: 275, y: 434, heavy: true }, { x: 217, y: 481 }, { x: 117, y: 497 }],
+          docks: [{ x: 178, y: 122 }, { x: 259, y: 101 }, { x: 52, y: 145 }],
+          rain: [{ x: 51, y: 301, every: 1.2, delay: 0.9 }, { x: 192, y: 278, every: 1.1, delay: 0.8 }, { x: 196, y: 76, every: 1.1 }],
+          frogs: [{ hops: [[285, 248], [203, 301]] }],
+        },
+        // frø 1800003
+        {
+          id: '18-12',
+          name: { no: 'Kuling', en: 'Gale' },
+          par: 4, pearl: 3,
+          boats: [{ x: 139, y: 187, color: 0, heavy: true }, { x: 198, y: 173, color: 1 }, { x: 280, y: 125, color: 2 }],
+          docks: [{ x: 223, y: 526, color: 0 }, { x: 51, y: 509, color: 1 }, { x: 73, y: 390, color: 2 }],
+          rain: [{ x: 224, y: 343, every: 1.1, delay: 0.5 }, { x: 190, y: 431, every: 0.9 }],
+          frogs: [{ hops: [[129, 406], [114, 505]] }],
+        },
+        // frø 1800006
+        {
+          id: '18-13',
+          name: { no: 'Storm i fjorden', en: 'Storm in the fjord' },
+          par: 5, pearl: 4,
+          tide: [2, 2, 1, 0, 0, 1],
+          boats: [{ x: 273, y: 534, heavy: true }, { x: 84, y: 507 }],
+          docks: [{ x: 310, y: 67 }, { x: 219, y: 104 }],
+          rocks: [{ x: 65, y: 399, r: 30 }, { x: 305, y: 422, r: 30 }],
+          logs: [{ x1: 225, y1: 441, x2: 143, y2: 439, r: 8 }],
+          rain: [{ x: 188, y: 375, every: 1.3, delay: 0.9 }, { x: 112, y: 230, every: 1.2, delay: 0.8 }],
+          banks: [{ x1: 161, y1: 246, r: 27, h: 1 }],
+          maels: [{ x: 202, y: 314, r: 105 }],
+        },
+        // frø 1800088
+        {
+          id: '18-14',
+          name: { no: 'Morgengry', en: 'Daybreak' },
+          par: 4, pearl: 3,
+          tide: [2, 1, 0, 1],
+          boats: [{ x: 214, y: 496, heavy: true }],
+          docks: [{ x: 86, y: 182 }],
+          rocks: [{ x: 281, y: 377, r: 27 }],
+          rain: [{ x: 130, y: 347 }],
+          frogs: [{ hops: [[157, 467], [166, 354]] }],
+          banks: [{ x1: -10, y1: 263, x2: 249, y2: 241, r: 20, h: 1 }],
+        },
+        // frø 1800010
+        {
+          id: '18-15',
+          name: { no: 'Stormnatta', en: 'The stormy night' },
+          par: 5, pearl: 4,
+          dark: true,
+          tide: [2, 0],
+          boats: [{ x: 202, y: 64, heavy: true }, { x: 150, y: 253 }],
+          docks: [{ x: 189, y: 437 }, { x: 303, y: 446 }],
+          logs: [{ x1: 129, y1: 127, x2: 217, y2: 195, r: 8 }],
+          rain: [{ x: 217, y: 553, every: 1 }, { x: 65, y: 507, every: 1.1 }, { x: 290, y: 233, every: 1.2 }],
+          frogs: [{ hops: [[86, 159], [51, 257]] }, { hops: [[276, 500], [128, 470]] }],
+          banks: [{ x1: 370, y1: 374, x2: 144, y2: 338, r: 17, h: 2 }],
+        },
+      ],
+    },
+    {
+      id: 19,
+      name: { no: 'Polarhavet', en: 'Arctic Sea' },
+      blurb: { no: 'Is, havstrøm og tidevann langt mot nord.', en: 'Ice, ocean currents and tides far to the north.' },
+      unlockStars: 486, mood: 'ice',
+      levels: [
+        // frø 1900056
+        {
+          id: '19-1',
+          name: { no: 'Mot nord', en: 'Northward' },
+          tip: { no: 'Vind og havstrøm først. Fjorden kommer snart', en: 'Wind and ocean currents first. The fjord is coming soon' },
+          par: 3, pearl: 2,
+          boats: [{ x: 54, y: 486 }],
+          docks: [{ x: 132, y: 55 }],
+          rocks: [{ x: 232, y: 288, r: 21 }],
+          logs: [{ x1: 203, y1: 502, x2: 283, y2: 458, r: 8 }],
+          currents: [{ x: 0, y: 152, w: 360, h: 92, vx: 73, vy: 0 }],
+          winds: [{ x: 0, y: 326, w: 360, h: 107, ax: -56, ay: 0 }],
+        },
+        // frø 1900081
+        {
+          id: '19-2',
+          name: { no: 'Pakkis', en: 'Pack ice' },
+          par: 3, pearl: 2,
+          tide: [2, 1, 0, 1],
+          boats: [{ x: 83, y: 500 }, { x: 154, y: 502 }],
+          docks: [{ x: 121, y: 306 }, { x: 268, y: 69 }],
+          logs: [{ x1: 89, y1: 124, x2: 175, y2: 92, r: 8 }],
+          currents: [{ x: 0, y: 163, w: 360, h: 84, vx: 60, vy: 0 }],
+          ice: [{ x: 35, y: 252, w: 270, h: 141 }],
+          banks: [{ x1: 370, y1: 406, x2: 148, y2: 386, r: 16, h: 1 }, { x1: 76, y1: 386, x2: -10, y2: 366, r: 16, h: 2 }],
+          maels: [{ x: 244, y: 217, r: 100 }],
+        },
+        // frø 1900077
+        {
+          id: '19-3',
+          name: { no: 'Havstrømmen', en: 'The ocean current' },
+          par: 3, pearl: 2,
+          tide: [1, 0],
+          boats: [{ x: 300, y: 317, color: 0 }, { x: 101, y: 531, color: 1 }],
+          docks: [{ x: 284, y: 115, color: 0 }, { x: 174, y: 66, color: 1 }],
+          logs: [{ x1: 31, y1: 389, x2: 113, y2: 373, r: 8 }],
+          ice: [{ x: 71, y: 156, w: 246, h: 138 }],
+          banks: [{ x1: 370, y1: 240, x2: 152, y2: 258, r: 17, h: 1 }],
+          maels: [{ x: 81, y: 206, r: 106 }],
+        },
+        // frø 1900058
+        {
+          id: '19-4',
+          name: { no: 'Isfjellet', en: 'The iceberg' },
+          par: 3, pearl: 2,
+          tide: [0, 1, 2, 1],
+          boats: [{ x: 271, y: 537 }, { x: 121, y: 478 }],
+          docks: [{ x: 224, y: 76 }, { x: 134, y: 109 }],
+          currents: [{ x: 0, y: 332, w: 360, h: 89, vx: -82, vy: 0 }],
+          ice: [{ x: 15, y: 209, w: 243, h: 206 }],
+          winds: [{ x: 0, y: 146, w: 360, h: 107, ax: -49, ay: 0 }],
+          banks: [{ x1: 237, y1: 244, r: 28, h: 2 }],
+          maels: [{ x: 142, y: 263, r: 86 }],
+        },
+        // frø 1900015
+        {
+          id: '19-5',
+          name: { no: 'Polarflo', en: 'Polar tide' },
+          par: 3, pearl: 2,
+          tide: [2, 2, 1, 0, 0, 1],
+          boats: [{ x: 222, y: 89 }, { x: 305, y: 86 }, { x: 148, y: 70 }],
+          docks: [{ x: 107, y: 442 }, { x: 240, y: 498 }, { x: 310, y: 527 }],
+          rocks: [{ x: 243, y: 150, r: 19 }],
+          currents: [{ x: 0, y: 180, w: 360, h: 75, vx: 58, vy: 0 }],
+          ice: [{ x: 18, y: 219, w: 321, h: 141 }],
+          banks: [{ x1: -10, y1: 341, x2: 249, y2: 369, r: 16, h: 2 }],
+          maels: [{ x: 74, y: 207, r: 108 }],
+        },
+        // frø 1900023
+        {
+          id: '19-6',
+          name: { no: 'Kaldt sund', en: 'Cold strait' },
+          par: 4, pearl: 3,
+          boats: [{ x: 134, y: 111 }, { x: 222, y: 88 }],
+          docks: [{ x: 201, y: 500 }, { x: 126, y: 470 }],
+          rocks: [{ x: 187, y: 161, r: 20 }, { x: 317, y: 113, r: 24 }],
+          currents: [{ x: 0, y: 197, w: 360, h: 86, vx: 62, vy: 0 }],
+          winds: [{ x: 0, y: 332, w: 360, h: 104, ax: 56, ay: 0 }],
+        },
+        // frø 1900071
+        {
+          id: '19-7',
+          name: { no: 'Isbjørnbukta', en: 'Polar bear bay' },
+          par: 4, pearl: 3,
+          boats: [{ x: 76, y: 392 }, { x: 43, y: 475 }],
+          docks: [{ x: 225, y: 101 }, { x: 105, y: 118 }],
+          logs: [{ x1: 138, y1: 228, x2: 64, y2: 170, r: 8 }],
+          whirls: [{ x: 74, y: 302, r: 48, power: 1 }],
+          currents: [{ x: 178, y: 169, w: 93, h: 300, vx: 0, vy: 46 }],
+          ice: [{ x: 50, y: 191, w: 260, h: 130 }],
+        },
+        // frø 1900057
+        {
+          id: '19-8',
+          name: { no: 'Malstrøm i isen', en: 'Maelstrom in the ice' },
+          par: 4, pearl: 3,
+          boats: [{ x: 77, y: 522 }, { x: 212, y: 505 }],
+          docks: [{ x: 207, y: 93 }, { x: 109, y: 92 }],
+          logs: [{ x1: 200, y1: 167, x2: 304, y2: 121, r: 8 }],
+          currents: [{ x: 0, y: 202, w: 360, h: 77, vx: -65, vy: 0 }],
+          ice: [{ x: 18, y: 288, w: 313, h: 141 }],
+          winds: [{ x: 0, y: 340, w: 360, h: 102, ax: 47, ay: 0 }],
+          maels: [{ x: 86, y: 234, r: 102 }],
+        },
+        // frø 1900051
+        {
+          id: '19-9',
+          name: { no: 'Drivisen', en: 'The drifting ice' },
+          par: 4, pearl: 3,
+          tide: [1, 0],
+          boats: [{ x: 67, y: 462 }, { x: 286, y: 468 }],
+          docks: [{ x: 254, y: 151 }, { x: 174, y: 57 }],
+          rocks: [{ x: 186, y: 483, r: 22 }, { x: 88, y: 115, r: 27 }],
+          currents: [{ x: 0, y: 319, w: 360, h: 84, vx: -76, vy: 0 }],
+          ice: [{ x: 23, y: 160, w: 310, h: 140 }],
+          banks: [{ x1: -10, y1: 208, x2: 101, y2: 223, r: 17, h: 2 }, { x1: 179, y1: 223, x2: 370, y2: 238, r: 17, h: 1 }],
+        },
+        // frø 1900003
+        {
+          id: '19-10',
+          name: { no: 'Midnattsola', en: 'Midnight sun' },
+          par: 4, pearl: 3,
+          tide: [2, 1, 0],
+          boats: [{ x: 193, y: 521, color: 0 }, { x: 259, y: 491, color: 1 }, { x: 135, y: 486, color: 2 }],
+          docks: [{ x: 136, y: 96, color: 0 }, { x: 307, y: 75, color: 1 }, { x: 55, y: 57, color: 2 }],
+          currents: [{ x: 0, y: 165, w: 360, h: 92, vx: -53, vy: 0 }],
+          ice: [{ x: 75, y: 162, w: 257, h: 130 }],
+          banks: [{ x1: 370, y1: 363, x2: 315, y2: 362, r: 17, h: 1 }, { x1: 221, y1: 362, x2: -10, y2: 361, r: 17, h: 1 }],
+          maels: [{ x: 221, y: 181, r: 90 }],
+        },
+        // frø 1900014
+        {
+          id: '19-11',
+          name: { no: 'Havstraumen', en: 'The deep current' },
+          par: 4, pearl: 3,
+          tide: [2, 1, 0],
+          boats: [{ x: 298, y: 66 }],
+          docks: [{ x: 246, y: 504 }],
+          rocks: [{ x: 260, y: 119, r: 19 }],
+          logs: [{ x1: 87, y1: 54, x2: 115, y2: 178, r: 8 }],
+          currents: [{ x: 0, y: 315, w: 360, h: 93, vx: -49, vy: 0 }],
+          banks: [{ x1: 370, y1: 254, x2: 153, y2: 236, r: 17, h: 2 }, { x1: 75, y1: 236, x2: -10, y2: 218, r: 17, h: 2 }],
+        },
+        // frø 1900026
+        {
+          id: '19-12',
+          name: { no: 'Isbreen', en: 'The glacier' },
+          par: 5, pearl: 4,
+          tide: [0, 1, 2, 1],
+          boats: [{ x: 284, y: 504, color: 0 }, { x: 85, y: 514, color: 1 }],
+          docks: [{ x: 165, y: 66, color: 0 }, { x: 265, y: 124, color: 1 }],
+          rocks: [{ x: 70, y: 84, r: 29 }, { x: 52, y: 449, r: 20 }],
+          currents: [{ x: 0, y: 316, w: 360, h: 89, vx: 83, vy: 0 }],
+          banks: [{ x1: -10, y1: 228, x2: 220, y2: 230, r: 15, h: 2 }, { x1: 296, y1: 230, x2: 370, y2: 232, r: 15, h: 1 }],
+          maels: [{ x: 184, y: 351, r: 104 }],
+        },
+        // frø 1900031
+        {
+          id: '19-13',
+          name: { no: 'Ishavet', en: 'The Arctic Ocean' },
+          par: 5, pearl: 4,
+          tide: [2, 1, 0, 1],
+          boats: [{ x: 241, y: 69 }, { x: 65, y: 93 }],
+          docks: [{ x: 228, y: 484 }, { x: 51, y: 540 }],
+          rocks: [{ x: 319, y: 128, r: 18 }, { x: 92, y: 461, r: 25 }],
+          currents: [{ x: 148, y: 170, w: 82, h: 278, vx: 0, vy: -52 }],
+          winds: [{ x: 0, y: 317, w: 360, h: 97, ax: -67, ay: 0 }],
+          banks: [{ x1: -10, y1: 246, x2: 55.5, y2: 245, r: 20, h: 1 }, { x1: 126.5, y1: 245, x2: 370, y2: 244, r: 20, h: 2 }],
+          maels: [{ x: 282, y: 363, r: 97 }],
+        },
+        // frø 1900002
+        {
+          id: '19-14',
+          name: { no: 'Polarstille', en: 'Polar calm' },
+          par: 3, pearl: 2,
+          tide: [2, 1, 0, 1],
+          boats: [{ x: 111, y: 508 }],
+          docks: [{ x: 61, y: 156 }],
+          rocks: [{ x: 222, y: 313, r: 18 }, { x: 117, y: 305, r: 23 }],
+          logs: [{ x1: 214, y1: 142, x2: 98, y2: 96, r: 8 }],
+          currents: [{ x: 0, y: 350, w: 360, h: 84, vx: -63, vy: 0 }],
+          banks: [{ x1: 370, y1: 218, x2: 234, y2: 227, r: 17, h: 2 }, { x1: 142, y1: 227, x2: -10, y2: 236, r: 17, h: 1 }],
+        },
+        // frø 1900055
+        {
+          id: '19-15',
+          name: { no: 'Nordpolen', en: 'The North Pole' },
+          par: 5, pearl: 4,
+          tide: [2, 1, 0],
+          boats: [{ x: 284, y: 465, color: 0 }, { x: 90, y: 453, color: 1 }, { x: 169, y: 518, color: 2 }],
+          docks: [{ x: 127, y: 118, color: 0 }, { x: 314, y: 58, color: 1 }, { x: 234, y: 88, color: 2 }],
+          rocks: [{ x: 315, y: 269, r: 18 }],
+          logs: [{ x1: 71, y1: 296, x2: 185, y2: 272, r: 8 }],
+          currents: [{ x: 0, y: 154, w: 360, h: 83, vx: -48, vy: 0 }],
+          ice: [{ x: 57, y: 204, w: 282, h: 172 }],
+          banks: [{ x1: 370, y1: 363, x2: 163, y2: 356, r: 17, h: 1 }, { x1: 91, y1: 356, x2: -10, y2: 349, r: 17, h: 2 }],
+        },
+      ],
+    },
+    { id: 20, name: { no: 'Perlebukta', en: 'Pearl Bay' }, blurb: { no: 'Hemmelige baner for perlejegere.', en: 'Secret levels for pearl hunters.' }, soon: true, unlockPearls: 30, levels: [] },
   ];
 
   // Stemningen (regn, skumring, is) følger verdenen, med mindre banen sier noe annet.
@@ -3449,6 +5750,8 @@ svg { fill: currentColor; }
       drawIce(ctx, w, t);
       drawWinds(ctx, w, t);
       for (const v of w.whirls) drawWhirl(ctx, v, t);
+      for (const m of w.maels) drawMael(ctx, m, t);
+      if (w.banks.length) drawBanksUnder(ctx, w, t);
       for (const c of w.cascades) drawCascadeWater(ctx, c, t);
       drawRainSpots(ctx, w, t);
       for (const d of w.docks) drawDockWater(ctx, d, t);
@@ -3461,6 +5764,7 @@ svg { fill: currentColor; }
     ctx.restore();
 
     if (w) {
+      if (w.banks.length) drawBanksUp(ctx, w, t);
       for (const r of w.rocks) drawRock(ctx, r, t);
       for (const l of w.logs) drawLog(ctx, l);
       if (w.walls.length || w.gates.length) {
@@ -3481,6 +5785,7 @@ svg { fill: currentColor; }
       drawFallingDrops(ctx, w);
     }
     drawParticles(ctx, st.particles, 'over');
+    if (w && w.tide) drawTideGauge(ctx, w, t);
     if (w) drawMood(ctx, w, t);
     if (w && w.dark) drawDark(ctx, w, st, t);
     if (st.hint) drawHint(ctx, st.hint, t, w);
@@ -3910,6 +6215,114 @@ svg { fill: currentColor; }
         drawLog(ctx, { x1, y1: y1 + bob, x2, y2: y2 + bob, r }, i * 7 + 3);
       });
     }
+  }
+
+  // Malstrøm: mørk virvel med skumarmer som går rundt, og et hull i midten.
+  function drawMael(ctx, m, t) {
+    const g = ctx.createRadialGradient(m.x, m.y, 4, m.x, m.y, m.r);
+    g.addColorStop(0, 'rgba(5,30,55,0.75)'); g.addColorStop(0.25, 'rgba(10,45,75,0.4)');
+    g.addColorStop(0.7, 'rgba(20,70,100,0.14)'); g.addColorStop(1, 'rgba(20,70,100,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, TAU); ctx.fill();
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    ctx.rotate(t * 1.6 * m.dir);
+    ctx.lineCap = 'round';
+    for (let a = 0; a < 5; a++) {
+      ctx.rotate(TAU / 5);
+      ctx.strokeStyle = 'rgba(235,250,255,0.5)';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      for (let k = 0; k <= 24; k++) {
+        const u = k / 24, rr = 14 + u * (m.r - 18), ang = -m.dir * u * 2.4;
+        const x = Math.cos(ang) * rr, y = Math.sin(ang) * rr;
+        if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.fillStyle = 'rgba(3,18,35,0.85)';
+    ctx.beginPath(); ctx.arc(m.x, m.y, C.MAEL_CORE, 0, TAU); ctx.fill();
+  }
+
+  // Sandbanker. Under vann: svak sandflekk (stiplet kant hvis den kommer
+  // opp ved neste trykk). Over vann: tegnes som en sandøy.
+  function bankShape(ctx, k, grow) {
+    ctx.lineCap = 'round';
+    ctx.lineWidth = (k.r + grow) * 2;
+    ctx.beginPath(); ctx.moveTo(k.x1, k.y1); ctx.lineTo(k.x2 + 0.01, k.y2); ctx.stroke();
+  }
+  function tideFade(w) { return Math.min(1, Math.max(0, (w.t - w.tideT) / 0.6)); }
+  function drawBanksUnder(ctx, w, t) {
+    const f = tideFade(w);
+    const nextUp = w.tide ? w.tide[(w.tideI + 1) % w.tide.length] : 2;
+    for (const k of w.banks) {
+      const up = E.bankUp(w, k);
+      ctx.strokeStyle = `rgba(241,220,166,${up ? 0.25 : 0.22 + 0.2 * (1 - f) * 0})`;
+      bankShape(ctx, k, 2);
+      if (!up && nextUp < k.h) {
+        ctx.save();
+        ctx.setLineDash([5, 6]); ctx.lineDashOffset = -t * 10;
+        ctx.strokeStyle = `rgba(255,248,220,${0.45 + 0.25 * Math.sin(t * 4)})`; ctx.lineWidth = 2;
+        const dx = k.x2 - k.x1, dy = k.y2 - k.y1, L = Math.hypot(dx, dy);
+        if (L < 1) { ctx.beginPath(); ctx.arc(k.x1, k.y1, k.r + 2, 0, TAU); ctx.stroke(); }
+        else {
+          const px = -dy / L * (k.r + 2), py = dx / L * (k.r + 2), a = Math.atan2(dy, dx);
+          ctx.beginPath();
+          ctx.moveTo(k.x1 + px, k.y1 + py); ctx.lineTo(k.x2 + px, k.y2 + py);
+          ctx.arc(k.x2, k.y2, k.r + 2, a + Math.PI / 2, a - Math.PI / 2, true);
+          ctx.lineTo(k.x1 - px, k.y1 - py);
+          ctx.arc(k.x1, k.y1, k.r + 2, a - Math.PI / 2, a + Math.PI / 2, true);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+  }
+  function drawBanksUp(ctx, w, t) {
+    const f = tideFade(w);
+    for (const k of w.banks) {
+      if (!E.bankUp(w, k)) continue;
+      ctx.save();
+      ctx.globalAlpha = 0.35 + 0.65 * f;
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)'; bankShape(ctx, k, 3 + Math.sin(t * 2) * 0.8);
+      ctx.strokeStyle = PAL.sandEdge; bankShape(ctx, k, 0);
+      ctx.strokeStyle = PAL.sand; bankShape(ctx, k, -3);
+      // noen småstein
+      const rnd = rng(Math.round(k.x1 * 7 + k.y1 * 3));
+      ctx.fillStyle = 'rgba(150,130,90,0.5)';
+      for (let i = 0; i < 4; i++) {
+        const u = rnd(), o = (rnd() - 0.5) * k.r;
+        const dx = k.x2 - k.x1, dy = k.y2 - k.y1, L = Math.hypot(dx, dy) || 1;
+        ctx.beginPath(); ctx.arc(k.x1 + dx * u - dy / L * o, k.y1 + dy * u + dx / L * o, 1.6 + rnd() * 1.4, 0, TAU); ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+  // Tidevannsstaken på venstre side: viser vannstanden nå (fylt) og ved
+  // neste trykk (ring).
+  // Tidevannsstang øverst til venstre i vannet: fylt prikk = vannet nå,
+  // ring = hvor vannet står etter neste trykk.
+  function drawTideGauge(ctx, w, t) {
+    const x = 18, y0 = 26, h = 50;
+    const lv = E.tideLevel(w), nx = w.tide[(w.tideI + 1) % w.tide.length];
+    ctx.fillStyle = 'rgba(10,50,70,0.18)';
+    ctx.beginPath(); ctx.ellipse(x + 2, y0 + h + 8, 9, 3, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(126,88,52,0.95)';
+    ctx.fillRect(x - 2.5, y0 - 8, 5, h + 16);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillRect(x - 2.5, y0 - 8, 1.5, h + 16);
+    for (let i = 0; i <= 2; i++) {
+      const y = y0 + h - (i / 2) * h;
+      ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(x - 6, y - 1, 12, 2);
+    }
+    const f = tideFade(w);
+    const ny = y0 + h - (nx / 2) * h;
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(x, ny, 5, 0, TAU); ctx.stroke();
+    const cy = y0 + h - (lv / 2) * h;
+    ctx.fillStyle = `rgba(80,190,240,${0.6 + 0.4 * f})`;
+    ctx.beginPath(); ctx.arc(x, cy, 4.5, 0, TAU); ctx.fill();
   }
 
   // Molo: en mur av steinblokker.
@@ -4717,6 +7130,12 @@ svg { fill: currentColor; }
     tone({ f: f * 0.8, f2: f * 1.4, glide: 0.05, dur: 0.1, vol: 0.09, send: 0.5 });
     noise({ dur: 0.04, freq: 4200, q: 0.8, vol: 0.025, filter: 'highpass' });
   };
+  // Tidevannet skifter: et mykt sus.
+  S.tide = function () {
+    if (!ready()) return;
+    noise({ dur: 0.7, freq: 600, q: 0.6, vol: 0.05 });
+    tone({ f: 110, f2: 90, glide: 0.5, dur: 0.6, vol: 0.04, send: 0.6 });
+  };
   // Frosk som hopper: lite «kvekk».
   S.frog = function () {
     if (!ready()) return;
@@ -4748,7 +7167,7 @@ svg { fill: currentColor; }
     if (!ready()) return;
     const k = Math.min(1, v / 320);
     if (k < 0.08) return;
-    if (what === 'rock' || what === 'shore') {
+    if (what === 'rock' || what === 'shore' || what === 'sand') {
       tone({ f: 150, f2: 90, dur: 0.09, vol: 0.22 * k, type: 'triangle' });
       noise({ dur: 0.05, freq: 900, q: 1.2, vol: 0.12 * k });
     } else if (what === 'log') {
@@ -5148,6 +7567,7 @@ svg { fill: currentColor; }
         case 'fall': fallFx(ev); S.fall(); break;
         case 'respawn': respawnFx(ev); S.pop(); break;
         case 'drop': dropFx(ev); S.drop(ev.x / C.W); break;
+        case 'tide': S.tide(); break;
         case 'frog': S.frog(); break;
         case 'land': splash(ev.x, ev.y); S.land(); break;
         case 'switch': switchFx(ev); if (ev.opened) S.gate(); break;
