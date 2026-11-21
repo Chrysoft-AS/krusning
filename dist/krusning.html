@@ -8262,7 +8262,7 @@ svg { fill: currentColor; }
       const a = Math.random() * TAU, sp = 20 + Math.random() * 60 * k;
       addP({ type: 'drop', x: ev.x, y: ev.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, drag: 5, size: 1 + Math.random(), life: 0.3 + Math.random() * 0.2 });
     }
-    for (const b of G.world.boats) {
+    if (G.world) for (const b of G.world.boats) { // i elvestryket er G.world tom
       if (Math.hypot(b.x - ev.x, b.y - ev.y) < b.r + 6) { const f = G.boatFx[b.id]; if (f) f.squash = Math.max(f.squash, 0.6 * k); }
     }
   }
