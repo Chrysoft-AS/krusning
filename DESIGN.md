@@ -113,19 +113,19 @@ Verdenene vises som en svingete sti langs en bekk fra dammen til fjorden, med en
 | **Stien** | Hovedløpet med verdener, stjerner og perler | Verden 1–2 | Finnes (285 baner) |
 | **Dagens dam** | Én bane per dag, lik for alle, delbart resultat | Ja | **Laget** (fase 1) |
 | **Rask runde** | Tilfeldig testet brett, velg Lett / Middels / Vrien | Lett er gratis | **Laget** (fase 1) |
-| **Stryket** | Elvestryk: elva renner av seg selv, styr båten til sidene med krusninger og unngå steiner, stokker og virvler. Én verden med to baner | Ja (foreløpig) | **Laget** (nov. 2026) |
+| **Elvestryk** | Elvestryk: elva renner av seg selv, styr båten til sidene med krusninger og unngå steiner, stokker og virvler. Én verden med to baner | Ja (foreløpig) | **Laget** (nov. 2026) |
 | **Bare vann** | Ingen mål. Trykk og lag musikk mens båtene flyter. For barn og for å slappe av | Ja | Liten, når det passer |
 | **Perlebukta** | Mesterbaner for perlejegere | Fullversjon | Fase 4 |
 | **Baneverkstedet** | Lag egne baner med dra og slipp, del dem som en kort kode | Fullversjon | Senere |
 
 Vi lager **ikke** tidsløp eller modus med «game over». Det bryter med roen som er hele poenget.
 
-### Stryket – elvestryk
+### Elvestryk (i koden: Stryket)
 
 - Samme kontroll som resten av spillet (trykk på vannet), men mer aktiv: elva ruller forbi, og krusningen dytter båten bort fra trykket. Trykk til venstre for båten, så glir den mot høyre.
 - Ingen «game over»: krasjer du, starter båten ved siste bøye. Stjernene gis for få krasj (0 = ★★★, 1–2 = ★★), og perler i elva kan fanges som ekstra utfordring.
 - Banene er **faste og håndlagde**, ikke tilfeldige: da er de like for alle, de kan testes på forhånd (`tools/stryk.js` lar en robot spille dem), og de kan senere brukes i en ukesutfordring.
-- S-1 «Første stryk» innfører én ting om gangen (stein, smal elv, stokker, virvel, slalåm). S-2 «Villstryket» går fortere og legger til stokker som flytter seg, sidestrømmer og en stein som glir fram og tilbake.
+- S-1 «Første stryk» innfører én ting om gangen (stein, smal elv, stokker, virvel, slalåm). S-2 «Strie strømmer» går fortere og legger til stokker som flytter seg, sidestrømmer og en stein som glir fram og tilbake.
 
 ### Rask runde – hvordan tilfeldige brett blir gode
 

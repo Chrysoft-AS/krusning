@@ -61,7 +61,7 @@ Forslagene lagres i `tools/out/` (ikke i git).
 
 ## Stryket (elvestryk)
 
-Egen spillmodus, ikke koblet til Stien eller stjernene der. Elva ruller av seg selv, båten ligger fast nede på skjermen, og spilleren styrer sidelengs med krusninger. Baner, fysikk og konstanter ligger i `js/stryket.js` (`LEVELS`), tegningen i `R.drawStryk` i `render.js`, og skjerm/meny/lagring (`save.stryk`) i Stryket-delen av `game.js`.
+Heter «Elvestryk» i spillet (ikke å forveksle med verden 10 «Stryket» på Stien). Egen spillmodus, ikke koblet til Stien eller stjernene der. Elva ruller av seg selv, båten ligger fast nede på skjermen, og spilleren styrer sidelengs med krusninger. Baner, fysikk og konstanter ligger i `js/stryket.js` (`LEVELS`), tegningen i `R.drawStryk` i `render.js`, og skjerm/meny/lagring (`save.stryk`) i Stryket-delen av `game.js`.
 - Alt i elva har en avstand `d` fra start og en `x`. Steiner, stokker og virvler gir krasj; elvebredden spretter bare. Etter krasj starter båten ved siste bøye (`checkpoints`).
 - Stjerner: ingen krasj = 3, 1–2 krasj = 2, ellers 1. Perlene i elva er ekstra.
 - Etter endringer: `node tools/stryk.js` (må gi ✔), `node tools/stryk.js --pearls` (alle perler skal kunne fanges) og `node tools/stryk.js --slow --se=1.4` (en treg robot som ser kort; S-1 bør klares, S-2 er ment å være vanskeligere).

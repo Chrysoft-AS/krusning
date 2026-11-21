@@ -303,7 +303,7 @@
       checkpoints: [{ d: 2100, x: 180 }, { d: 4000, x: 180 }],
     },
     {
-      id: 'S-2', name: { no: 'Villstryket', en: 'Wild rapids' },
+      id: 'S-2', name: { no: 'Strie strømmer', en: 'Fierce waters' },
       tip: { no: 'Sidestrømmer drar båten med seg, og noen stokker flytter på seg.', en: 'Side currents pull the boat along, and some logs move.' },
       startX: 180, dockX: 180, length: 8000,
       speed: [[0, 95], [2000, 105], [4100, 118], [6100, 130], [8000, 140]],
