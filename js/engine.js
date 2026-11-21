@@ -743,9 +743,18 @@
   /* ---------- tilstand ---------- */
 
   // Alt i ro? (Da faller heller ingen flere regndråper før neste trykk.)
+  // En båt inne i en malstrøm ligger aldri i ro: den blir slynget ut eller
+  // dratt ned (senest etter MAEL_MAX sekunder), selv om farten er lav et øyeblikk.
+  function inMael(w, b) {
+    if (b.kind !== 'boat' || b.dock >= 0 || b.sink > 0) return false;
+    for (const m of w.maels) if (Math.hypot(b.x - m.x, b.y - m.y) < m.r) return true;
+    return false;
+  }
+
   function isSettled(w) {
     for (const rp of w.ripples) if (!rp.amb || rainPending(w, rp)) return false;
     if (w.timber.length) for (const b of w.bodies) if (stuckInTimber(w, b)) return false;
+    if (w.maels.length) for (const b of w.bodies) if (inMael(w, b)) return false;
     for (const fr of w.frogs) if (fr.jt >= 0) return false;
     for (const b of w.bodies) {
       if (b.sink > 0) return false;
@@ -774,6 +783,7 @@
   // (brukes av hint-knappen for å stoppe tidlig).
   function isCalm(w) {
     if (w.rains.length || w.timber.length) return isSettled(w); // regn og tømmer kan fortsatt flytte noe
+    if (w.maels.length) for (const b of w.bodies) if (inMael(w, b)) return false;
     for (const fr of w.frogs) if (fr.jt >= 0) return false;
     for (const rp of w.ripples) {
       if (rp.r >= rp.range) continue;
